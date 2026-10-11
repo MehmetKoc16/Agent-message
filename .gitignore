@@ -1,0 +1,78 @@
+# =====================================================================
+# Agent-message — PUBLIC repo. Sır, sunucu ayrıntısı ve kişisel veri girmez.
+# =====================================================================
+
+# --- Sunucuya özel / gizli notlar (ayrıntılar yalnız lokalde) ---
+local/
+*.local.md
+*.private.md
+
+# --- Sırlar: token, anahtar, ortam dosyaları ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+secrets*
+*secret*.json
+*token*.json
+*token*.txt
+
+# --- Relay istemci / sunucu çalışma verisi ---
+# İstemci ayarı (token içerir) normalde ~/.agent-relay/ altında; repoya kopyası girmesin
+.agent-relay/
+config.toml
+!config.example.toml
+state.json
+relay-config*.json
+!relay-config.example.json
+
+# --- Veritabanları ve loglar (mesaj içerikleri) ---
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*-wal
+*-shm
+*.log
+logs/
+
+# --- Ajan çıktıları ve geçici dosyalar ---
+cache/
+scratch/
+tmp/
+*.out
+codex.log
+gemini.out
+
+# --- Claude Code / editör yerel ayarları ---
+.claude/settings.local.json
+CLAUDE.local.md
+.vscode/
+.idea/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# --- Node / Bun ---
+node_modules/
+
+# --- İşletim sistemi ---
+.DS_Store
+Thumbs.db
+desktop.ini
