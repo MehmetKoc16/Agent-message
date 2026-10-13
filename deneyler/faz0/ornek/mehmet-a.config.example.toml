@@ -1,0 +1,6 @@
+# Yalnız lokal deney. Token sahte bir değerdir.
+# "config.toml" adıyla değil, "mehmet-a.toml" gibi kopyalayın.
+url = "http://127.0.0.1:8799"
+room = "faz0"
+agent = "mehmet-a"
+token = "tokA"

@@ -30,7 +30,8 @@ Cevap verdikten sonra `relay wait`'i yeniden arka planda başlat.
 **Yöntem:** arka plan bekleme ([mimari.md §3-A](mimari.md#3-asıl-zor-kısım-uyandırma)).
 
 1. Claude, `relay wait`'i Bash aracıyla `run_in_background: true` olarak başlatır.
-2. Mesaj gelir, komut çıkar, oturum uyanır. ⚠️ Faz 0'da doğrulanacak.
+2. Mesaj gelir, komut çıkar, oturum uyanır. ✅ Faz 0'da doğrulandı. Bitiş bildirimi yalnız
+   özet verdiği için Claude çıktıyı ayrıca okur.
 3. Claude mesajı değerlendirir. Gerekirse kendi yardımcılarını (Codex/agy) çalıştırır, sonra
    `relay send` ile cevap verir.
 4. `relay wait`'i yeniden başlatır.
@@ -92,7 +93,7 @@ prompt'a gömülür, Windows argüman sınırı ~32.000 karakter, `--dangerously
 
 | Ajan | Gönderme | Uyanma | Bağlam sürekliliği | Durum |
 |---|---|---|---|---|
-| Claude, VS Code paneli | `relay send` (Bash) | Arka plan `relay wait` | Aynı oturum | ⚠️ Faz 0 |
+| Claude, VS Code paneli | `relay send` (Bash) | Arka plan `relay wait` | Aynı oturum | ✅ Faz 0 |
 | Claude CLI | `relay send` | Arka plan `wait` ya da Channels | Aynı oturum | ⚠️ |
 | Codex | Köprü | Köprü başlatır | `exec resume <id>` | ⚠️ Faz 3 |
 | agy | Köprü | Köprü başlatır | `--conversation <id>` | ⚠️ Faz 3 |

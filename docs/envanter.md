@@ -39,7 +39,8 @@ Son güncelleme: 11.10.2026
   **kendiliğinden uyanıyor.** ✅ Gözlendi: 11.10'da bu oturum, başka iki projedeki
   oturumların mesajlarıyla uyandı. Bu yerel ve dahili bir mekanizma, makineler arası çalışmaz.
 - Arka planda başlatılan bir komut (`run_in_background`) bittiğinde oturum uyanıyor.
-  ⚠️ Araç belgesinde yazıyor; panelde boştayken uyandığını Faz 0'da test edeceğiz.
+  ✅ Faz 0'da (13.10.2026) VS Code panelinde boştayken uyandığı doğrulandı
+  ([SONUC.md](../deneyler/faz0/SONUC.md)).
 - Channels: MCP sunucusunun çalışan oturuma mesaj itmesi. Araştırma önizlemesinde; kendi
   channel'ımız için `--dangerously-load-development-channels` bayrağı gerekiyor. Ayrıntı:
   [arastirma.md](arastirma.md#claude-code-channels).

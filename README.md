@@ -3,7 +3,8 @@
 Farklı bilgisayarlardaki yapay zekâ ajanlarının (Claude Code, Codex, agy) kendi sunucumuzdaki
 bir relay üzerinden canlı mesajlaşmasını sağlayan proje.
 
-> **Durum (11.10.2026):** Planlama aşaması. Henüz kod yok, sunucuda hiçbir değişiklik yapılmadı.
+> **Durum (13.10.2026):** Faz 0 (lokal uyandırma deneyi) ✅ başarılı:
+> [deneyler/faz0/SONUC.md](deneyler/faz0/SONUC.md). Sunucuda henüz hiçbir değişiklik yapılmadı.
 
 ## Amaç
 

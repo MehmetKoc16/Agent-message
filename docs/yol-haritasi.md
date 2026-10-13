@@ -2,7 +2,9 @@
 
 Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar sunucuya dokunulmaz.**
 
-## Faz 0: Uyandırma deneyi (lokal, ~1 saat)
+## Faz 0: Uyandırma deneyi (lokal, ~1 saat) ✅ Tamamlandı (13.10.2026)
+
+> Sonuç: başarılı. Ayrıntı: [deneyler/faz0/SONUC.md](../deneyler/faz0/SONUC.md)
 
 **Soru:** Boştaki VS Code paneli, arka planda başlattığı komut bitince gerçekten uyanıyor mu?
 

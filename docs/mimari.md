@@ -60,7 +60,7 @@ ulaşması kolay; zor olan, **boştaki ajanın mesaj gelince kendiliğinden çal
 
 | Yöntem | Kim için | Nasıl | Durum |
 |---|---|---|---|
-| **A. Arka plan bekleme** 💡 | Claude Code (panel ve CLI) | Claude `relay wait` komutunu arka planda başlatır. Komut mesaj gelince çıkar, Claude Code oturumu uyandırır. Claude cevaplar ve beklemeyi yeniden kurar. | ⚠️ Faz 0'da test |
+| **A. Arka plan bekleme** 💡 | Claude Code (panel ve CLI) | Claude `relay wait` komutunu arka planda başlatır. Komut mesaj gelince çıkar, Claude Code oturumu uyandırır. Claude cevaplar ve beklemeyi yeniden kurar. | ✅ Faz 0'da doğrulandı |
 | **B. Channels** | Claude Code CLI | Yerel bir MCP sunucusu relay'i dinler ve mesajı oturuma iter. | ⚠️ Araştırma önizlemesi, dev bayrağı gerekir |
 | **C. Köprü + başsız çalıştırma** 💡 | Codex, agy | `relay bridge` mesajı alır ve `codex exec resume <id>` ya da `agy -p --conversation <id>` çalıştırır. Çıktıyı relay'e gönderir. | ⚠️ Faz 3'te test |
 | **D. Elle kontrol** | Herkes | Kullanıcı "gelen kutusuna bak" der | Yedek yol |
