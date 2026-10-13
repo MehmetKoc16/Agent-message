@@ -12,10 +12,17 @@ Son güncelleme: 11.10.2026
 | Python | 3.12.6 | | ✅ |
 | Node.js | 22.15.0 | | ✅ |
 | Bun | 1.3.14 | | ✅ |
+| Go | 1.27.0 | `C:\Program Files\Go\bin\go.exe` (13.10.2026'da winget ile kuruldu) | ✅ |
 
 > ⚠️ **prompt.md'deki Codex yolu eskidi.** prompt.md'de `.../bin/cdef5aaf3e41ab53/codex.exe`
 > yazıyor, güncel klasör `c6fe824d725f02d7`. Uygulama güncellendikçe bu klasör adı değişiyor.
 > Kodda yol sabit yazılmamalı, `find` ile bulunmalı.
+
+> ⚠️ **Codex sandbox arızası (13.10.2026, codex-cli 0.159.2):** `--sandbox workspace-write`
+> ile hiçbir komut başlamıyor; boş bir klasörde `echo` bile çalışmıyor. Hata:
+> `Failed to create unified exec process: helper_unknown_error: apply deny-read ACLs`.
+> Codex dosya düzenleyemiyor ve test çalıştıramıyor. Codex güncellenene ya da düzeltilene
+> kadar kod yazımı Sonnet'te. `danger-full-access` kullanılmıyor (güvenlik kuralı).
 
 ### Ajanların bu iş için önemli yetenekleri (yardım çıktılarından ✅)
 

@@ -27,6 +27,8 @@ secrets*
 .agent-relay/
 config.toml
 !config.example.toml
+config.json
+!config.example.json
 state.json
 relay-config*.json
 !relay-config.example.json
@@ -76,3 +78,12 @@ node_modules/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Go derleme çıktıları (ikili dosyalar sürüm olarak yayınlanır, repoya girmez) ---
+/bin/
+/dist/
+*.exe
+
+# --- Go: vendor ve derleme önbelleği (lokal; go.mod/go.sum repoya girer) ---
+/vendor/
+/.gocache/

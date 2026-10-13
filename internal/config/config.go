@@ -1,0 +1,87 @@
+// Package config, sunucunun JSON ayar dosyasını okur ve doğrular.
+package config
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"regexp"
+)
+
+// NameRe ajan, oda ve benzeri adların tek geçerli biçimidir.
+var NameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+
+// Server sunucu ayarlarıdır. Bilinmeyen alan hata sayılır.
+type Server struct {
+	Host             string `json:"host"`
+	Port             int    `json:"port"`
+	DB               string `json:"db"`
+	MaxTurns         int    `json:"max_turns"`
+	MaxBody          int    `json:"max_body"`
+	RatePerMin       int    `json:"rate_per_min"`
+	RatePerDay       int    `json:"rate_per_day"`
+	RetentionDays    int    `json:"retention_days"`
+	MaxWaitSec       int    `json:"max_wait_sec"`
+	MaxConnsPerAgent int    `json:"max_conns_per_agent"`
+}
+
+// Default varsayılan değerleri döndürür (DB boş: dosyada verilmesi zorunlu).
+func Default() Server {
+	return Server{
+		Host: "127.0.0.1", Port: 8790,
+		MaxTurns: 20, MaxBody: 16384, RatePerMin: 30, RatePerDay: 500,
+		RetentionDays: 14, MaxWaitSec: 50, MaxConnsPerAgent: 4,
+	}
+}
+
+// LoadServer dosyayı okur, varsayılanların üstüne yazar ve doğrular.
+func LoadServer(path string) (Server, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return Server{}, fmt.Errorf("ayar dosyası açılamadı: %w", err)
+	}
+	defer f.Close()
+	c := Default()
+	dec := json.NewDecoder(f)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&c); err != nil {
+		return Server{}, fmt.Errorf("ayar dosyası geçersiz: %w", err)
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return Server{}, errors.New("ayar dosyası geçersiz: JSON'dan sonra fazladan veri var")
+	}
+	if err := c.Validate(); err != nil {
+		return Server{}, err
+	}
+	return c, nil
+}
+
+// Validate değerlerin güvenli ve anlamlı olduğunu denetler.
+func (c Server) Validate() error {
+	if c.Host != "127.0.0.1" && c.Host != "::1" {
+		return fmt.Errorf("host yalnız 127.0.0.1 ya da ::1 olabilir (verilen: %q)", c.Host)
+	}
+	if c.Port < 1 || c.Port > 65535 {
+		return errors.New("port 1-65535 arasında olmalı")
+	}
+	if c.DB == "" {
+		return errors.New("db yolu zorunlu")
+	}
+	switch {
+	case c.MaxTurns < 1:
+		return errors.New("max_turns en az 1 olmalı")
+	case c.MaxBody < 1 || c.MaxBody > 1<<20:
+		return errors.New("max_body 1 ile 1048576 arasında olmalı")
+	case c.RatePerMin < 1 || c.RatePerDay < 1:
+		return errors.New("rate_per_min ve rate_per_day en az 1 olmalı")
+	case c.RetentionDays < 1:
+		return errors.New("retention_days en az 1 olmalı")
+	case c.MaxWaitSec < 1 || c.MaxWaitSec > 120:
+		return errors.New("max_wait_sec 1 ile 120 arasında olmalı")
+	case c.MaxConnsPerAgent < 1:
+		return errors.New("max_conns_per_agent en az 1 olmalı")
+	}
+	return nil
+}

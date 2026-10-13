@@ -15,9 +15,16 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 - **Başarısız olursa:** yedek planlar: hook ile uyandırma (agent-comms yaklaşımı),
   CLI + Channels.
 
-## Faz 1: Relay sunucusu ve CLI (lokal)
+## Faz 1: Relay sunucusu ve CLI (lokal) ✅ Tamamlandı (13.10.2026)
 
-- `agent_relay` (Python + FastAPI + SQLite) ve `relay` CLI (yalnız standart kütüphane).
+> Sonuç: Go ile yazıldı ([cmd/README.md](../cmd/README.md)). 58 test, `go vet` temiz, Linux
+> çapraz derlemesi tamam. Bellek: 4 ajan beklerken 200 mesajda tepe ~21 MB (Windows).
+> agy kodu üç parçada inceledi: 25 bulgunun 16'sı doğrulanıp düzeltildi, 9'u çürütüldü.
+> Gerçek ikililerle uçtan uca denendi (gönder/bekle, UTF-8, kaçışlama, sır taraması, 401).
+> Kodu Sonnet yazdı. Codex'in Windows sandbox'ı arızalı olduğu için kullanılamadı.
+> Açık: `go test -race` çalıştırılamadı (makinede cgo/gcc yok); Linux'ta gerçek çalıştırma Faz 4'te.
+
+- Go: `agent-relay` sunucusu (+ `admin` alt komutu) ve `relay` istemcisi; tek dış bağımlılık `modernc.org/sqlite`.
 - [protokol.md](protokol.md) v1: token doğrulama, tur ve hız sınırları, long-poll.
 - Testler: token yok/yanlış → 401; `from` taklidi yapılamaz; tur sınırında kilitlenir;
   16 KB üstü → 413; long-poll mesaj gelince hemen döner.
@@ -76,7 +83,7 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 |---|---|---|---|
 | K1 | Relay'i kendimiz yazıyoruz, hazır proje kullanmıyoruz | 💡 Öneri | Lisans, kimlik doğrulama, sunucu kısıtları ([arastirma.md](arastirma.md#sonuç-)) |
 | K2 | v1'de HTTP long-poll, WebSocket yok | 💡 Öneri | Arka plan uyandırma modeline uyuyor, basit |
-| K3 | Python (FastAPI + SQLite); istemci yalnız standart kütüphane | 💡 Öneri | Ubuntu'da hazır, projeler Python, istemcide kurulum yok |
+| K3 | **Go** (sunucu + istemci), SQLite için `modernc.org/sqlite` (saf Go, cgo yok); ayarlar JSON | ✅ 13.10.2026 | `net/http` internete açık sunucu için üretim kalitesinde (Python `http.server` değil); düşük bellek; long-poll için goroutine; tek ikili dosya: sunucuya kopyala-çalıştır, arkadaşa Python kurdurmadan `relay.exe`. Python Faz 0 kodu protokolün referans uygulaması olarak kalır |
 | K4 | Ayrı alt alan adı (`relay.<domain>`), `api.<domain>` altında yol değil | 💡 Öneri | Diğer uygulamalardan yapılandırma ve log ayrımı |
 | K5 | `--dangerously-skip-permissions` yasak | ✅ Kesin | prompt.md kuralı |
 | K6 | Varsayılan: yönetici ajanlar konuşur, Codex/agy yerel yardımcı | 💡 Öneri | prompt.md'deki düzeni korur |
