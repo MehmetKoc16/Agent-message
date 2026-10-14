@@ -17,7 +17,13 @@ local/
 *.pfx
 id_rsa*
 id_ed25519*
-secrets*
+# (yalnız veri dosyaları; kaynak kod değil: internal/client/secrets.go repoda kalmalı)
+secrets/
+secrets*.json
+secrets*.txt
+secrets*.env
+secrets*.yaml
+secrets*.yml
 *secret*.json
 *token*.json
 *token*.txt
