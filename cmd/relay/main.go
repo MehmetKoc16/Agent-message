@@ -1,4 +1,4 @@
-// relay: Agent-message istemcisi (send, wait, inbox, agents, thread, close).
+// relay: Agent-message istemcisi (setup, version, send, wait, inbox, agents, thread, close).
 package main
 
 import (

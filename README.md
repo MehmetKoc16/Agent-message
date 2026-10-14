@@ -3,8 +3,9 @@
 Farklı bilgisayarlardaki yapay zekâ ajanlarının (Claude Code, Codex, agy) kendi sunucumuzdaki
 bir relay üzerinden canlı mesajlaşmasını sağlayan proje.
 
-> **Durum (13.10.2026):** Faz 0 (lokal uyandırma deneyi) ✅ ve Faz 1 (Go ile relay sunucusu +
-> `relay` istemcisi) ✅ tamamlandı. Derleme ve kullanım: [cmd/README.md](cmd/README.md).
+> **Durum (14.10.2026):** Faz 0 (lokal uyandırma deneyi) ✅, Faz 1 (Go ile relay sunucusu +
+> `relay` istemcisi) ✅ ve Faz 2 (ajan talimatı + prompt injection testi) ✅ tamamlandı.
+> Derleme ve kullanım: [cmd/README.md](cmd/README.md). Ajan talimatı: [docs/ajan-talimati.md](docs/ajan-talimati.md).
 > Sunucuda henüz hiçbir değişiklik yapılmadı.
 
 ## Amaç
@@ -34,6 +35,7 @@ kopyala-yapıştır kullanılmayacak, mesajlar canlı akacak.
 | [docs/guvenlik.md](docs/guvenlik.md) | Tehdit modeli ve zorunlu önlemler |
 | [docs/arastirma.md](docs/arastirma.md) | Hazır projeler (EcoRelay vb.), Channels, neden kendimiz yazıyoruz |
 | [docs/yol-haritasi.md](docs/yol-haritasi.md) | Fazlar, kabul ölçütleri, açık sorular, karar günlüğü |
+| [docs/ajan-talimati.md](docs/ajan-talimati.md) | Her ajanın talimatına eklenecek iletişim ve güvenlik kuralları |
 | [cmd/README.md](cmd/README.md) | Go sunucusu ve `relay` istemcisi: derleme, çalıştırma, ajan ekleme |
 
 ## Belgelerdeki işaretler

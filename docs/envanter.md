@@ -7,7 +7,7 @@ Son güncelleme: 11.10.2026
 | Araç | Sürüm | Konum / not | Durum |
 |---|---|---|---|
 | Claude Code | 2.1.276 | VS Code eklentisi (sohbet paneli) olarak kullanılıyor | ✅ |
-| Codex CLI | codex-cli 0.159.2 | `/c/Users/pc/AppData/Local/OpenAI/Codex/bin/c6fe824d725f02d7/codex.exe` | ✅ |
+| Codex CLI | codex-cli 0.162.0-alpha.17.2 | `/c/Users/pc/AppData/Local/OpenAI/Codex/bin/2e5e00daee91c61d/codex.exe` (klasör güncellemeyle değişir) | ✅ |
 | agy (Antigravity CLI) | 1.3.3 | `/c/Users/pc/AppData/Local/agy/bin/agy.exe` | ✅ |
 | Python | 3.12.6 | | ✅ |
 | Node.js | 22.15.0 | | ✅ |
@@ -18,7 +18,11 @@ Son güncelleme: 11.10.2026
 > yazıyor, güncel klasör `c6fe824d725f02d7`. Uygulama güncellendikçe bu klasör adı değişiyor.
 > Kodda yol sabit yazılmamalı, `find` ile bulunmalı.
 
-> ⚠️ **Codex sandbox arızası (13.10.2026, codex-cli 0.159.2):** `--sandbox workspace-write`
+> ✅ **Çözüldü (14.10.2026):** codex-cli 0.162.0-alpha.17.2 ile `workspace-write` sandbox'ı yeniden
+> çalışıyor (echo, go, dosya yazma denendi). Ayar değişikliği gerekmedi (`[windows] sandbox = "elevated"`).
+> Codex sandbox'ta Go kullanırken: `GOFLAGS=-mod=vendor GOPROXY=off GOCACHE=<proje>\.gocache`; Go telemetrisi kapatıldı.
+>
+> ~~Codex sandbox arızası (13.10.2026, codex-cli 0.159.2):~~ `--sandbox workspace-write`
 > ile hiçbir komut başlamıyor; boş bir klasörde `echo` bile çalışmıyor. Hata:
 > `Failed to create unified exec process: helper_unknown_error: apply deny-read ACLs`.
 > Codex dosya düzenleyemiyor ve test çalıştıramıyor. Codex güncellenene ya da düzeltilene

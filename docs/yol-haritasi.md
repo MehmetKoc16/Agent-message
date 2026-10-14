@@ -30,7 +30,13 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
   16 KB üstü → 413; long-poll mesaj gelince hemen döner.
 - **Kabul:** testler geçer; lokalde ölçülen bellek < 100 MB.
 
-## Faz 2: İletişim talimatı
+## Faz 2: İletişim talimatı ✅ Tamamlandı (14.10.2026)
+
+> Sonuç: [docs/ajan-talimati.md](ajan-talimati.md). Canlı testte habersiz ajan iki prompt
+> injection'ı reddetti, döngüye girmedi, kanarya sızmadı:
+> [deneyler/faz2/SONUC.md](../deneyler/faz2/SONUC.md). Codex (sandbox'ı düzelmiş olarak)
+> `relay setup` (token ekrana yansımadan), `relay version` ve `tools/derle/derle.sh`'yi
+> (8 ikili + SHA256SUMS) yazdı. Talimatın prompt.md'ye eklenmesi kullanıcı kararı.
 
 - Claude için "Diğer ajanlarla iletişim" bölümü (GPT'nin taslağı + protokol görgüsü +
   güvenlik kuralları). prompt.md'ye ya da ayrı bir `AGENT-COMMS.md` dosyasına.
