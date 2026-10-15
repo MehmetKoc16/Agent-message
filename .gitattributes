@@ -1,0 +1,7 @@
+# Linux sunucuda çalışacak dosyalar her zaman LF kalır (Windows'tan scp ile kopyalansa bile).
+*.sh        text eol=lf
+*.service   text eol=lf
+deploy/**   text eol=lf
+*.go        text eol=lf
+go.mod      text eol=lf
+go.sum      text eol=lf
