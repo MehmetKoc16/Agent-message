@@ -29,12 +29,14 @@ const maxFetch = 100
 
 // Server HTTP işleyicilerini ve sınırları bir arada tutar.
 type Server struct {
-	cfg   config.Server
-	st    *store.Store
-	log   *slog.Logger
-	hub   *Hub
-	rate  *rateLimiter
-	conns *connLimiter
+	cfg          config.Server
+	st           *store.Store
+	log          *slog.Logger
+	hub          *Hub
+	rate         *rateLimiter
+	conns        *connLimiter
+	unauth       *unauthLimiter
+	authenticate func(context.Context, string) (store.Agent, error)
 
 	touchMu sync.Mutex
 	touched map[string]time.Time
@@ -44,9 +46,11 @@ type Server struct {
 func New(cfg config.Server, st *store.Store, log *slog.Logger) *Server {
 	return &Server{
 		cfg: cfg, st: st, log: log, hub: NewHub(),
-		rate:    newRateLimiter(cfg.RatePerMin, cfg.RatePerDay),
-		conns:   newConnLimiter(cfg.MaxConnsPerAgent),
-		touched: map[string]time.Time{},
+		rate:         newRateLimiter(cfg.RatePerMin, cfg.RatePerDay),
+		conns:        newConnLimiter(cfg.MaxConnsPerAgent),
+		unauth:       newUnauthLimiter(cfg.UnauthPerMin, cfg.UnauthGlobalPerMin),
+		authenticate: st.Authenticate,
+		touched:      map[string]time.Time{},
 	}
 }
 
@@ -88,7 +92,7 @@ func writeErr(w http.ResponseWriter, status int, code string) {
 func bearer(r *http.Request) string {
 	v, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	v = strings.TrimSpace(v)
-	if !ok || v == "" || len(v) > 256 {
+	if !ok || v == "" || len(v) > 256 || len(r.Header.Values("Authorization")) != 1 || strings.ContainsAny(v, " \t\r\n") {
 		return ""
 	}
 	return v
@@ -101,18 +105,31 @@ func (s *Server) room(h roomHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		info := infoFrom(r.Context())
 		token := bearer(r)
+		// Başarısız sayılar ve eşzamanlı rezervasyonlar DB'den önce denetlenir.
+		finish, ok := s.unauth.begin(s.clientIP(r), token)
+		if !ok {
+			writeErr(w, http.StatusTooManyRequests, "kimliksiz_hiz_siniri")
+			return
+		}
+		failed := false
+		defer func() { finish(failed) }()
 		if token == "" {
+			failed = true
 			writeErr(w, http.StatusUnauthorized, "yetkisiz")
 			return
 		}
-		a, err := s.st.Authenticate(r.Context(), token)
+		a, err := s.authenticate(r.Context(), token)
 		if errors.Is(err, store.ErrUnauthorized) {
+			failed = true
 			writeErr(w, http.StatusUnauthorized, "yetkisiz")
 			return
 		} else if err != nil {
 			s.internal(w, "kimlik doğrulama", err)
 			return
 		}
+		s.unauth.recognize(token)
+		// Kimlik doğrulandı: rezervasyonu uzun isteğin sonuna kadar tutma.
+		finish(false)
 		info.agent = a.Name
 		// Yer ayırma, DB'ye başka sorgu atmadan önce yapılır (tek bağlantıya gereksiz yük binmesin).
 		release, ok := s.conns.Acquire(a.Name)
@@ -399,12 +416,13 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request, a store.Ag
 
 // ---- çalıştırma ----
 
-// Run yapılandırılan adreste dinler (yalnız loopback; config.Validate zorlar).
+// Run yapılandırılan TCP/Unix/systemd dinleyicisini kullanır.
 func (s *Server) Run(ctx context.Context) error {
-	ln, err := net.Listen("tcp", net.JoinHostPort(s.cfg.Host, strconv.Itoa(s.cfg.Port)))
+	ln, err := Listen(s.cfg)
 	if err != nil {
 		return err
 	}
+	defer ln.Close()
 	return s.Serve(ctx, ln)
 }
 

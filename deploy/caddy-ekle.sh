@@ -25,7 +25,25 @@ if [[ -n $geri ]]; then
     [[ -z $blok && -z $alan && -z $mevcut_saglik ]] || hata '--geri-al diğer mod argümanlarıyla kullanılamaz'
 else
     [[ -n $blok && -n $alan && -n $mevcut_saglik ]] || hata '--blok, --alan ve --mevcut-saglik zorunlu'
+    # Çözümlemeden önce alanı doğrula; seçenek/metin DNS aracına taşınmasın.
+    etiket='[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?'
+    dns="^$etiket(\\.$etiket)+$"
+    [[ ${#alan} -le 253 && $alan =~ $dns ]] || hata 'geçerli küçük harfli DNS alanı gerekli'
 fi
+dns_kontrol() {
+    # DNS sorgusu kuru çalışmada da yapılır; hiçbir dosya ya da servis değişmez.
+    komut_iste getent
+    komut_iste ip
+    local adresler arayuzler
+    adresler=$(getent ahosts "$alan" | awk '{print $1}' | sort -u) || adresler=
+    arayuzler=$(ip -o addr | awk '{sub(/\/.*/, "", $4); print $4}') || arayuzler=
+    if ! awk 'NR==FNR {a[$0]=1; next} NF && a[$0] {ok=1} END {exit !ok}' \
+        <(printf '%s\n' "$adresler") <(printf '%s\n' "$arayuzler"); then
+        if (( uygula )); then hata 'DNS kaydı henüz bu sunucuyu göstermiyor'; fi
+        printf '%s\n' 'UYARI: DNS kaydı henüz bu sunucuyu göstermiyor; uygulamadan önce düzeltin.' >&2
+    fi
+}
+if [[ -z $geri ]]; then dns_kontrol; fi
 kok_kontrol
 sistem_kontrol
 komut_iste diff
@@ -36,9 +54,6 @@ if [[ -n $geri ]]; then
 else
     [[ -f $blok && -r $blok ]] || hata 'blok okunamıyor'
     # Kabuk veya Caddy sözdizimi enjekte edebilen alan/URL değerlerini reddet.
-    etiket='[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?'
-    dns="^$etiket(\\.$etiket)+$"
-    [[ ${#alan} -le 253 && $alan =~ $dns ]] || hata 'geçerli küçük harfli DNS alanı gerekli'
     [[ $mevcut_saglik == https://* && $mevcut_saglik != *[[:space:]@\?#]* ]] || hata 'sağlık URL HTTPS olmalı; kimlik bilgisi/sorgu içeremez'
     saglik_host=${mevcut_saglik#https://}
     saglik_host=${saglik_host%%/*}
@@ -113,7 +128,7 @@ diff -u --label /etc/caddy/Caddyfile --label /etc/caddy/Caddyfile.onerilen \
     "$caddyfile" <(aday) || fark_kodu=$?
 (( fark_kodu <= 1 )) || hata 'diff başarısız'
 if (( ! uygula )); then
-    printf '%s\n' 'KURU ÇALIŞMA: dosya/yedek yazılmadı, ağ isteği veya reload yapılmadı.' \
+    printf '%s\n' 'KURU ÇALIŞMA: dosya/yedek yazılmadı; DNS dışında ağ isteği veya reload yapılmadı.' \
         'Uygulama: zaman damgalı yedek → ekle/geri koy → validate → reload; restart yok.'
     exit 0
 fi
@@ -155,7 +170,14 @@ fi
 caddy validate --config "$caddyfile" --adapter caddyfile
 systemctl reload caddy
 if [[ -z $geri ]]; then
-    saglik_bekle 15 "$mevcut_saglik" "https://$alan/v1/health"
+    saglik_bekle 15 "$mevcut_saglik"
+    # İlk ACME sertifikası zaman alabilir; relay gecikmesi canlı siteyi geri aldırmaz.
+    if ! saglik_bekle 90 "https://$alan/v1/health"; then
+        trap - ERR INT TERM
+        printf '%s\n' 'UYARI: kısmi başarı; mevcut uygulama sağlıklı, relay HTTPS 90 sn içinde 200 olmadı. GERİ ALINMADI.' \
+            'DNS kaydını, ACME/sertifika loglarını (journalctl -u caddy) ve /run/agent-relay/relay.sock izinlerini inceleyin.' >&2
+        exit 3
+    fi
 fi
 trap - ERR INT TERM
 printf '%s\n' 'Caddy işlemi tamamlandı; restart kullanılmadı.'

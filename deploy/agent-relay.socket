@@ -1,0 +1,14 @@
+[Unit]
+Description=Agent-message relay Unix socket
+
+[Socket]
+ListenStream=/run/agent-relay/relay.sock
+SocketUser=agentrelay
+SocketGroup=caddy
+SocketMode=0660
+DirectoryMode=0755
+Accept=no
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

@@ -59,6 +59,13 @@ func run(args []string) int {
 
 func serve(ctx context.Context, cfg config.Server) int {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	// Aktivasyon hatası varsa veritabanını açmadan açık hata ile dur.
+	ln, err := server.Listen(cfg)
+	if err != nil {
+		log.Error("dinleyici açılamadı", "err", err.Error())
+		return 1
+	}
+	defer ln.Close()
 	st, err := store.Open(cfg.DB, cfg.MaxTurns)
 	if err != nil {
 		log.Error("veritabanı açılamadı", "err", err.Error())
@@ -66,7 +73,7 @@ func serve(ctx context.Context, cfg config.Server) int {
 	}
 	defer st.Close()
 	srv := server.New(cfg, st, log)
-	if err := srv.Run(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.Serve(ctx, ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Error("sunucu durdu", "err", err.Error())
 		return 1
 	}

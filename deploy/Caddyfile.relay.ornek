@@ -1,6 +1,5 @@
 # Bu blok mevcut /etc/caddy/Caddyfile sonuna EKLENİR; mevcut bloklara dokunulmaz.
-# Alanı ve portu yerel kopyada düzenle. Caddy çekirdeğinde hız sınırı yoktur;
-# relay kendi ajan başına hız sınırını uygular (anonim trafik için genel limit değildir).
+# Alanı yerel kopyada düzenle. Relay ajan ve kimliksiz istek sınırlarını uygular.
 relay.example.com {
     # request_body: Caddy 2.x yönergesi; 64KB = 64000 bayt (relay max_body 16384 değerinin üstünde pay bırakır).
     request_body {
@@ -13,7 +12,7 @@ relay.example.com {
         -Server
     }
     handle /v1/* {
-        reverse_proxy 127.0.0.1:8790 {
+        reverse_proxy unix//run/agent-relay/relay.sock {
             transport http {
                 # max_wait_sec=50 için 25 saniye pay; arttırılırsa bunları da arttır.
                 response_header_timeout 75s

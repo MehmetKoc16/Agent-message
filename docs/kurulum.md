@@ -12,18 +12,32 @@ uygulamaların dizinleri yalnız sunucudaki/yerel özel kopyalarda düzenlenir; 
 - En az 300 MiB `MemAvailable`, ikili/veri/yedekler için yeterli boş disk. Windows'taki
   yaklaşık 21 MB tepe ölçümü Linux'ta aynı tüketimin garantisi değildir.
 - Bash, coreutils (`sha256sum`, `install`, `diff`), `awk`, `grep`, `ss`, `curl`, `flock`,
-  `useradd`, `systemd-analyze`, `python3` hazır olmalı. Python yalnız kurucunun JSON/ELF
-  denetimi içindir; servis saf Go ikilisidir, venv yoktur. Otomatik paket kurulmaz.
+  `useradd`, `systemd-analyze`, `python3`, `getent`, `ip` hazır olmalı; `caddy` grubu bulunmalı.
+  Caddy aracı için curl gerekir; yalnız relay kurucusu curl yoksa python3 kullanır.
+  Python kurucunun JSON/ELF denetimi ve curl yoksa Unix soketi sağlık kontrolü içindir;
+  servis saf Go ikilisidir, venv yoktur. Otomatik paket kurulmaz.
 - Caddy hizmeti sağlıklı ve `/etc/caddy/Caddyfile` normal dosya olmalı. Mevcut uygulamanın
   kimlik doğrulama gerektirmeyen, yönlendirmesiz **HTTPS 200** sağlık URL'sini sahibi verir.
   URL sorgu veya kimlik bilgisi içeremez; 443 portu kullanılır. Yanlış URL otomatik geri aldırır.
-- Dışa açık yalnız 22/80/443 kalır; UFW/sshd değiştirilmez, 8790 açılmaz. SSH erişimi
+- Dışa açık yalnız 22/80/443 kalır; UFW/sshd değiştirilmez, relay TCP portu açılmaz. SSH erişimi
   yalnız mevcut yetkili operatörde kalır. DNS/TLS doğrulaması için mevcut 80/443 erişimi gerekir.
 - Önce diğer uygulamaların sahiplerine haber ver → yedeği ve dönüş planını doğrula →
   `validate` → `reload`. **Caddy için restart yoktur.** Diğer servisler, veritabanları ve
   zamanlanmış işler değiştirilmez. Kuru çalışma çıktısı onaydan önce incelenir.
+  Uygulama **sunucu sahibinin belirlediği bakım penceresinde** yapılır.
 
-Paket: [systemd birimi](../deploy/agent-relay.service), [JSON](../deploy/config.example.json),
+DNS önce hazırlanır: `relay.example.com` A/AAAA kayıtları bu sunucunun arayüz
+adreslerine yönelmeli; eski/yanlış AAAA bırakılmamalı. Caddy aracı kuru çalışmada da
+`getent ahosts` ve `ip -o addr` ile en az bir ortak adres arar. Eşleşme yoksa uyarır;
+`--uygula` hiçbir dosya/kilit/yedek yazmadan durur. Ortak adres bulunması bütün A/AAAA
+kayıtlarının doğru veya dışarıdan erişilebilir olduğunun kanıtı değildir.
+
+Üretimde PID 1, `/run/agent-relay/relay.sock` dinleyicisini açar ve fd 3'ü relay'e
+aktarır. Caddy bu Unix soketine bağlanır (`agentrelay:caddy`, 0660; üst dizin 0755).
+Relay `PrivateNetwork=yes`, `RestrictAddressFamilies=AF_UNIX`, `IPAddressDeny=any`
+ile çalışır; loopback dahil IP erişimi yoktur. `PrivateUsers=yes` korunur.
+
+Paket: [servis](../deploy/agent-relay.service), [soket](../deploy/agent-relay.socket), [JSON](../deploy/config.example.json),
 [yerel drop-in örneği](../deploy/10-yerel.conf.ornek), [Caddy bloğu](../deploy/Caddyfile.relay.ornek),
 [kurucu](../deploy/kurulum.sh), [Caddy aracı](../deploy/caddy-ekle.sh),
 [kaldırıcı](../deploy/kaldir.sh). Betikleri `bash` ile çalıştırmak yürütme izni gerektirmez;
@@ -54,13 +68,14 @@ Aktarım SSH ile yapılır; paket hazırlayan ajan bunu yürütmez.
 Sunucuda, aktarım dizininden:
 
 ```bash
-sudo bash deploy/kurulum.sh --ikili agent-relay-linux-amd64 --ozet SHA256SUMS --port 8790
+sudo bash deploy/kurulum.sh --ikili agent-relay-linux-amd64 --ozet SHA256SUMS
 ```
 
 Varsayılan yol hiçbir dosya, kullanıcı, kilit, yedek veya servis değiştirmez. Root,
-Ubuntu/systemd, dosya adı ve SHA-256, `ss -ltn` ile boş port, RAM kontrol edilir.
-Wildcard/IPv6 dahil aynı portu kullanan bir dinleyici varsa durur. Mevcut config varsa
-localhost/port/veri yolu eşleşmesi denetlenir; dosya içeriği değiştirilmez.
+Ubuntu/systemd, dosya adı ve SHA-256, caddy grubu, soket hedefi ve RAM kontrol edilir.
+Soket hedefi normal dosya veya sembolik bağlantıysa durur. `--port` kaldırılmıştır;
+kullanılırsa anlaşılır hata verir. Mevcut config varsa systemd/trust/veri yolu eşleşmesi
+denetlenir; eski TCP config otomatik dönüştürülmez, dosya içeriği değiştirilmez.
 `/etc/caddy/Caddyfile` bu kurucuda okunmaz veya değiştirilmez.
 
 ## 3. Yerel izolasyon drop-in'i
@@ -92,32 +107,32 @@ kişisel veri tutan bu sunucuda normal kurulum yolu değildir.
 Kuru çalışmayı yeniden inceleyin, ardından:
 
 ```bash
-sudo bash deploy/kurulum.sh --ikili agent-relay-linux-amd64 --ozet SHA256SUMS --port 8790 --uygula
-curl --noproxy '*' --fail http://127.0.0.1:8790/v1/health
+sudo bash deploy/kurulum.sh --ikili agent-relay-linux-amd64 --ozet SHA256SUMS --uygula
+curl --unix-socket /run/agent-relay/relay.sock http://localhost/v1/health
 ```
 
 Kurucu ayrı `agentrelay` sistem hesabını oluşturur (kabuksuz, ev dizinsiz, ek grup yok).
 İkili root:root 0755, config root:agentrelay 0640 olur. Veri dizinini systemd 0700 ile
 oluşturur. Eski ikili `agent-relay.onceki` olarak korunur; mevcut config değiştirilmez.
-Portu değiştirirseniz **özel Caddy kopyasındaki upstream'i de** aynı porta ayarlayın.
+Kurucu curl yoksa python3 ile aynı Unix soketinden HTTP sağlık kontrolü yapar.
 
-Birim kurulur, `systemd-analyze verify`, `daemon-reload`, `enable` ve `restart agent-relay` çalışır (yalnız relay; Caddy ve diğer servisler değil).
+İki birim kurulur, `systemd-analyze verify`, `daemon-reload`,
+`systemctl enable --now agent-relay.socket`, ardından servis enable/restart çalışır.
 10 saniyelik sağlık penceresinde 200 alınmazsa servis durdurulur, önceki ikili ve birim
-geri konur; relay kapalı bırakılır ve komut hata döndürür. İlk kurulumda yeni birim
+geri konur; soket birimi ve önceki etkin/aktif durumu da geri alınır. İlk kurulumda yeni birimler
 devre dışı bırakılıp kaldırılır. Geri alma komutlarının hatası ACİL uyarısıyla bildirilir;
 inceleme dosyaları korunur. Oluşmuş config, veri ve hesap korunur. systemd güvenlik
-puanı gösterilir; puan tek başına kabul kararı değildir. Port boşluğu şartı nedeniyle
-bu betik çalışan sürümü yerinde güncellemez; güncellemede sahibin onayladığı relay
-kesintisi, veri yedeği ve `stop` adımı gerekir. Caddy'ye dokunulmaz.
+puanı gösterilir; puan tek başına kabul kararı değildir. Güncelleme relay restart'ı
+gerektirir; veri yedeği ve sahibin onayladığı kesinti penceresi gerekir. Caddy'ye dokunulmaz.
 
 ## 5. DNS ve Caddy
 
 Kullanıcı DNS'te `relay.example.com` yerine seçilen özel alanı sunucuya yönlendirir.
 A kaydını ve varsa AAAA kaydını doğrular; yanlış/eski AAAA bırakmaz. Caddy TLS'i alır;
-DNS yayılımını bekleyin. Sertifika edinimi 15 saniyeyi aşarsa Caddy adımı güvenli
-olarak geri döner; günlükleri inceleyip daha sonra yeniden deneyin.
+DNS yayılımını Caddy reload'dan önce bekleyin. İlk sertifika edinimi 10–60 saniye sürebilir.
 
-`deploy/Caddyfile.relay.ornek` dosyasının **özel kopyasında** alanı ve portu düzenleyin.
+`deploy/Caddyfile.relay.ornek` dosyasının **özel kopyasında** alanı düzenleyin; upstream
+`unix//run/agent-relay/relay.sock` kalır.
 Yalnız relay site bloğu eklenir. Mevcut site blokları değiştirilmez. Caddy'nin kurulu
 2.x sürümünde `request_body`, transport zaman aşımı ve log filtresi desteği gerçek
 `caddy validate` ile kontrol edilir. Caddy güncellemesi bu paketin kapsamı değildir.
@@ -129,7 +144,7 @@ sudo bash deploy/caddy-ekle.sh --blok Caddyfile.relay --alan relay.example.com -
 sudo bash deploy/caddy-ekle.sh --blok Caddyfile.relay --alan relay.example.com --mevcut-saglik https://api.example.com/saglik --uygula
 ```
 
-İlk komut yalnız diff gösterir; ağ isteği/validate/reload yapmaz. Diff mevcut Caddyfile
+İlk komut DNS ön kontrolü ve diff gösterir; HTTP isteği/validate/reload yapmaz. Diff mevcut Caddyfile
 içeriğini içerebilir; çıktıyı public repoya veya paylaşılan günlüklere koymayın.
 İkinci komut mevcut uygulamanın ön sağlık kontrolünü yapar, zaman damgalı
 `/etc/caddy/Caddyfile.yedek-<zaman>` yedeği alır, sona ekler, validate ve **reload** yapar.
@@ -137,15 +152,21 @@ Aynı alan Caddyfile'da site adresi olarak (tek başına, virgüllü/çok satır
 `import` ile gelen dosyalardaki alan çakışmalarını sahibi ayrıca
 inceler; ana dosyadaki basit tarama bunları çözümlemez.
 
-Reload sonrasında 15 saniyelik ortak pencerede hem mevcut uygulama hem relay HTTPS
-sağlığı 200 olmalıdır. Başarısızlıkta yedek geri konur, validate ve reload yapılır,
-komut hata verir. Otomatik geri alma başarısızlığı ayrıca ACİL uyarısıyla belirtilir;
+Reload sonrasında mevcut uygulama 15 saniye içinde 200 olmalıdır; olmazsa yedek
+geri konur, validate/reload yapılır ve hata döner. Ardından relay HTTPS sağlığı ayrı
+90 saniyelik pencerede beklenir. Relay başarısızsa **geri alınmaz**; DNS, ACME/sertifika
+günlüğü (`journalctl -u caddy`) ve soket izni tanıları yazdırılır, çıkış **3** olur.
+Caddy aracı çıkış kodları: **0** tamam/kuru çalışma, **1** ön kontrol veya uygulama
+hatası (değişiklik başladıysa otomatik geri alma), **3** kısmi başarı: mevcut uygulama
+sağlıklı, relay henüz hazır değil; eklenen blok ve yedek korunur. Yeniden eklemek yerine
+tanı koyun; aynı alanın tekrar eklenmesi reddedilir.
+Otomatik geri alma başarısızlığı ayrıca ACİL uyarısıyla belirtilir;
 sunucu sahibi hemen müdahale eder. Betikler aynı `flock` kilidini kullanır; başka
 operatörlerin Caddy düzenlemeleriyle çakışmamak için değişiklik penceresi yine gereklidir.
 
 ## 6. Doğrulama ve kabul
 
-- [ ] Yerelde `curl http://127.0.0.1:8790/v1/health`, dışarıdan
+- [ ] Yerelde `curl --unix-socket /run/agent-relay/relay.sock http://localhost/v1/health`, dışarıdan
   `curl https://relay.example.com/v1/health`: HTTP 200 ve `{"ok":true}`.
 - [ ] Mevcut uygulamanın sahibi `https://api.example.com/saglik` ve kendi kullanıcı
   akışları/veritabanı/zamanlanmış işleri üzerinden etkilenmediğini doğruladı.
@@ -155,8 +176,12 @@ operatörlerin Caddy düzenlemeleriyle çakışmamak için değişiklik penceres
   long-poll yükünde bellek/CPU izlendi; 100M sınırı aşılmıyor, OOM/yeniden başlama yok.
   `sudo systemctl show agent-relay -p MemoryCurrent -p MemoryPeak -p MemoryMax -p NRestarts`
   ek kanıttır. 100M systemd birimi MiB tabanlıdır.
-- [ ] `ss -ltn` yalnız `127.0.0.1:8790` gösteriyor. Dışarıdaki yetkili başka bir
-  makineden 8790 bağlantısı başarısız; UFW'de yalnız mevcut 22/80/443 açık.
+- [ ] Sunucu sahibine `systemd-analyze security agent-relay`, `ss -ltnp` ve
+  `ss -lxp | grep agent-relay` çıktıları iletildi: relay TCP portu yok, Unix soketi var.
+  UFW'de yalnız mevcut 22/80/443 açık.
+- [ ] Soket root ağ ad alanında açılıyor; Caddy hesabı 0660 sokete bağlanabiliyor.
+  `PrivateNetwork` + `PrivateUsers` altında fd 3 kabulü, config okuma ve SQLite/WAL
+  yazımı çalışıyor. IP soketi oluşturma/yerel IP portuna çıkış engelli.
 - [ ] `sudo systemd-analyze security agent-relay` sahibi tarafından incelendi.
   `systemctl status`/journal çıktısında bilinmeyen yönerge, seccomp, namespace veya
   BPF/cgroup filtreleme uyarısı yok; varsa güvenlik kuralını kaldırarak geçmeyin.
@@ -212,7 +237,7 @@ sudo bash deploy/kaldir.sh
 sudo bash deploy/kaldir.sh --uygula
 ```
 
-Servis durur/devre dışı kalır; birim, **tüm yerel drop-in dizini** ve ikili dizini
+Soket ve servis durur/devre dışı kalır; iki birim, **tüm yerel drop-in dizini** ve ikili dizini
 kaldırılır, daemon-reload yapılır. Önce drop-in'in özel yedeğini alın. Hesap, config
 ve veri korunur. `--veri-sil --uygula` config ve veri dizinini de kalıcı siler; ancak
 ayrı açık veri silme kararı ve doğrulanmış yedekten sonra kullanın. Caddy bloğu bu
@@ -271,7 +296,8 @@ deneyin ve nedenini sunucu sahibine bildirin. Sırayla, en az güvenlik kaybı o
 4. `PrivateUsers=yes` -> `no`: config/veri `Permission denied` veriyor veya kullanıcı ad alanı
    çekirdekte kapalıysa. `ReadOnly`/sahiplik (`root:agentrelay 0640`) önce doğrulanır.
 5. `MemoryDenyWriteExecute=yes` -> `no`: yalnız SIGSEGV/SIGSYS ile erken ölümde ve diğerleri sonuç vermediyse.
-6. `RestrictNamespaces`, `IPAddressDeny/Allow` ve `DevicePolicy`: son çare; gevşetmeden önce sahibine danışın.
+6. `RestrictNamespaces` ve `DevicePolicy`: son çare; gevşetmeden önce sahibine danışın.
+   IP erişimini açmayın; `PrivateNetwork`, AF_UNIX ve `IPAddressDeny=any` korunur.
 
 Sınırları (`MemoryMax`, `TasksMax`, `LimitNOFILE`) çok daraltmak da `NRestarts` artışıyla
 görülür; bunlar güvenlik değil kaynak ayarıdır, önce `systemctl show` ile gerçek kullanımı ölçün.
@@ -297,12 +323,13 @@ Ancak Go 1.27 Linux çalışma zamanı ile bu birimin **tam birleşimi** Windows
 sınanamaz. Özellikle `PrivateUsers`/`RestrictNamespaces`, `ProtectProc`/`ProcSubset`,
 `SystemCallFilter` (`@resources` dahil), IP BPF filtreleri ve `DevicePolicy` gerçek
 Ubuntu çekirdeği/systemd üzerinde doğrulanmalıdır. Gereken özelliğin yokluğunu
-sessizce kabul etmeyin; sahibiyle değerlendirin. `IPAddressAllow=localhost` aynı
-sunucudaki diğer yerel portlara çıkışı da serbest bırakır; bu tam ağ izolasyonu değildir.
+sessizce kabul etmeyin; sahibiyle değerlendirin. Loopback izni kaldırıldı: relay IP
+portlarına çıkamaz; Caddy'den gelen Unix fd'si özel ağ ad alanında kullanılmalıdır.
 Root, kernel açığı veya eksik yerel drop-in karşısında systemd mutlak sınır değildir.
 
-Hız sınırı ajan başınadır, Caddy çekirdeğinde genel hız limiti yoktur. 64 KB gövde
-sınırı eşzamanlı anonim istek sayısını sınırlamaz. Bellek sınırında relay OOM ile
+Ajan sınırına ek olarak kimliksiz denemeler IP başına dakikada 20, global 300 ile
+sınırlıdır; Caddy çekirdeğinde genel hız limiti yoktur. 64 KB gövde sınırı tüm
+bağlantı sayısını sınırlamaz. Bellek sınırında relay OOM ile
 kapanabilir; CPU/Tasks/NOFILE sınırları yük altında gecikme veya hata doğurabilir.
 50 saniyelik long-poll için iki upstream zaman aşımı 75 saniyedir; max_wait arttırılırsa
 ikisini de pay bırakacak şekilde arttırın. TLS, Caddy reload/rollback, Linux kaynak
@@ -315,8 +342,8 @@ for f in deploy/*.sh deploy/test/*.sh; do bash -n "$f" || exit; done
 bash deploy/test/kuru_calisma_test.sh
 ```
 
-Test `--kok <dizin>` ile sahte Ubuntu/systemd/port/RAM girdilerini kullanır; root,
-systemd süreci veya ağ gerektirmez. Argüman hatası, manifest, port/RAM, Caddy tek site
+Test `--kok <dizin>` ile sahte Ubuntu/systemd/soket/RAM ve getent/ip stub'ları kullanır; root,
+systemd süreci veya ağ gerektirmez. Argüman hatası, manifest, grup/soket/RAM, DNS, Caddy tek site
 ve tekrar ekleme kontrollerini sınar; her çağrıda dosya ağacının içerik ve metadata
 özetinin değişmediğini denetler. `--kok` ile `--uygula` kesinlikle yasaktır; üretimde
 bu bayrak kullanılmaz. Yerel test Linux'taki ayrıcalıklı uygulama akışını doğrulamaz.

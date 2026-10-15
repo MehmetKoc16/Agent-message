@@ -30,19 +30,44 @@ sistem_kontrol() {
     fi
 }
 
-port_kontrol() {
-    local dinleyen
-    if [[ -n $kok ]]; then
-        [[ -f $kok/test/ss-ltn ]] || hata 'test ss çıktısı yok'
-        dinleyen=$(cat -- "$kok/test/ss-ltn")
+soket_kontrol() {
+    komut_iste getent
+    getent group caddy >/dev/null || hata 'caddy grubu yok; önce Caddy kurulumunu doğrulayın'
+    local hedef="$kok/run/agent-relay/relay.sock"
+    [[ ! -L $kok/run/agent-relay && ! -L $hedef ]] || hata 'soket hedefinde sembolik bağlantı var'
+    if [[ -e $hedef && ! -S $hedef ]]; then hata 'soket hedefi var ve soket değil'; fi
+}
+
+soket_saglik() {
+    if command -v curl >/dev/null 2>&1; then
+        local kod
+        kod=$(curl --noproxy '*' --proxy '' --unix-socket /run/agent-relay/relay.sock \
+            --max-time 1 --silent --output /dev/null --write-out '%{http_code}' http://localhost/v1/health) || return 1
+        [[ $kod == 200 ]]
     else
-        komut_iste ss
-        dinleyen=$(ss -H -ltn)
+        python3 - <<'PY'
+import socket, http.client
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(1)
+try:
+    s.connect('/run/agent-relay/relay.sock')
+    s.sendall(b'GET /v1/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
+    response = http.client.HTTPResponse(s)
+    response.begin()
+    raise SystemExit(0 if response.status == 200 else 1)
+finally:
+    s.close()
+PY
     fi
-    # Wildcard ve IPv6 dinleyicileri de çakışabilir; tüm adreslerde aynı portu reddet.
-    if awk -v p="$port" '$4 ~ (":" p "$") {found=1} END {exit !found}' <<< "$dinleyen"; then
-        hata "port $port kullanımda; mevcut servisi inceleme olmadan durdurmayın"
-    fi
+}
+
+soket_saglik_bekle() {
+    local son=$((SECONDS + 10))
+    while (( SECONDS < son )); do
+        if soket_saglik; then return 0; fi
+        sleep 1
+    done
+    return 1
 }
 
 bellek_kontrol() {

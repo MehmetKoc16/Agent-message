@@ -49,6 +49,38 @@ agent-relay admin --config server.json purge                    # süresi dolan 
 
 3. Başlatın: `agent-relay serve --config server.json`. Ctrl+C ya da SIGTERM ile düzgün kapanır. Üretimde Caddy (TLS) arkasında çalışır; bkz. `docs/guvenlik.md`.
 
+`listen` boşsa geliştirme için mevcut host/port TCP davranışı sürer (yalnız
+`127.0.0.1`/`::1`). `listen: "systemd"` üretimde tek Unix dinleyicisini fd 3'ten
+alır; LISTEN_PID bu süreç, LISTEN_FDS tam 1 olmalıdır. Aktivasyon değişkenleri
+okunup temizlenir. Bu mod yalnız systemd üzerinden başlatılır.
+`listen: "unix:<mutlak yol>"` yerel deneme içindir. Dolu listen ile host veya port
+verilemez; bilinmeyen JSON alanları reddedilir. Unix hedefi mevcut normal dosyaysa
+başlamaz; eski soketi kaldırır, 0660 dinler, kapanışta soketi siler.
+
+Yerel Linux denemesi için host/port alanlarını çıkarıp şu ayarı kullanın (db yazılabilir olmalı):
+
+```json
+{"listen":"unix:/run/agent-relay/relay.sock","db":"relay.db"}
+```
+
+```bash
+agent-relay serve --config server.json
+# Başka terminalde; soket dizini önceden oluşturulmuş ve kullanıcıya yazılabilir olmalı:
+curl --unix-socket /run/agent-relay/relay.sock http://localhost/v1/health
+```
+
+Windows'ta `unix:` sonrasında yazılabilir mutlak Windows yolu kullanın; JSON'da
+ters eğik çizgileri kaçırın veya `/` kullanın. Windows AF_UNIX desteği gerekir.
+`trust_forwarded_for` varsayılan false; yalnız Unix/systemd ve güvenilen proxy
+erişimiyle true yapılır. Son X-Forwarded-For adresini kullanır; TCP ile true hatadır.
+Kimliksiz limitler varsayılan IP başına 20/dakika, global 300/dakikadır
+(`unauth_per_min`, `unauth_global_per_min`). Başarılar sayılmaz; tanınan token özeti
+ön sınırı atlar, DB iptal kontrolü sürer. Dolu sınırda yeni token da 429 alabilir.
+
+Dağıtım Caddy aracının çıkışları: 0 tamam/kuru çalışma, 1 hata (değişiklik sonrası
+mevcut uygulama 15 sn içinde 200 değilse geri alma), 3 kısmi başarı (relay 90 sn
+içinde hazır değil; geri alınmaz). DNS önce sunucuyu göstermelidir; ayrıntı: `docs/kurulum.md`.
+
 ## İstemci ayarı
 
 `relay setup --url https://relay.example.com --room ornek-proje --agent ali-claude`

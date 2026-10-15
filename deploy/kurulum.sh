@@ -3,16 +3,16 @@ set -euo pipefail
 burada=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=ortak.sh
 source "$burada/ortak.sh"
-ikili= ozet= kok= port=8790 uygula=0 drop_onay=0
+ikili= ozet= kok= uygula=0 drop_onay=0
 kullanim() {
-    printf '%s\n' 'sudo bash deploy/kurulum.sh --ikili <agent-relay-linux-amd64> --ozet <SHA256SUMS> [--port 8790] [--uygula] [--drop-in-yok-onay]'
+    printf '%s\n' 'sudo bash deploy/kurulum.sh --ikili <agent-relay-linux-amd64> --ozet <SHA256SUMS> [--uygula] [--drop-in-yok-onay]'
     printf '%s\n' '--kok <dizin>: yalnız test; --uygula ile kullanılamaz.'
 }
 while (($#)); do
     case $1 in
         --ikili) deger_iste "$@"; ikili=$2; shift 2 ;;
         --ozet) deger_iste "$@"; ozet=$2; shift 2 ;;
-        --port) deger_iste "$@"; port=$2; shift 2 ;;
+        --port) hata '--port kaldırıldı; relay systemd Unix soketinden dinler' ;;
         --kok) deger_iste "$@"; kok=$2; shift 2 ;;
         --uygula) uygula=1; shift ;;
         --drop-in-yok-onay) drop_onay=1; shift ;;
@@ -21,7 +21,6 @@ while (($#)); do
     esac
 done
 [[ -n $ikili && -n $ozet ]] || hata '--ikili ve --ozet zorunlu'
-[[ $port =~ ^[1-9][0-9]{0,4}$ ]] && (( port <= 65535 )) || hata 'port 1-65535 arasında olmalı'
 kok_kontrol
 sistem_kontrol
 [[ -f $ikili && -r $ikili && -f $ozet && -r $ozet ]] || hata 'ikili veya SHA256SUMS okunamıyor'
@@ -33,21 +32,21 @@ beklenen=$(awk -v ad="$ad" 'length($1)==64 && $1 !~ /[^[:xdigit:]]/ {n=$2; sub(/
 gercek=$(sha256sum -- "$ikili")
 gercek=${gercek%% *}
 [[ $gercek == "$beklenen" ]] || hata 'SHA-256 uyuşmazlığı'
-port_kontrol
+soket_kontrol
 bellek_kontrol
 config="$kok/etc/agent-relay/config.json"
 drop="$kok/etc/systemd/system/agent-relay.service.d/10-yerel.conf"
 if [[ -f $config ]]; then
     komut_iste python3
     # Mevcut dosyayı değiştirme; sağlık kontrolünün doğru hedefe gittiğini doğrula.
-    python3 - "$config" "$port" <<'PY'
+    python3 - "$config" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as f:
     c = json.load(f)
-if (c.get("host", "127.0.0.1") != "127.0.0.1"
-        or c.get("port", 8790) != int(sys.argv[2])
+if (c.get("listen") != "systemd" or "host" in c or "port" in c
+        or c.get("trust_forwarded_for") is not True
         or c.get("db") != "/var/lib/agent-relay/relay.db"):
-    sys.exit("hata: mevcut config host/port/db hedefle uyuşmuyor; dosya değiştirilmedi")
+    sys.exit("hata: mevcut config listen/trust_forwarded_for/db hedefle uyuşmuyor; dosya değiştirilmedi")
 PY
 fi
 drop_eksik=0
@@ -55,17 +54,20 @@ if [[ ! -f $drop ]] || ! grep -Eq '^[[:space:]]*InaccessiblePaths[[:space:]]*=[[
     drop_eksik=1
     printf '%s\n' 'UYARI: yerel 10-yerel.conf içinde InaccessiblePaths gerekli.' >&2
 fi
-printf '%s\n' 'Plan: SHA-256, Ubuntu/systemd, boş port ve en az 300 MiB MemAvailable doğrulandı.' \
+printf '%s\n' 'Plan: SHA-256, Ubuntu/systemd, caddy grubu/soket ve en az 300 MiB MemAvailable doğrulandı.' \
     '1. agentrelay sistem hesabını doğrula/oluştur (kabuksuz, ev dizinsiz, ek grup yok).' \
     '2. /opt/agent-relay root:root 0755; eski ikiliyi agent-relay.onceki olarak koru.' \
     '3. config yoksa root:agentrelay 0640 oluştur; mevcut config içeriğine dokunma.' \
-    '4. Birimi kur; yerel drop-in şartını kontrol et; systemd-analyze verify çalıştır.' \
+    '4. Soket ve servis birimlerini kur; yerel drop-in şartını kontrol et; systemd-analyze verify çalıştır.' \
     '5. daemon-reload; enable --now; 10 sn içinde HTTP 200 bekle.' \
-    '6. Hata halinde servisi durdur, önceki ikili/birimi geri koy, servisi kapalı bırak.' \
+    '6. Hata halinde servis/soketi durdur; ikili/iki birim ve önceki aktif soketi geri al.' \
     '7. systemd-analyze security agent-relay puanını göster. Caddyfile değiştirilmez.'
-printf 'Seçilen port: %s\n' "$port"
+printf '%s\n' 'Soket: /run/agent-relay/relay.sock; TCP dinleyicisi yok.'
 sonraki() {
     printf '%s\n' 'Sonraki: DNS kaydını hazırlayın; caddy-ekle.sh kuru çalışma ve --uygula adımlarını izleyin.' \
+        'Sunucu sahibine şu çıktıları iletin: systemd-analyze security agent-relay' \
+        'ss -ltnp (relay TCP portu OLMAMALI)' \
+        'ss -lxp | grep agent-relay' \
         'Ajan: sudo -u agentrelay /opt/agent-relay/agent-relay admin --config /etc/agent-relay/config.json add-agent ornek-ajan --rooms ornek-proje'
 }
 if (( ! uygula )); then
@@ -77,7 +79,7 @@ if (( ! uygula )); then
     exit 0
 fi
 (( ! drop_eksik || drop_onay )) || hata 'yerel drop-in eksik; hiçbir kurulum değişikliği yapılmadı'
-for arac in install cp getent useradd id stat systemd-analyze curl uname python3; do komut_iste "$arac"; done
+for arac in install cp getent useradd id stat systemd-analyze uname python3; do komut_iste "$arac"; done
 [[ $(uname -m) == x86_64 ]] || hata 'bu paket linux-amd64 hedefler; mimariyi inceleyin'
 # Yanlış platformdaki bir dosyayı root olarak çalıştırmadan ELF başlığını doğrula.
 python3 - "$ikili" <<'PY'
@@ -88,7 +90,7 @@ if len(h) != 20 or h[:6] != b'\x7fELF\x02\x01' or h[18:20] != b'\x3e\x00':
     sys.exit('hata: Linux amd64 ELF ikilisi gerekli')
 PY
 kilit_al
-port_kontrol
+soket_kontrol
 bellek_kontrol
 if getent passwd agentrelay >/dev/null; then
     kayit=$(getent passwd agentrelay)
@@ -102,12 +104,13 @@ else
 fi
 # Sembolik bağlantılarla başka uygulamaların dosyalarına yazılmasını reddet.
 for hedef in /opt/agent-relay /opt/agent-relay/agent-relay /opt/agent-relay/agent-relay.onceki \
-    /etc/agent-relay /etc/agent-relay/config.json /etc/systemd/system/agent-relay.service; do
+    /etc/agent-relay /etc/agent-relay/config.json /etc/systemd/system/agent-relay.service /etc/systemd/system/agent-relay.socket; do
     [[ ! -L $hedef ]] || hata 'kurulum hedefinde sembolik bağlantı var'
 done
 install -d -o root -g root -m 0755 /opt/agent-relay
-eski=0 birim_eski=0 degisti=0 onceki_aktif=0
+eski=0 birim_eski=0 degisti=0 onceki_aktif=0 soket_eski=0 soket_aktif=0 soket_etkin=0
 birim=/etc/systemd/system/agent-relay.service
+soket_birim=/etc/systemd/system/agent-relay.socket
 islem=$(mktemp -d /opt/agent-relay/.kurulum.XXXXXX)
 chmod 0700 "$islem"
 geri_don() {
@@ -120,6 +123,12 @@ geri_don() {
                 exit 1
             fi
         fi
+        if ! systemctl stop agent-relay.socket; then
+            if systemctl is-active --quiet agent-relay.socket; then
+                printf 'ACİL: soket durdurulamadı; dosyalara geri dönülmedi. İnceleme dizini: %s\n' "$islem" >&2
+                exit 1
+            fi
+        fi
         if (( eski )); then
             cp -p -- /opt/agent-relay/agent-relay.onceki /opt/agent-relay/agent-relay || sorun=1
         else
@@ -129,7 +138,12 @@ geri_don() {
             if [[ -e $birim ]]; then systemctl disable agent-relay || sorun=1; fi
             rm -f -- "$birim" || sorun=1
         fi
+        if (( ! soket_etkin )) && [[ -e $soket_birim ]]; then systemctl disable agent-relay.socket || sorun=1; fi
+        if (( soket_eski )); then cp -p -- "$islem/soket" "$soket_birim" || sorun=1; else
+            rm -f -- "$soket_birim" || sorun=1
+        fi
         systemctl daemon-reload || sorun=1
+        if (( soket_aktif )); then systemctl start agent-relay.socket || sorun=1; fi
         # Yükseltmede önceki sürüm çalışıyorduysa onu geri ayağa kaldır.
         if (( onceki_aktif && eski && birim_eski )); then systemctl start agent-relay || sorun=1; fi
     fi
@@ -143,6 +157,9 @@ geri_don() {
 }
 trap geri_don ERR INT TERM
 if systemctl is-active --quiet agent-relay; then onceki_aktif=1; fi
+if systemctl is-active --quiet agent-relay.socket; then soket_aktif=1; fi
+if systemctl is-enabled --quiet agent-relay.socket; then soket_etkin=1; fi
+if [[ -f $soket_birim ]]; then cp -p -- "$soket_birim" "$islem/soket"; soket_eski=1; fi
 if [[ -f $birim ]]; then cp -p -- "$birim" "$islem/birim"; birim_eski=1; fi
 if [[ -f /opt/agent-relay/agent-relay ]]; then
     cp -p -- /opt/agent-relay/agent-relay /opt/agent-relay/agent-relay.onceki
@@ -152,24 +169,19 @@ degisti=1
 install -o root -g root -m 0755 -- "$ikili" /opt/agent-relay/agent-relay
 if [[ ! -e $config ]]; then
     install -d -o root -g agentrelay -m 0750 /etc/agent-relay
-    python3 - "$burada/config.example.json" "$port" > "$islem/config.json" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    c = json.load(f)
-c["port"] = int(sys.argv[2])
-print(json.dumps(c, indent=2))
-PY
-    install -o root -g agentrelay -m 0640 "$islem/config.json" "$config"
+    install -o root -g agentrelay -m 0640 "$burada/config.example.json" "$config"
 else
     [[ $(stat -c '%U:%G:%a' "$config") == root:agentrelay:640 ]] || { printf '%s\n' 'Mevcut config root:agentrelay 0640 olmalı.' >&2; false; }
 fi
 install -o root -g root -m 0644 "$burada/agent-relay.service" "$birim"
-systemd-analyze verify "$birim"
+install -o root -g root -m 0644 "$burada/agent-relay.socket" "$soket_birim"
+systemd-analyze verify "$birim" "$soket_birim"
 systemctl daemon-reload
 # enable --now çalışan eski sürümü yeniden başlatmaz; yükseltmede yeni ikili için restart şart (yalnız relay).
+systemctl enable --now agent-relay.socket
 systemctl enable agent-relay
 systemctl restart agent-relay
-saglik_bekle 10 "http://127.0.0.1:$port/v1/health"
+soket_saglik_bekle
 trap - ERR INT TERM
 rm -rf -- "$islem"
 printf '%s\n' 'Relay sağlık kontrolü 200; kurulum tamamlandı.'

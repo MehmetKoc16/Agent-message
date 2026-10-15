@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,6 +60,32 @@ func TestVarsayilanlarVeSinirlar(t *testing.T) {
 	for _, bad := range []string{`{}`, `{"db":"x","port":0}`, `{"db":"x","max_turns":0}`, `{"db":"x","max_body":99999999}`, `{"db":"x","max_wait_sec":0}`} {
 		if _, err := LoadServer(write(t, bad)); err == nil {
 			t.Fatalf("%s reddedilmeli", bad)
+		}
+	}
+}
+
+// NEDEN: üretim soketi ile geliştirme TCP'si karışırsa izolasyon kaybolur.
+func Test_config_listen_dogrulamasi(t *testing.T) {
+	unix, _ := json.Marshal("unix:" + filepath.Join(t.TempDir(), "s"))
+	for _, tc := range []struct {
+		body string
+		ok   bool
+	}{
+		{`{"db":"x","listen":"systemd","trust_forwarded_for":true}`, true},
+		{`{"db":"x","listen":` + string(unix) + `}`, true},
+		{`{"db":"x","listen":""}`, true},
+		{`{"db":"x","listen":"systemd","host":""}`, false},
+		{`{"db":"x","listen":"systemd","port":0}`, false},
+		{`{"db":"x","trust_forwarded_for":true}`, false},
+		{`{"db":"x","listen":"unix:relative.sock"}`, false},
+		{`{"db":"x","listen":"other"}`, false},
+		{`{"db":"x","unauth_per_min":0}`, false},
+		{`{"db":"x","unauth_global_per_min":0}`, false},
+		{`{"db":"x","listen":"systemd","unknown":1}`, false},
+	} {
+		_, err := LoadServer(write(t, tc.body))
+		if (err == nil) != tc.ok {
+			t.Errorf("%s: %v", tc.body, err)
 		}
 	}
 }

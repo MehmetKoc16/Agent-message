@@ -1,8 +1,9 @@
 [Unit]
 # Servisi listelerde tanınabilir bir adla göster.
 Description=Agent-message Go relay
-# Yerel dinleyici için temel ağ hedefi yeterlidir.
-After=network.target
+# PID 1 dinleyiciyi süreçten önce açıp fd olarak aktarır.
+Requires=agent-relay.socket
+After=agent-relay.socket
 
 [Service]
 # Uzun yaşayan Go sürecini doğrudan izle.
@@ -110,12 +111,13 @@ SystemCallFilter=~@privileged @resources
 # yalnız '~@resources' ifadesini kaldır ('~@privileged' kalsın); bkz. docs/kurulum.md.
 # Yasak çağrıyı bulmak için: journalctl -u agent-relay ve 'systemd-analyze syscall-filter'.
 SystemCallErrorNumber=EPERM
-# Yalnız IP ve yerel Unix soketlerini kullan.
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Yalnız yerel Unix soketleri; IP soketi oluşturulamaz.
+RestrictAddressFamilies=AF_UNIX
+# Dinleyici fd'si PID 1'den gelir; özel ağ ad alanında da çalışır.
+# Loopback dahil diğer servislerin IP portlarına erişim yoktur.
+PrivateNetwork=yes
 # Varsayılan olarak tüm IP trafiğini engelle.
 IPAddressDeny=any
-# Caddy ve yerel yönetim için yalnız loopback trafiğine izin ver.
-IPAddressAllow=localhost
 # Aygıt erişimini kapat; temel özel aygıtlar systemd tarafından sağlanır.
 DevicePolicy=closed
 # Sunucudaki diğer uygulamaların dizinleri yerel drop-in ile eklenir: /etc/systemd/system/agent-relay.service.d/10-yerel.conf (repoya girmez)

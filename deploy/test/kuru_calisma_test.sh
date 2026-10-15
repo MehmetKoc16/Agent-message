@@ -12,6 +12,25 @@ trap temizle EXIT
 kok="$gecici/kok"
 cd -- "$gecici"
 mkdir -p kok/etc/caddy kok/run/systemd/system kok/proc/1 kok/test girdi
+mkdir -p stub kok/run/agent-relay
+# NEDEN: DNS/grup ön kontrolleri gerçek ağa veya sunucu hesaplarına erişmemeli.
+cat > "$gecici/stub/getent" <<'SH'
+#!/usr/bin/env bash
+burada=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+case "$1 $2" in
+    'group caddy') [[ ! -e $burada/grup-yok ]] || exit 2; printf 'caddy:x:999:\n' ;;
+    'ahosts relay.example.com') cat "$burada/dns" ;;
+    *) exit 2 ;;
+esac
+SH
+cat > "$gecici/stub/ip" <<'SH'
+#!/usr/bin/env bash
+printf '1: lo inet6 ::1/128 scope host\n'
+SH
+printf '::1 STREAM relay.example.com\n' > "$gecici/stub/dns"
+chmod +x "$gecici/stub/getent" "$gecici/stub/ip"
+# Sabit PATH: test ortamının mevcut değişken değerini okumaz.
+export PATH="$gecici/stub:/usr/bin:/bin"
 printf 'ID=ubuntu\nVERSION_ID="24.04"\n' > "$kok/etc/os-release"
 printf 'systemd\n' > "$kok/proc/1/comm"
 printf 'MemAvailable: 400000 kB\n' > "$kok/proc/meminfo"
@@ -47,10 +66,10 @@ bekle() {
 bekle 'kurulum eksik argüman' hata 'zorunlu' bash "$deploy/kurulum.sh"
 bekle 'kurulum eksik değer' hata 'değer gerekli' bash "$deploy/kurulum.sh" --ikili
 bekle 'kurulum bilinmeyen bayrak' hata 'bilinmeyen' "${kur[@]}" --yanlis
-bekle 'geçersiz port' hata 'port 1-65535' "${kur[@]}" --port 0
+bekle 'geçersiz port kaldırıldı' hata '--port kaldırıldı' "${kur[@]}" --port 0
 bekle 'test kökünde uygulama yasak' hata '--kok ile --uygula yasak' "${kur[@]}" --uygula
 bekle 'kurulum kuru ve eksik drop-in uyarısı' tamam 'KURU ÇALIŞMA' "${kur[@]}"
-bekle 'farklı port kuru' tamam 'Seçilen port: 8791' "${kur[@]}" --port 8791
+bekle 'farklı port artık hata' hata '--port kaldırıldı' "${kur[@]}" --port 8791
 printf '%064d  agent-relay-linux-amd64\n' 0 > "$gecici/girdi/YANLIS"
 bekle 'SHA-256 uyuşmazlığı' hata 'SHA-256 uyuşmazlığı' "${kur[@]}" --ozet "$gecici/girdi/YANLIS"
 printf '%064d  baska-dosya\n' 0 > "$gecici/girdi/YANLIS"
@@ -60,9 +79,12 @@ bekle 'çift manifest satırı' hata 'tek geçerli satır' "${kur[@]}" --ozet "$
 printf 'MemAvailable: 200000 kB\n' > "$kok/proc/meminfo"
 bekle 'düşük RAM' hata 'en az 300 MiB' "${kur[@]}"
 printf 'MemAvailable: 400000 kB\n' > "$kok/proc/meminfo"
-printf 'LISTEN 0 128 127.0.0.1:8790 *:*\n' > "$kok/test/ss-ltn"
-bekle 'dolu port' hata 'kullanımda' "${kur[@]}"
-: > "$kok/test/ss-ltn"
+printf 'koru\n' > "$kok/run/agent-relay/relay.sock"
+bekle 'soket olmayan hedef' hata 'soket değil' "${kur[@]}"
+rm -- "$kok/run/agent-relay/relay.sock"
+: > "$gecici/stub/grup-yok"
+bekle 'caddy grubu yoksa durur' hata 'caddy grubu yok' "${kur[@]}"
+rm -- "$gecici/stub/grup-yok"
 printf 'ID=ubuntu\nVERSION_ID="22.04"\n' > "$kok/etc/os-release"
 bekle 'yanlış Ubuntu' hata 'Ubuntu 24.04 gerekli' "${kur[@]}"
 printf 'ID=ubuntu\nVERSION_ID="24.04"\n' > "$kok/etc/os-release"
@@ -74,6 +96,13 @@ bekle 'Caddy eksik değer' hata 'değer gerekli' bash "$deploy/caddy-ekle.sh" --
 bekle 'Caddy bilinmeyen bayrak' hata 'bilinmeyen' "${cad[@]}" --yanlis
 bekle 'Caddy test kökünde uygulama yasak' hata '--kok ile --uygula yasak' "${cad[@]}" --uygula
 bekle 'Caddy kuru diff' tamam '+relay.example.com {' "${cad[@]}"
+# NEDEN: DNS hatasında --uygula kilit/yedek dahil hiçbir şey yazmamalı.
+: > "$gecici/stub/dns"
+bekle 'DNS çözülemiyor uygulama yazmaz' hata 'DNS kaydı henüz bu sunucuyu göstermiyor' "${cad[@]}" --uygula
+bekle 'DNS çözülemiyor kuru uyarır' tamam 'UYARI: DNS kaydı' "${cad[@]}"
+printf '127.0.0.1 STREAM relay.example.com\n' > "$gecici/stub/dns"
+bekle 'DNS başka adres uygulama yazmaz' hata 'DNS kaydı henüz bu sunucuyu göstermiyor' "${cad[@]}" --uygula
+printf '::1 STREAM relay.example.com\n' > "$gecici/stub/dns"
 bekle 'Caddy güvensiz sağlık URL' hata 'HTTPS olmalı' "${cad[@]}" --mevcut-saglik http://api.example.com/saglik
 bekle 'Caddy hatalı alan' hata 'DNS alanı' "${cad[@]}" --alan 'relay.example.com;komut'
 printf '\nrelay.example.com {\n    respond 200\n}\n' >> "$kok/etc/caddy/Caddyfile"

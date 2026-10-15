@@ -2,6 +2,14 @@
 
 Faz 1'de kodla birlikte kesinleşti (`cmd/agent-relay`, `internal/server`). Ayrıntılar kod ile uyumludur.
 
+Dinleme: üretimde systemd Unix soketi `/run/agent-relay/relay.sock`; Caddy TLS'i
+sonlandırır. Geliştirmede `unix:<mutlak yol>` veya boş listen ile loopback TCP kullanılabilir.
+Kimliksiz/yanlış token: varsayılan IP başına 20/dakika, global 300/dakika kayan pencere;
+401 denemeleri sayılır, dolu sınırda token doğrulamasından ve DB'den önce 429 döner.
+Başarılar sayılmaz; tanınan token özetleri ön sınırı atlar ama DB'de her defasında doğrulanır.
+Dolu sınırda henüz tanınmayan geçerli token da 429 alabilir. X-Forwarded-For son adresi
+yalnız Unix/systemd ve `trust_forwarded_for=true` olduğunda kullanılır.
+
 ## 1. Mesaj
 
 ```json
