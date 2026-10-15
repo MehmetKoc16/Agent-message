@@ -240,8 +240,13 @@ sudo bash deploy/kaldir.sh --uygula
 Soket ve servis durur/devre dışı kalır; iki birim, **tüm yerel drop-in dizini** ve ikili dizini
 kaldırılır, daemon-reload yapılır. Önce drop-in'in özel yedeğini alın. Hesap, config
 ve veri korunur. `--veri-sil --uygula` config ve veri dizinini de kalıcı siler; ancak
-ayrı açık veri silme kararı ve doğrulanmış yedekten sonra kullanın. Caddy bloğu bu
-betikle kaldırılmaz; yukarıdaki geri alma adımı gerekir.
+ayrı açık veri silme kararı ve doğrulanmış yedekten sonra kullanın.
+
+> ⚠️ **`kaldir.sh` Caddy bloğunu KALDIRMAZ.** Caddyfile'daki relay bloğu yalnız
+> `caddy-ekle.sh --geri-al <yedek>` ile (ya da sunucu sahibinin elle, yedek → validate →
+> reload sırasıyla) kaldırılır. `kaldir.sh`'den sonra blok kalırsa Caddy, artık var olmayan
+> sokete 502 döner; canlı uygulamayı etkilemez ama blok temizlenmelidir. Sıra: önce
+> `caddy-ekle.sh --geri-al`, sonra `kaldir.sh`.
 
 ## Günlük işletim ve yedek
 
