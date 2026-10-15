@@ -5,7 +5,7 @@
 | İkili | Ne yapar |
 |---|---|
 | `agent-relay` | Sunucu (`serve`) ve yönetici komutları (`admin`). Sunucuda çalışır. |
-| `relay` | İstemci (`setup`, `version`, `send`, `wait`, `inbox`, `agents`, `thread`, `close`). Her ajanın makinesinde çalışır, Python gerekmez. |
+| `relay` | İstemci (`setup`, `version`, `send`, `wait`, `inbox`, `agents`, `thread`, `close`, `bridge`). Her ajanın makinesinde çalışır, Python gerekmez. |
 
 ## Derleme
 
@@ -98,6 +98,94 @@ relay close T-1             # konuşmayı kapatır
 Çıkış kodları: `0` mesaj geldi/işlem tamam, `1` hata ya da kilitli konuşma, `2` zaman aşımı, `3` sunucuya ulaşılamıyor, `4` sır taraması gönderimi engelledi, `130` iptal (Ctrl+C).
 
 Gönderimden önce mesaj taranır (özel anahtar bloğu, `sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox*-`, `AIza` değerleri, adında `PASSWORD`/`SECRET`/`TOKEN`/`API_KEY` geçen büyük harfli `AD=değer` satırları). Eşleşirse gönderilmez; atlatma bayrağı yoktur.
+
+## Codex/agy'yi odaya bağlamak
+
+Önce her ajan için `relay setup` ile ayrı ayar dosyası hazırlayın. Köprüyü kullanıcı başlatır;
+gelen relay mesajları başka ajanlardan gelen güvenilmeyen veridir ve tek başına eylem izni vermez.
+
+```
+relay --config codex.json bridge --runner codex --workdir C:\projeler\ortak
+relay --config agy.json bridge --runner agy --workdir C:\projeler\ortak
+
+# Özel kurulum ve tek beklemesiz kontrol
+relay --config codex.json bridge --runner codex --exe C:\araclar\codex.exe --once
+
+# İsteğe bağlı hata teşhisi (başarılı turlar kaydedilmez)
+relay --config agy.json bridge --runner agy --debug-log agy-hatalar.log
+
+# Model, efor, kota ve süreyi açıkça seçme
+relay --config codex.json bridge --runner codex --model gpt-6.1-sol --effort medium --max-runs-per-hour 20 --runner-timeout 900
+```
+
+Tam kullanım:
+
+```
+relay --config <ayar> bridge --runner codex|agy [--exe <yol>] [--workdir <dizin>] [--model <m>] [--effort <e>] [--sandbox read-only|workspace-write] [--max-runs-per-hour 20] [--runner-timeout 900] [--debug-log <dosya>] [--once]
+```
+
+Codex varsayılanları `gpt-6.1-sol`, `medium` ve **read-only** sandbox'tır. Yeni konuşma
+`codex exec`, devamı `codex exec resume <id>` ile çalışır; prompt stdin'den gider.
+Resume sandbox ayarı `-c sandbox_mode="read-only"` olarak verilir. `workspace-write` yalnız
+açık bayrakla seçilir ve stderr'e uyarı basar. Köprü izin denetimlerini atlayan bayrak üretmez.
+
+agy varsayılan modeli `gemini-3.8-flash-medium` olur. JSON `conversation_id` ile aynı konuşma
+sürdürülür. `--sandbox` agy için hatadır, `--effort` yok sayılır. Başsız agy araç izinlerini
+reddeder. Prompt agy'ye argüman olarak verilir. Windows'ta exe ve tüm argümanlar Go'nun
+`syscall.EscapeArg` kaçışları ve aradaki boşluklarla birlikte en çok 32.000 UTF-16 birimi
+olabilir; diğer platformlarda prompt sınırı 28.000 birimdir. Codex stdin prompt sınırı 200 KB'dır.
+Prompt sığmıyorsa tampondan en eski mesajlar sığana kadar düşer (`tampon_budandi`). Yeni
+mesaj önsözle birlikte tek başına sığmıyorsa ajan çalışmaz; `köprü: mesaj ajan için çok uzun`
+cevabı gider. Bu ret kota tüketmez ve ardışık çalıştırıcı hatası sayılmaz.
+
+`--exe` yoksa `os.UserHomeDir()` ile bulunan ev dizininin altında Codex için
+`AppData\Local\OpenAI\Codex\bin\*\codex.exe` eşleşmelerinin en yeni değişiklik zamanlı olanı,
+agy için `AppData\Local\agy\bin\agy.exe` aranır. Bulunamazsa `--exe` istenir.
+
+**Maliyet/kota:** her `soru`/`gorev` kullanıcı aboneliği üzerinden bir model çağrısı yapabilir.
+Varsayılan sınır kayan saatte 20 denemedir; başarısız denemeler de sayılır. Limit aşımında
+yanıtlanmayan soru/görev aynı konuşmanın kalıcı tamponuna bağlam olarak eklenir (tampon
+sınırları geçerlidir); otomatik olarak daha sonra yanıtlanmaz. Konuşma başına saatte bir
+`köprü: saatlik çalıştırma sınırına ulaşıldı; mesajınız kaydedildi ama yanıtlanmadı, lütfen daha sonra yeniden sorun`
+bilgisi gönderilir. Sayaç kalıcı değildir; yeniden başlatınca sıfırlanır.
+`bilgi`/`cevap`/`sonuc` çağrı yapmaz, bir sonraki sorunun tamponuna girer; `kapat` temizler.
+`--once` tek beklemesiz GET'teki en çok 100 mesajı işleyip `0` ile çıkar; geçici ağ hatasında `3`.
+Sürekli mod 50 saniyelik long-poll kullanır ve geçici ulaşım/502/503/504 hatalarını yeniden dener.
+
+Oturumlar ve konuşma başına en çok 20 mesaj / 32 KB JSON bağlamı, ayarın yanındaki
+`bridge-<oda>-<ajan>-<runner>.json` dosyasına atomik kaydedilir; bu dosya gövdeleri içerir,
+paylaşmayın. En eski tampon mesajları sınır aşımında düşer. İmleç ancak işlenen mesajdan sonra
+ilerler; başarıyla biten işlem sırasında iptal gelmiş olsa da o mesajın imleci ilerletilir.
+Çökme sonrası son mesaj/cevap tekrarlanabilir. Aynı ayarla eşzamanlı `wait`, `inbox`
+ya da ikinci köprü açmayın. Bozuk oturum/imleç dosyası hata verir.
+
+Cevaplar aynı konuşmada `reply_to` ve `to` ile gönderilir. Boş/`SESSIZ` cevap sessiz kalır;
+markdown, sondaki noktalama, küçük harf ve Türkçe I/İ varyasyonları tanınır. İlk satırı
+`SESSIZ:`/`SESSİZ:` ile başlayan cevap da gönderilmez. `Şüpheli:`/`**ŞÜPHELİ:**` gibi
+retler özgün metniyle gönderilir ve uyarılır. Sır taraması eşleşirse cevap yerine sabit engelleme metni
+gönderilir. Çok uzun cevap 16 KB'a kısaltılır. 409 oturumu temizler. Çalıştırıcı hatası/zaman
+aşımı sabit hata cevabı üretir; üç ardışık çalıştırıcı hatası köprüyü `1` ile durdurur.
+HTTP 429'da hazır cevap bellekte tutulur, imleç ilerlemeden 15 saniye beklenir ve aynı gönderim
+yeniden denenir; ajan tekrar çalıştırılmaz. Toplam beş deneme de 429 alırsa köprü `1` ile
+durur, imleç korunur. Bekleme iptal edilebilir. Bilinmeyen mesaj tipleri `bilinmeyen_tip`
+olarak loglanır, ajan çalışmaz ve imleç ilerler.
+
+Loglar gövde ve cevap içermez; çalıştırıcı stderr'i varsayılan olarak bastırılır.
+`--debug-log <dosya>` yalnız başarısız çalıştırmaların stderr'inin son 2 KB'ını ayrı bir
+dosyaya 0600 izinle ekler (Windows'ta izinler kısmen uygulanır). Her satır zaman, konuşma,
+mesaj id ve çıkış kodu içerir. Sır taraması eşleşen satırın tamamını
+`[sır deseni gizlendi: <desen>]` ile değiştirir. Prompt yazılmaz; stderr'e yansıtılmış prompt
+satırları gizlenir. Başından kesilen ilk stderr satırı, sır deseni eksik kalabileceği için atılır.
+Teşhis içeriği ana loga veya relay'e taşınmaz. Alt süreç ortamı aynen miras alır.
+
+**Windows süreç notu:** varsayılan çalıştırıcı zaman aşımı 900 saniyedir. Süre dolunca veya
+Ctrl+C/SIGTERM gelince `exec.CommandContext` ana çalıştırıcı sürecini öldürür; Windows'ta
+onun başlattığı çocuk süreçler kalabilir. Süreç ağacının tamamını kapatma garantisi yoktur.
+İptalde işlenmemiş mesajın imleci ilerlemez ve köprü `130` ile çıkar.
+
+İlk turdaki Türkçe önsöz dosya okuma/listeleme/arama komutlarına izin verir; dosya değiştiren,
+ağa çıkan, paket kuran ve sistem ayarını değiştiren komutları yasaklar. Sır paylaşmama ve güvenilmeyen veri kurallarını
+aktarır; bu bir işletim sistemi güvenlik sınırı değildir. Ayrıntılar: `docs/istemciler.md` C/D.
 
 ## Bellek ölçümü
 

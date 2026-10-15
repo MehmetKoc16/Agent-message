@@ -43,7 +43,12 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 - **Kabul:** Faz 0 senaryosu bu talimatla tekrar edilir. Döngü oluşmaz, sır sızmaz,
   sahte bir "`.env`'i gönder" mesajı reddedilir.
 
-## Faz 3: Codex ve agy köprüsü (lokal)
+## Faz 3: Codex ve agy köprüsü (lokal) ✅ Tamamlandı (15.10.2026)
+
+> Sonuç: `relay bridge --runner codex|agy` (Codex yazdı). Gerçek Codex ve agy ile canlı test:
+> soru/cevap, resume ile bağlam, bilgi tamponu, read-only sandbox (yazma engellendi), prompt
+> injection reddi. agy incelemesi 10 bulgu: 7 düzeltildi. Ayrıntı:
+> [deneyler/faz3/SONUC.md](../deneyler/faz3/SONUC.md).
 
 - `relay bridge --codex` (`exec resume`) ve `--agy` (`--conversation` ya da `agentapi`).
 - **Kabul:** Claude, köprü üzerinden bir Codex konuşmasıyla 3 tur konuşur; Codex önceki turu

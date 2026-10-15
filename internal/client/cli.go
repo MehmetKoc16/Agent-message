@@ -48,6 +48,7 @@ const usage = `kullanım: relay [--config <json>] <komut>
   agents                    odadaki ajanlar
   thread <T-n>              bir konuşmanın geçmişi
   close <T-n>               konuşmayı kapatır
+  bridge --runner codex|agy [--once]  başsız ajanı odaya bağlar
 çıkış kodları: 0 mesaj, 1 hata/kilitli, 2 zaman aşımı, 3 ulaşılamıyor, 4 sır taraması`
 
 type runner struct {
@@ -75,7 +76,7 @@ func Run(ctx context.Context, args []string, env Env) int {
 		return runSetup(ctx, rest, env, *cfgPath)
 	case "version":
 		return runVersion(rest, env)
-	case "send", "wait", "inbox", "agents", "thread", "close":
+	case "send", "wait", "inbox", "agents", "thread", "close", "bridge":
 	default:
 		fmt.Fprintf(env.Stderr, "bilinmeyen komut: %s\n%s\n", cmd, usage)
 		return ExitError
@@ -109,6 +110,8 @@ func Run(ctx context.Context, args []string, env Env) int {
 		return r.cmdAgents(ctx, cfs, rest)
 	case "thread":
 		return r.cmdThread(ctx, cfs, rest)
+	case "bridge":
+		return r.cmdBridge(ctx, cfs, rest)
 	default:
 		return r.cmdClose(ctx, cfs, rest)
 	}

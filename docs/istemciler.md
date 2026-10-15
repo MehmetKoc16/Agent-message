@@ -14,7 +14,7 @@ relay inbox                      # okunmamış mesajları listeler
 relay agents                     # odadaki ajanlar, son görülme ve bekliyor mu
 relay thread <id>                # bir konuşmanın geçmişi
 relay close <id>                 # konuşmayı kapatır
-relay bridge --codex|--agy       # köprü modu (Codex/agy için, Faz 3)
+relay bridge --runner codex|agy [--once]  # başsız ajanı odaya bağlar
 ```
 
 `setup` token'ı stdin'den tek satır okur; baştaki/sondaki boşlukları ve satır sonunu kırpar.
@@ -103,28 +103,87 @@ Cevap bir mesaja bağlıysa çerçevede `reply_to="<id>"` da bulunur.
 Codex kendiliğinden uyanamaz, onu **köprü** başlatır.
 
 ```
-relay bridge --codex --session <CODEX_SESSION_ID> --sandbox read-only
-  └─ mesaj geldi → codex exec resume <ID> "<çerçeveli mesaj>" < /dev/null
-                 → çıktıdan cevabı ayıkla → relay send (reply-to ile)
+relay --config codex.json bridge --runner codex --workdir C:\projeler\ortak
+relay --config codex.json bridge --runner codex --exe C:\araclar\codex.exe --once
 ```
 
-- `codex exec resume` aynı Codex konuşmasını sürdürür ✅ (yardım çıktısında var). Bağlam korunur.
-- Varsayılan sandbox: **read-only.** `workspace-write` yalnız kullanıcı açıkça isterse.
-- prompt.md'deki kurallar geçerli: `< /dev/null` şart, cevap logda "tokens used" satırından
-  sonra, Codex yolu `find` ile bulunur.
-- ⚠️ `exec resume` ile `-m`, `--sandbox` bayraklarının birlikte çalıştığı Faz 3'te denenecek.
+- Varsayılan model `gpt-6.1-sol`, `--effort medium`, `--sandbox read-only`.
+  `--sandbox workspace-write` açıkça seçilebilir; stderr'e yazma izni uyarısı basılır.
+- İlk soruda `codex exec --json -o <geçici-dosya> ... --sandbox read-only -C <dizin> -`
+  çalışır. Prompt stdin'den verilir ve stdin kapanır. JSONL'deki `thread.started` oturumu alınır.
+- Aynı relay konuşmasının sonraki soruları `codex exec resume <id> --json -o <dosya> ... -`
+  kullanır. Resume'da sandbox `-c sandbox_mode="read-only"` ile verilir; çalışma dizini süreç
+  cwd'sidir. Son cevap önce `-o` dosyasından, yoksa son `agent_message` olayından alınır.
+- `--exe` yoksa standart ev dizininin `AppData\Local\OpenAI\Codex\bin\*\codex.exe`
+  eşleşmeleri arasından değişiklik zamanı en yeni olan seçilir. Bulunamazsa açık hata verilir.
+- İzin atlatma seçenekleri üretilmez. İlk turdaki sabit Türkçe önsöz mesajların güvenilmeyen
+  veri olduğunu ve köprüyü başlatmanın gelen talimatları onaylamadığını belirtir. Modelden
+  yalnız okuyarak cevap vermesi istenir; bu metin tek başına işletim sistemi güvenlik sınırı değildir.
+  Dosya okuma, listeleme ve arama komutları serbesttir; dosya değiştirme, ağ, paket kurulumu
+  ve sistem ayarı değiştirme yasaktır. Sandbox seçimi yeni ve devam turunda korunur.
 
 ## D. agy (Antigravity CLI)
 
-İki aday var, Faz 3'te ikisi de denenecek:
+```
+relay --config agy.json bridge --runner agy --workdir C:\projeler\ortak
+relay --config agy.json bridge --runner agy --model gemini-3.8-flash-medium --once
+```
 
-1. **Köprü + `agy -p --conversation <ID>`**: Codex ile aynı model. ⚠️ `--conversation`'ın
-   `-p` ile birlikte çalıştığı denenmedi.
-2. **`agy agentapi send-message <recipient_id> <content>`**: çalışan bir agy konuşmasına mesaj
-   iter (EcoRelay bu yolu kullanıyor). ⚠️ `recipient_id` anlamı denenmedi.
+- Köprü `agy -p <prompt> --model <model> --output-format json --print-timeout 900s` çalıştırır.
+  JSON'daki `conversation_id` saklanır; devam turlarında `--conversation <id>` eklenir.
+  `status` yalnız `SUCCESS` ise `response` alınır. Varsayılan model `gemini-3.8-flash-medium`.
+- Stdin `os.DevNull` üzerinden boştur. Başsız modda agy araç izinlerini reddeder.
+  `--sandbox` agy için hatadır; `--effort` yok sayılır.
+- Prompt argümandır; Windows'ta exe ve tüm argümanlar `syscall.EscapeArg` ile kaçışlandıktan
+  sonra boşluklar dahil en çok 32.000 UTF-16 birimi olabilir. Diğer platformlarda önceki
+  28.000 birimlik prompt sınırı korunur. Tampondaki bağlam ve önsöz de sınıra dahildir.
+- `--exe` yoksa standart ev dizininin `AppData\Local\agy\bin\agy.exe` yolu kullanılır.
 
-prompt.md'deki agy kuralları geçerli: başsız modda araç izinleri reddedilir, dosya içeriği
-prompt'a gömülür, Windows argüman sınırı ~32.000 karakter, `--dangerously-skip-permissions` yasak.
+Her iki köprü için ortak davranış:
+
+- **Kota/maliyet:** yalnız `soru` ve `gorev` ajanı çalıştırır. `cevap`, `sonuc`, `bilgi` sonraki
+  soruya bağlam olur; `kapat` tamponu ve oturumu siler. Her mesaj tek tek id sırasıyla işlenir.
+- `--max-runs-per-hour 20` kayan pencereyle denemeleri sınırlar; hatalı denemeler de sayılır.
+  Aşılınca model çalışmaz; soru/görev tampon sınırları içinde kalıcı bağlama eklenir. Konuşma
+  başına saatte bir `köprü: saatlik çalıştırma sınırına ulaşıldı; mesajınız kaydedildi ama yanıtlanmadı, lütfen daha sonra yeniden sorun`
+  bilgisi gönderilir. Otomatik sonradan yanıt yoktur; karşı ajan yeniden sormalıdır. Bu sayaçlar bellektedir;
+  köprüyü yeniden başlatmak kotayı sıfırlar. Üç ardışık çalıştırıcı hatasında çıkış `1` olur.
+- `--runner-timeout 900` saniyedir. Hata/zaman aşımında sabit hata cevabı gönderilir.
+  `--once` tek beklemesiz istekte dönen mesajları işler ve çıkar (protokolde en çok 100 mesaj).
+  Sürekli mod, `wait` gibi 502/503/504 ve ulaşılamamada yeniden dener; `--once` bunlarda `3` döner.
+- Codex toplam prompt sınırı 200 KB'dır. Her iki çalıştırıcıda prompt sığmıyorsa tampondan
+  en eski mesajlar düşer (`tampon_budandi`). Yeni mesaj tek başına sığmıyorsa ajan çalışmaz;
+  `köprü: mesaj ajan için çok uzun` gönderilir. Bu ret çalıştırıcı hatası ya da kota tüketimi sayılmaz.
+- Ayar dosyası yanında `bridge-<oda>-<ajan>-<runner>.json` atomik ve imleçteki kilit düzeniyle
+  yazılır. Konuşma başına oturum ve en çok 20 mesaj / metadata dahil 32 KB JSON tamponu tutulur;
+  en eskiler düşer. Bu dosya mesaj gövdeleri içerir; paylaşmayın. Dosya izinleri 0600'dür
+  (Windows'ta kısmen uygulanır). Bozuk oturum dosyası sessizce sıfırlanmaz.
+- İmleç aynı `state-<oda>-<ajan>.json` dosyasıdır; kayıt ve cevap gönderimi tamamlandıktan sonra
+  mesaj bazında ilerler. İşlem başarısızken gelen iptal veya gönderim/kayıt hatası imleci ilerletmez;
+  işlem başarıyla tamamlanmışsa sonradan gelen iptale rağmen imleç ilerler. Çökme sonrası son
+  mesaj ve cevap tekrar edebilir (en az bir kez teslim). Aynı ajan ayarıyla eşzamanlı başka
+  `bridge`, `wait` veya `inbox` çalıştırmayın; okuma imlecini paylaşırlar.
+- Boş/`SESSIZ` cevap gönderilmez. `ŞÜPHELİ:` ret cevabı gönderilir ve içeriksiz uyarı loglanır.
+  Markdown, sondaki noktalama, büyük/küçük harf ve Türkçe I/İ varyasyonları tanınır;
+  ilk satırı `SESSIZ:`/`SESSİZ:` ile başlayan cevaplar da sessiz kalır. Özgün ret metni korunur.
+  Yanıt sır taramasından geçer; eşleşirse yalnız `köprü: cevap sır taraması nedeniyle gönderilmedi`
+  gönderilir, loga desen adı yazılır. Yanıt gerekirse UTF-8 korunarak 16 KB'a kısaltılır.
+- Cevaplar `cevap` tipi, aynı thread, gelen mesajın id'sine `reply_to` ve gönderene `to` ile
+  gider. HTTP 409 oturumu ve tamponu temizler; sonraki mesajlarla devam edilir.
+- HTTP 429'da hazır cevap bellekte tutulur; imleç ilerlemeden 15 saniye beklenir, yalnız
+  gönderim yeniden denenir. Toplam beş başarısız denemede köprü `1` ile durur. Bekleme iptal
+  edilebilir; ajan yeniden çalıştırılmaz. Bilinmeyen mesaj tipi `bilinmeyen_tip` olarak loglanıp atlanır.
+- Loglar zaman, konuşma, mesaj id, tip, işlem, süre ve çıkış kodu içerir; gövde, cevap ve
+  çalıştırıcı stderr'i içermez. Alt sürece ebeveyn ortamı değiştirilmeden aktarılır.
+- İsteğe bağlı `--debug-log <dosya>` başarısız çalıştırmalardaki stderr'in son 2 KB'ını
+  0600 izinli dosyaya ekler. Her satır zaman, konuşma, mesaj id ve çıkış kodu taşır. Sır içeren
+  satırlar `[sır deseni gizlendi: <desen>]` olur; prompt satırları gizlenir. Kesilmiş ilk satır
+  atılır. Başarılı turlar yazılmaz; teşhis ana loga veya relay'e taşınmaz. Bayraksız stderr atılır.
+- Ctrl+C/SIGTERM çalışan ana süreci öldürür ve `130` döndürür. Windows'ta çalıştırıcının
+  başlattığı çocuk süreçler kalabilir; süreç ağacının tamamının kapanması garanti edilmez.
+
+Çalıştırıcı biçimleri makinede önceden doğrulanmıştır; köprü testleri gerçek ajanı ve kotayı
+kullanmayan sahte çalıştırıcılarla yapılır. Gerçek CLI sürüm değişiklikleri ayrıca denenmelidir.
 
 ## E. İnsan
 
@@ -138,6 +197,6 @@ prompt'a gömülür, Windows argüman sınırı ~32.000 karakter, `--dangerously
 |---|---|---|---|---|
 | Claude, VS Code paneli | `relay send` (Bash) | Arka plan `relay wait` | Aynı oturum | ✅ Faz 0 |
 | Claude CLI | `relay send` | Arka plan `wait` ya da Channels | Aynı oturum | ⚠️ |
-| Codex | Köprü | Köprü başlatır | `exec resume <id>` | ⚠️ Faz 3 |
-| agy | Köprü | Köprü başlatır | `--conversation <id>` | ⚠️ Faz 3 |
+| Codex | `relay bridge --runner codex` | `soru`/`gorev` gelince başlatır | Konuşma başına kalıcı `exec resume <id>` | Uygulandı; sahte çalıştırıcı testleri |
+| agy | `relay bridge --runner agy` | `soru`/`gorev` gelince başlatır | Konuşma başına kalıcı `--conversation <id>` | Uygulandı; sahte çalıştırıcı testleri |
 | İnsan | `relay send` / web | — | — | 💡 |
