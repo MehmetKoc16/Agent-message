@@ -17,60 +17,59 @@ Bu yüzden güvenlik sonradan eklenecek bir özellik değil, tasarımın başlan
 
 ## 2. Sunucu sıkılaştırması (systemd)
 
-💡 Taslak `agent-relay.service`, Faz 4'te sunucudaki ana uygulamanın tarafının onayıyla kesinleşir:
+Go servisi için [agent-relay.service](../deploy/agent-relay.service) ve
+[kurulum.sh](../deploy/kurulum.sh) hazırlanmıştır. Sunucuda uygulanmadan önce ana
+uygulamanın sahibi paketi ve özel izolasyon listesini onaylar. İşlem sırası ve geri
+alma: [kurulum rehberi](kurulum.md). Python/venv çalışma zamanı gerekmez.
 
-```ini
-[Service]
-User=agentrelay
-Group=agentrelay
-ExecStart=/opt/agent-relay/venv/bin/python -m agent_relay --host 127.0.0.1 --port 8790
-WorkingDirectory=/opt/agent-relay
-StateDirectory=agent-relay            # /var/lib/agent-relay (SQLite)
+| Alan | Uygulama ve amacı |
+|---|---|
+| Kimlik/dosyalar | Kabuksuz, ev dizinsiz `agentrelay`; ikili root:root 0755, config root:agentrelay 0640; StateDirectory 0700, UMask 0077 |
+| Bellek/CPU | MemoryHigh=80M, MemoryMax=100M, MemorySwapMax=0, CPUQuota=25%, TasksMax=64, LimitNOFILE=1024 |
+| Dosya izolasyonu | ProtectSystem=strict, ProtectHome, PrivateTmp/Devices/Users; diğer uygulamalar için özel InaccessiblePaths drop-in |
+| Çekirdek/süreç | Kernel/ControlGroups/Clock/Hostname korumaları, ProtectProc=invisible, ProcSubset=pid; namespace/realtime/SUID kısıtları |
+| Yetki/syscall | NoNewPrivileges, boş capabilities; native mimari, @system-service izin listesi ve @privileged/@resources reddi (yasak çağrı SIGSYS yerine EPERM döner: SystemCallErrorNumber=EPERM, Go başlangıçta prlimit64 çağırır); MemoryDenyWriteExecute |
+| Ağ | Yalnız 127.0.0.1:8790 dinleme; AF_INET/AF_INET6/AF_UNIX; IPAddressDeny=any, IPAddressAllow=localhost |
+| Hata/toparlanma | SIGTERM, 20 sn kapanış, on-failure/5 sn; kurucuda SHA-256, RAM/port kontrolü ve 10 sn sağlık başarısızlığında ikili geri alma |
 
-MemoryMax=150M
-CPUQuota=25%
-TasksMax=64
+Port 8790 örnektir; kurulumda boş port seçilir. Yerel yollar yalnız
+`/etc/systemd/system/agent-relay.service.d/10-yerel.conf` içinde tutulur;
+[10-yerel.conf.ornek](../deploy/10-yerel.conf.ornek) yalnız yer tutucudur. Drop-in yoksa
+kurucu uygulamayı durdurur; `--drop-in-yok-onay` sahibin ayrıca kabul ettiği istisnadır.
+Salt okunur sistem dosyaları hâlâ okunabilir; diğer uygulamaların özel dizinlerini
+eksiksiz gizlemek ve izinlerini korumak gerekir. Localhost izni diğer yerel servislere
+erişimi de açar; tam ağ izolasyonu sağlamaz.
 
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-PrivateDevices=yes
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
-RestrictSUIDSGID=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-CapabilityBoundingSet=
-SystemCallFilter=@system-service
-InaccessiblePaths=<diğer uygulamaların ve veritabanının dizinleri>   # gerçek liste: local/sunucu.md
-IPAddressDeny=any
-IPAddressAllow=localhost              # yalnız Caddy'den gelen bağlantı; dışarıya çıkış yok
-```
-
-- Port 8790 bir örnek; Faz 4'te kullanılmayan bir port seçilir.
-- `InaccessiblePaths` listesi sunucuya özel olduğu için public repoda tutulmaz.
+Saf Go ve modernc SQLite JIT kullanmadığı için MemoryDenyWriteExecute uygundur.
+Syscall grupları, PrivateUsers, proc/namespace ve IP BPF/aygıt kısıtlarının birlikte
+çalışması gerçek Ubuntu/systemd üzerinde ilk kurulumda doğrulanmalıdır; Windows
+kontrolleri bunu kanıtlamaz. Uyarılar ve systemd güvenlik puanı sahibiyle incelenir.
 
 ## 3. Caddy
 
-💡 Taslak site bloğu. Mevcut Caddyfile'a **ekleme** yapılır, mevcut bloklara dokunulmaz.
+[Caddyfile.relay.ornek](../deploy/Caddyfile.relay.ornek) yalnız relay site bloğudur.
+[caddy-ekle.sh](../deploy/caddy-ekle.sh) varsayılan kuru çalışmada diff gösterir;
+`--uygula` ile mevcut `/etc/caddy/Caddyfile` sonuna **ekler**, mevcut blokları değiştirmez.
 
-```
-relay.<domain> {
-    request_body {
-        max_size 64KB
-    }
-    reverse_proxy 127.0.0.1:8790
-    log {
-        output file /var/log/caddy/relay.log
-    }
-}
-```
+| Koruma | Değer/davranış |
+|---|---|
+| TLS/yönlendirme | `relay.example.com`; yalnız `/v1/*` → `127.0.0.1:8790`, diğer yollar 404 |
+| İstek/long-poll | Gövde en çok 64KB; transport response_header_timeout/read_timeout 75s, varsayılan max_wait_sec=50 için pay |
+| Başlıklar | HSTS (1 yıl), X-Content-Type-Options=nosniff, Referrer-Policy=no-referrer; Server kaldırılır |
+| Günlük | `/var/log/caddy/relay.log`; filter ile request>headers>Authorization ve tüm request>uri silinir; sorgu loglanmaz |
+| Saklama | Dönen loglar 10MiB, en çok 14 dosya/336 saat; etkin dosya ve journal politikası ayrıca incelenir |
+| Değişiklik | Ön sağlık → zaman damgalı yedek → ekleme → validate → reload → 15 sn içinde mevcut uygulama ve relay HTTPS 200 |
+| Geri alma | Validate/reload/sağlık hatasında yedeği geri koy, validate/reload; elle `--geri-al` da önce kuru çalışır |
+
+Caddy çekirdeğinde hız sınırı yoktur; relay ajan başına hız sınırı uygular. Anonim
+trafik ve bağlantı sayısı bu sınırın dışında kalabilir. Günlükte istemci IP'si gibi
+başka kişisel alanlar kalabilir. TLS ve kurulu Caddy 2.x sürümündeki yönergeler ilk
+uygulamada doğrulanır. DNS ve mevcut uygulamanın gerçek sağlık URL'si özel kopyada
+verilir. Yedekten sonra başka Caddy değişiklikleri varsa tam dosya geri alınmaz;
+sahibi yalnız relay bloğunu kaldırır.
 
 Uygulama sırası [envanter.md](envanter.md#değişiklik-protokolü)'de: haber ver → yedekle →
-`caddy validate` → `systemctl reload caddy`.
+`caddy validate` → `systemctl reload caddy`. **Restart kullanılmaz.**
 
 ## 4. İstemci tarafı
 

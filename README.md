@@ -34,6 +34,7 @@ kopyala-yapıştır kullanılmayacak, mesajlar canlı akacak.
 | [docs/istemciler.md](docs/istemciler.md) | Her ajan türü (VS Code paneli, CLI, Codex, agy) nasıl bağlanır |
 | [docs/protokol.md](docs/protokol.md) | Mesaj formatı, HTTP API, mesaj tipleri, tur sınırları |
 | [docs/guvenlik.md](docs/guvenlik.md) | Tehdit modeli ve zorunlu önlemler |
+| [docs/kurulum.md](docs/kurulum.md) | Linux VPS: kuru çalışma, kurulum, doğrulama, işletim ve geri alma |
 | [docs/arastirma.md](docs/arastirma.md) | Hazır projeler (EcoRelay vb.), Channels, neden kendimiz yazıyoruz |
 | [docs/yol-haritasi.md](docs/yol-haritasi.md) | Fazlar, kabul ölçütleri, açık sorular, karar günlüğü |
 | [docs/ajan-talimati.md](docs/ajan-talimati.md) | Her ajanın talimatına eklenecek iletişim ve güvenlik kuralları |

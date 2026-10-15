@@ -1,0 +1,125 @@
+[Unit]
+# Servisi listelerde tanınabilir bir adla göster.
+Description=Agent-message Go relay
+# Yerel dinleyici için temel ağ hedefi yeterlidir.
+After=network.target
+
+[Service]
+# Uzun yaşayan Go sürecini doğrudan izle.
+Type=simple
+# Ayrı, kabuksuz ve ev dizinsiz sistem hesabı kullan.
+User=agentrelay
+# Yapılandırmaya yalnız bu grup erişsin.
+Group=agentrelay
+# Kabuk veya yorumlayıcı çalıştırmadan Go ikilisini başlat.
+ExecStart=/opt/agent-relay/agent-relay serve --config /etc/agent-relay/config.json
+# SQLite ve WAL dosyalarını kalıcı özel dizinde tut.
+StateDirectory=agent-relay
+# Veriye diğer kullanıcıların erişmesini engelle.
+StateDirectoryMode=0700
+# Yapılandırma dizinini systemd ile tanımla.
+# BELİRSİZ (düşük): systemd bu dizini kendisi oluşturur ya da kurulum.sh önceden root:agentrelay 0750 yapar;
+# sahiplik/mod doğrulaması için docs/kurulum.md kontrol listesine bak. ProtectSystem=strict altında salt okunurdur.
+ConfigurationDirectory=agent-relay
+# Dizini yalnız sahibi ve grubu okuyabilsin.
+ConfigurationDirectoryMode=0750
+# Yeni dosyaları yalnız hesap sahibine aç.
+UMask=0077
+# Göreli dosyaları veri diziniyle sınırla.
+WorkingDirectory=/var/lib/agent-relay
+# Beklenmeyen hatalarda toparlan.
+Restart=on-failure
+# Hata döngüsünün kaynak tüketmesini yavaşlat.
+RestartSec=5
+# Go kapanışı için sınırlı süre tanı.
+TimeoutStopSec=20
+# HTTP sunucusunun düzgün kapanmasını iste.
+KillSignal=SIGTERM
+# Bellek baskısını sert sınırdan önce uygula.
+MemoryHigh=80M
+# Diğer canlı uygulamalara RAM bırak.
+MemoryMax=100M
+# Relay'in swap kullanmasını engelle.
+MemorySwapMax=0
+# İşlemci kullanımını bir çekirdeğin dörtte biriyle sınırla.
+CPUQuota=25%
+# Go iş parçacıkları dahil görev sayısını sınırla.
+TasksMax=64
+# Açık dosya ve soket sayısını sınırla.
+LimitNOFILE=1024
+# Çocuk süreçlerde yetki kazanımını engelle.
+NoNewPrivileges=yes
+# Sistem dosyalarını salt okunur yap; StateDirectory yazılabilir kalır.
+ProtectSystem=strict
+# Kullanıcı evlerini gizle.
+ProtectHome=yes
+# Geçici dosyaları diğer servislerden ayır.
+PrivateTmp=yes
+# Fiziksel aygıtları gizle.
+PrivateDevices=yes
+# Kullanıcı kimliklerini özel ad alanında eşle.
+# RİSK (düşük-orta): PrivateUsers ile User= birlikte genelde sorunsuzdur; ama kullanıcı ad alanı
+# dosya sahipliğini 'nobody' gösterebilir. Config okunamıyor (Permission denied) ya da veritabanı
+# açılamıyorsa ilk gevşetilecek adaylardan biridir (bkz. docs/kurulum.md).
+PrivateUsers=yes
+# Çekirdek parametrelerini değiştirmeyi engelle.
+ProtectKernelTunables=yes
+# Çekirdek modülü yüklemeyi engelle.
+ProtectKernelModules=yes
+# Çekirdek günlüklerini gizle.
+ProtectKernelLogs=yes
+# Kontrol gruplarını salt okunur yap.
+ProtectControlGroups=yes
+# Sistem saatini koru.
+ProtectClock=yes
+# Makine adının değiştirilmesini engelle.
+ProtectHostname=yes
+# Diğer kullanıcıların süreçlerini gizle.
+ProtectProc=invisible
+# Proc altında süreç dışı bilgileri gizle.
+# RİSK (düşük): /proc/meminfo, /proc/cpuinfo gibi dosyalar görünmez; Go çalışma zamanı ve saf-Go SQLite
+# bunlara muhtaç değildir, beklenmedik bir 'no such file' görülürse gevşetilir.
+ProcSubset=pid
+# Yeni ad alanları oluşturmayı engelle.
+RestrictNamespaces=yes
+# Gerçek zamanlı zamanlama ayrıcalığını engelle.
+RestrictRealtime=yes
+# SUID/SGID dosyası oluşturmayı engelle.
+RestrictSUIDSGID=yes
+# İşlem kişiliğini sabitle.
+LockPersonality=yes
+# Saf Go ve modernc SQLite JIT kullanmaz; yazılabilir kod belleğini engelle.
+# RİSK (düşük): Go ve modernc SQLite (C'den çevrilmiş Go) JIT kullanmaz, bu yüzden uyumlu olması beklenir;
+# yine de ilk kurulumda doğrulanmalı. Servis SIGSEGV/SIGSYS ile ölürse bunu da dene.
+MemoryDenyWriteExecute=yes
+# Hesap durduğunda IPC nesnelerini temizle.
+RemoveIPC=yes
+# Tüm Linux yeteneklerini kaldır.
+CapabilityBoundingSet=
+# Miras alınan yetenekleri kaldır.
+AmbientCapabilities=
+# Yalnız ikilinin doğal syscall mimarisine izin ver.
+SystemCallArchitectures=native
+# Normal servis çağrılarına izin ver.
+SystemCallFilter=@system-service
+# Ayrıcalıklı ve kaynak sınırı değiştiren çağrıları reddet.
+SystemCallFilter=~@privileged @resources
+# RİSK (YÜKSEK, ilk kurulumda doğrula): Go 1.19+ başlangıçta RLIMIT_NOFILE'ı prlimit64 ile okur/yükseltir;
+# prlimit64 @resources grubundadır. Varsayılan eylem süreci öldürmek (SIGSYS) olduğundan aşağıdaki
+# SystemCallErrorNumber şarttır: yasak çağrı EPERM döner, Go bu hatayı yok sayar. Hâlâ ölüyorsa önce
+# yalnız '~@resources' ifadesini kaldır ('~@privileged' kalsın); bkz. docs/kurulum.md.
+# Yasak çağrıyı bulmak için: journalctl -u agent-relay ve 'systemd-analyze syscall-filter'.
+SystemCallErrorNumber=EPERM
+# Yalnız IP ve yerel Unix soketlerini kullan.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Varsayılan olarak tüm IP trafiğini engelle.
+IPAddressDeny=any
+# Caddy ve yerel yönetim için yalnız loopback trafiğine izin ver.
+IPAddressAllow=localhost
+# Aygıt erişimini kapat; temel özel aygıtlar systemd tarafından sağlanır.
+DevicePolicy=closed
+# Sunucudaki diğer uygulamaların dizinleri yerel drop-in ile eklenir: /etc/systemd/system/agent-relay.service.d/10-yerel.conf (repoya girmez)
+
+[Install]
+# Normal çok kullanıcılı açılışta başlat.
+WantedBy=multi-user.target

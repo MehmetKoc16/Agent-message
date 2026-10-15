@@ -1,0 +1,6 @@
+# Yalnız sunucuda düzenle; gerçek yolları repoya veya inceleme çıktısına koyma.
+# Yer tutucuların tümünü var olan dizinlerle değiştir; olmayan yol servisi durdurur.
+[Service]
+# Diğer uygulamanın kodu, ayarları, verisi, yedekleri ve iş dizinlerini gizle.
+InaccessiblePaths=/srv/diger-uygulama /etc/diger-uygulama /var/lib/diger-uygulama /var/backups/diger-uygulama
+# Relay'in kendi veri/config/ikili dizinlerini veya Caddy'yi buraya ekleme.

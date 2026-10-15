@@ -1,0 +1,44 @@
+# Bu blok mevcut /etc/caddy/Caddyfile sonuna EKLENİR; mevcut bloklara dokunulmaz.
+# Alanı ve portu yerel kopyada düzenle. Caddy çekirdeğinde hız sınırı yoktur;
+# relay kendi ajan başına hız sınırını uygular (anonim trafik için genel limit değildir).
+relay.example.com {
+    # request_body: Caddy 2.x yönergesi; 64KB = 64000 bayt (relay max_body 16384 değerinin üstünde pay bırakır).
+    request_body {
+        max_size 64KB
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+    handle /v1/* {
+        reverse_proxy 127.0.0.1:8790 {
+            transport http {
+                # max_wait_sec=50 için 25 saniye pay; arttırılırsa bunları da arttır.
+                response_header_timeout 75s
+                read_timeout 75s
+            }
+        }
+    }
+    handle {
+        respond 404
+    }
+    # Sunucuda ilk kurulumda doğrula: /var/log/caddy caddy kullanıcısınca yazılabilir olmalı; `caddy validate`
+    # yönergeleri doğrular. Caddy 2.x varsayılanı Authorization/Cookie başlıklarını zaten gizler; silme ek önlemdir.
+    log {
+        output file /var/log/caddy/relay.log {
+            roll_size 10MiB
+            roll_keep 14
+            roll_keep_for 336h
+        }
+        format filter {
+            wrap json
+            fields {
+                request>headers>Authorization delete
+                # URI alanını tamamen silmek sorguyu da gizler.
+                request>uri delete
+            }
+        }
+    }
+}

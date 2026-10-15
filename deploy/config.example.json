@@ -1,0 +1,12 @@
+{
+  "host": "127.0.0.1",
+  "port": 8790,
+  "db": "/var/lib/agent-relay/relay.db",
+  "max_turns": 20,
+  "max_body": 16384,
+  "rate_per_min": 30,
+  "rate_per_day": 500,
+  "retention_days": 14,
+  "max_wait_sec": 50,
+  "max_conns_per_agent": 4
+}
