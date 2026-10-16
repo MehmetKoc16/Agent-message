@@ -5,6 +5,97 @@ hata() { printf 'hata: %s\n' "$*" >&2; exit 1; }
 deger_iste() { [[ $# -ge 2 && -n $2 && $2 != --* ]] || hata "$1 için değer gerekli"; }
 komut_iste() { command -v "$1" >/dev/null 2>&1 || hata "gerekli komut yok: $1"; }
 
+# Örnek blokla birlikte sabit tutulur; farklı log hedefleri otomatik hazırlanmaz.
+caddy_log_yolu=/var/log/caddy/relay.log
+caddy_log_kontrol() {
+    # Salt okunur: test kökü ve sayısal kimliklerle de sınanabilir.
+    local hedef=$1 uid=$2 gid=$3 dizin parca bilgi
+    dizin=${hedef%/*}
+    parca=$dizin
+    while [[ $parca != / && -n $parca ]]; do
+        [[ ! -L $parca ]] || hata 'Caddy log yolunda sembolik bağlantı var'
+        [[ $parca == */* ]] || break
+        parca=${parca%/*}
+    done
+    [[ -d $dizin ]] || hata 'Caddy log dizini yok'
+    [[ $(stat -c '%u' -- "$dizin") == "$uid" ]] || hata 'Caddy log dizini sahibi caddy değil'
+    [[ ! -L $hedef ]] || hata 'Caddy log dosyası sembolik bağlantı'
+    if [[ -e $hedef ]]; then
+        [[ -f $hedef ]] || hata 'Caddy log hedefi normal dosya değil'
+        bilgi=$(stat -c '%u:%g:%a:%h' -- "$hedef") || hata 'Caddy log bilgisi okunamadı'
+        [[ $bilgi == "$uid:$gid:600:1" ]] || hata 'Caddy log dosyası caddy:caddy 0600 ve tek bağlantılı olmalı; dosyaya dokunulmadı'
+    fi
+}
+
+caddy_log_hazirla() (
+    # Yalnız canlı --uygula çağırır. Dizin fd'si hedefi sabitler; link mevcut
+    # adı atomik olarak reddeder. Root hiçbir zaman mevcut loga yazmaz.
+    local hedef=$1 uid=$2 gid=$3
+    caddy_log_kontrol "$hedef" "$uid" "$gid"
+    # openat/O_NOFOLLOW: her dizin bileşeni sabitlenir. Hazırlama aynı dosya
+    # sistemindedir; /tmp ayrı bir mount olsa da atomik link çalışır.
+    python3 - "$hedef" "$uid" "$gid" <<'PY'
+import os, secrets, stat, subprocess, sys
+
+target, uid, gid = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+directory = os.open('/', flags)
+private = None
+name = None
+verified = False
+try:
+    for part in target.split('/')[1:-1]:
+        child = os.open(part, flags, dir_fd=directory)
+        os.close(directory)
+        directory = child
+    if os.fstat(directory).st_uid != uid:
+        raise RuntimeError('Caddy log dizini sahibi caddy değil')
+    leaf = target.rsplit('/', 1)[1]
+    try:
+        info = os.stat(leaf, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        info = None
+    if info is not None:
+        if not (stat.S_ISREG(info.st_mode) and info.st_uid == uid and
+                info.st_gid == gid and stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1):
+            raise RuntimeError('Caddy log hedefi değişti/geçersiz; dosyaya dokunulmadı')
+    else:
+        name = '.agent-relay-log-' + secrets.token_hex(16)
+        os.mkdir(name, 0o700, dir_fd=directory)
+        private = os.open(name, flags, dir_fd=directory)
+        info = os.fstat(private)
+        if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700 or os.listdir(private):
+            raise RuntimeError('özel log hazırlama dizini değişti')
+        verified = True
+        subprocess.run(['install', '-o', 'caddy', '-g', 'caddy', '-m', '0600',
+                        '/dev/null', f'/proc/self/fd/{private}/relay.log'],
+                       pass_fds=(private,), check=True)
+        # EEXIST: yarışta beliren dosya/symlink ASLA ezilmez veya izlenmez.
+        os.link('relay.log', leaf, src_dir_fd=private, dst_dir_fd=directory,
+                follow_symlinks=False)
+except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+    print(f'hata: Caddy log hazırlığı başarısız; mevcut hedefe yazılmadı: {exc}', file=sys.stderr)
+    sys.exit(1)
+finally:
+    if private is not None:
+        # Yalnız doğrulanmış root dizininin içeriğini temizle.
+        owned = os.fstat(private)
+        if verified:
+            try:
+                os.unlink('relay.log', dir_fd=private)
+            except FileNotFoundError:
+                pass
+            try:
+                entry = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                if (entry.st_dev, entry.st_ino) == (owned.st_dev, owned.st_ino):
+                    os.rmdir(name, dir_fd=directory)
+            except FileNotFoundError:
+                pass
+        os.close(private)
+    os.close(directory)
+PY
+)
+
 kok_kontrol() {
     # Test kökü yalnız okuma içindir; sistem komutları ve --uygula kapalıdır.
     if [[ -n $kok ]]; then

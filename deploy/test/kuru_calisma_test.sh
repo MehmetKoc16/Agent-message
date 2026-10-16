@@ -96,6 +96,38 @@ bekle 'Caddy eksik değer' hata 'değer gerekli' bash "$deploy/caddy-ekle.sh" --
 bekle 'Caddy bilinmeyen bayrak' hata 'bilinmeyen' "${cad[@]}" --yanlis
 bekle 'Caddy test kökünde uygulama yasak' hata '--kok ile --uygula yasak' "${cad[@]}" --uygula
 bekle 'Caddy kuru diff' tamam '+relay.example.com {' "${cad[@]}"
+(cd -- "$kok" && mkdir -p var/log/caddy)
+bekle 'Caddy kuru çalışma eksik log dosyasını oluşturmaz' tamam 'KURU ÇALIŞMA' "${cad[@]}"
+[[ ! -e $kok/var/log/caddy/relay.log && ! -L $kok/var/log/caddy/relay.log ]] || exit 1
+log_kontrol=(bash -c 'source "$1/ortak.sh"; caddy_log_kontrol "$2/var/log/caddy/relay.log" "$3" "$4"; printf "LOG KONTROL TAMAM\n"' log-test "$deploy" "$kok")
+test_uid=$(stat -c '%u' -- "$kok/var/log/caddy")
+test_gid=$(stat -c '%g' -- "$kok/var/log/caddy")
+bekle 'log kontrolü eksik dosyaya yazmaz' tamam 'LOG KONTROL TAMAM' "${log_kontrol[@]}" "$test_uid" "$test_gid"
+mkdir -- "$kok/var/log/caddy/relay.log"
+bekle 'log dizin hedefini dokunmadan reddeder' hata 'normal dosya değil' "${log_kontrol[@]}" "$test_uid" "$test_gid"
+rmdir -- "$kok/var/log/caddy/relay.log"
+# Git Bash ln -s bazı Windows kurulumlarında kopya üretir; gerçek bağlantı
+# oluşmadıysa bunu başarı saymayız, sınanamayan kontrolü açıkça bildiririz.
+printf 'korunacak log hedefi\n' > "$kok/var/log/caddy/hedef"
+ln -s -- hedef "$kok/var/log/caddy/relay.log"
+if [[ -L $kok/var/log/caddy/relay.log ]]; then
+    bekle 'log symlink hedefini dokunmadan reddeder' hata 'sembolik bağlantı' "${log_kontrol[@]}" "$test_uid" "$test_gid"
+else
+    printf '%s\n' 'SINANAMADI: Windows gerçek symlink oluşturmadı; symlink reddi Linux üzerinde doğrulanmalı.'
+fi
+rm -- "$kok/var/log/caddy/relay.log"
+bekle 'log dizini yanlış sahibini dokunmadan reddeder' hata 'dizini sahibi caddy değil' "${log_kontrol[@]}" 4294967294 "$test_gid"
+printf 'mevcut log korunur\n' > "$kok/var/log/caddy/relay.log"
+# Sahiplik değiştirmeden stat çıktısını taklit et; Linux chown/0600 testi değildir.
+bekle 'log dosyası yanlış sahiplik bilgisi reddedilir (stat taklidi)' hata 'dosyaya dokunulmadı' bash -c '
+    source "$1/ortak.sh"
+    stat() {
+        if [[ $2 == "%u:%g:%a:%h" ]]; then printf "4294967294:4294967294:600:1\n"; else command stat "$@"; fi
+    }
+    caddy_log_kontrol "$2/var/log/caddy/relay.log" "$3" "$4"
+' log-test "$deploy" "$kok" "$test_uid" "$test_gid"
+rm -- "$kok/var/log/caddy/relay.log"
+printf '%s\n' 'SINANAMADI: gerçek caddy sahipliği/0600, ayrıcalıklı install ve runuser/validate/reload Windows testinin kapsamında değil.'
 # NEDEN: DNS hatasında --uygula kilit/yedek dahil hiçbir şey yazmamalı.
 : > "$gecici/stub/dns"
 bekle 'DNS çözülemiyor uygulama yazmaz' hata 'DNS kaydı henüz bu sunucuyu göstermiyor' "${cad[@]}" --uygula

@@ -313,8 +313,12 @@ kaldırılmaz. `/etc/agent-relay` dizin sahipliği (root:agentrelay 0750) ve con
 
 ### Caddy tarafında ilk doğrulanacaklar
 
-`caddy validate` root olarak çalışır; Caddyfile'da `{$DEĞİŞKEN}` kullanılıyorsa
-(ör. systemd `EnvironmentFile`) kuru/uygulama aşamasında doğrulama başarısız olabilir.
+16.10.2026 olayında root ile validate, logu root:root 0600 oluşturduğu için reload izin hatası verdi; otomatik geri alma canlı uygulamayı korudu.
+Artık ekleme ve geri alma uygulamalarında validate öncesi sabit `/var/log/caddy/relay.log` hedefi hazırlanır: dizin caddy sahibi olmalı, dosya yoksa özel dizinde `install` ile caddy:caddy 0600 oluşturulup mevcut hedefi ezmeyen atomik bağlantıyla yayımlanır; symlink, normal olmayan dosya, yanlış sahiplik/izin veya birden çok bağlantı hata verir, kuru çalışma hiçbir log oluşturmaz.
+Bütün validate çağrıları `runuser -u caddy -- caddy validate` ile çalışır; Caddyfile/import okunamıyorsa açık hata verir ve root'a geri düşmez (güvenli log hazırlığı için uygulamada `python3` gerekir).
+
+Caddyfile'da `{$DEĞİŞKEN}` kullanılıyorsa
+(ör. systemd `EnvironmentFile`) uygulama aşamasında doğrulama başarısız olabilir.
 Bu durumda sahibi `--envfile` ile elle doğrular; betik hata verip dosyayı değiştirmeden durur.
 Emin olunamayan yönergeler: `request_body { max_size }`, `reverse_proxy` altında `transport http`
 içindeki `response_header_timeout`/`read_timeout`, `log` altında `format filter` + `fields`

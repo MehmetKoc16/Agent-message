@@ -132,17 +132,30 @@ if (( ! uygula )); then
         'Uygulama: zaman damgalı yedek → ekle/geri koy → validate → reload; restart yok.'
     exit 0
 fi
-for arac in caddy curl cp date flock; do komut_iste "$arac"; done
+for arac in caddy curl cp date flock runuser getent stat install python3; do komut_iste "$arac"; done
 kilit_al
+caddy_hesap=$(getent passwd caddy) || hata 'caddy kullanıcısı yok; önce Caddy kurulumunu doğrulayın'
+caddy_grup=$(getent group caddy) || hata 'caddy grubu yok; önce Caddy kurulumunu doğrulayın'
+IFS=: read -r hesap_ad _ caddy_uid _ <<< "$caddy_hesap"
+IFS=: read -r grup_ad _ caddy_gid _ <<< "$caddy_grup"
+[[ $hesap_ad == caddy && $grup_ad == caddy && $caddy_uid =~ ^[0-9]+$ && $caddy_gid =~ ^[0-9]+$ && $caddy_uid != 0 && $caddy_gid != 0 ]] || hata 'caddy hesap/grup bilgisi geçersiz'
+caddy_dogrula() {
+    runuser -u caddy -- caddy validate --config "$1" --adapter caddyfile || {
+        printf '%s\n' 'hata: caddy kullanıcısıyla validate başarısız; Caddyfile/import okuma ve log izinlerini inceleyin; root ile tekrar denenmedi.' >&2
+        return 1
+    }
+}
 if [[ -z $geri ]]; then
     tekrar_kontrol
     saglik "$mevcut_saglik" || hata 'mevcut uygulama ön sağlık kontrolü 200 değil; dosya değiştirilmedi'
-else
+fi
+caddy_log_hazirla "$caddy_log_yolu" "$caddy_uid" "$caddy_gid"
+if [[ -n $geri ]]; then
     # Geri alma kaynağı da gerçek Caddy ile, değiştirmeden önce doğrulanır.
-    caddy validate --config "$geri" --adapter caddyfile
+    caddy_dogrula "$geri"
 fi
 # Mevcut yapılandırmayı da doğrula; bozuk bir başlangıcı yedekleyip yayınlama.
-caddy validate --config "$caddyfile" --adapter caddyfile
+caddy_dogrula "$caddyfile"
 yedek="$caddyfile.yedek-$(date -u +%Y%m%dT%H%M%S-%N)"
 [[ ! -e $yedek ]] || hata 'yedek adı çakıştı'
 cp -p -- "$caddyfile" "$yedek"
@@ -151,7 +164,7 @@ geri_don() {
     trap - ERR INT TERM
     printf '%s\n' 'hata: Caddy değişikliği geri alınıyor.' >&2
     if cp -p -- "$yedek" "$caddyfile" && \
-        caddy validate --config "$caddyfile" --adapter caddyfile && systemctl reload caddy; then
+        caddy_dogrula "$caddyfile" && systemctl reload caddy; then
         printf '%s\n' 'Önceki Caddyfile geri kondu ve reload edildi.' >&2
     else
         printf 'ACİL: otomatik geri alma tamamlanamadı; sunucu sahibi incelemeli. Yedek: %s\n' "$yedek" >&2
@@ -167,7 +180,7 @@ else
     cat -- "$blok" >> "$caddyfile"
     printf '\n' >> "$caddyfile"
 fi
-caddy validate --config "$caddyfile" --adapter caddyfile
+caddy_dogrula "$caddyfile"
 systemctl reload caddy
 if [[ -z $geri ]]; then
     saglik_bekle 15 "$mevcut_saglik"

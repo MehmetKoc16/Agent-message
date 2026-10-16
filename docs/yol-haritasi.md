@@ -54,7 +54,11 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 - **Kabul:** Claude, köprü üzerinden bir Codex konuşmasıyla 3 tur konuşur; Codex önceki turu
   hatırlar. agy için de aynısı.
 
-## Faz 4: Sunucuya kurulum ⚠️ onay gerektirir
+## Faz 4: Sunucuya kurulum ✅ Tamamlandı (16.10.2026)
+
+> Sonuç: sunucu sahibinin incelemesi (A1 Unix soketi + ağ yok, A2 güvenli geri alma) sonrası
+> kuruldu. Güvenlik puanı 0.2 SAFE, bellek ~3 MB, TCP portu yok. Caddy log sahipliği olayı
+> otomatik geri almayla zararsız atlatıldı. Ayrıntı: [deneyler/faz4/SONUC.md](../deneyler/faz4/SONUC.md).
 
 1. Mimari ve [güvenlik.md](guvenlik.md) sunucudaki ana uygulamanın tarafına onaylatılır.
 2. DNS: `relay.<domain>` A kaydı (kullanıcı yapar).
