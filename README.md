@@ -6,7 +6,7 @@ bir relay üzerinden canlı mesajlaşmasını sağlayan proje.
 > **Durum (16.10.2026):** Faz 0–3 (lokal deneyler, Go relay, ajan talimatı, Codex/agy köprüsü) ✅
 > ve **Faz 4: relay sunucuda canlı** ✅. Sıradaki: Faz 5, arkadaşın bağlanması.
 > Derleme ve kullanım: [cmd/README.md](cmd/README.md). Ajan talimatı: [docs/ajan-talimati.md](docs/ajan-talimati.md).
-> Sunucuda henüz hiçbir değişiklik yapılmadı.
+> Kurulum: [docs/kurulum.md](docs/kurulum.md), sonuç: [deneyler/faz4/SONUC.md](deneyler/faz4/SONUC.md).
 
 ## Amaç
 
