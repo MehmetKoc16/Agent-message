@@ -54,6 +54,6 @@ Betik, validate'den önce log dosyasını doğru sahiplikle oluşturacak şekild
 
 ## Açık kalanlar
 
-- Sunucu yeniden başlatıldıktan sonra relay'in soket etkinleştirmesiyle kendiliğinden kalktığı
-  doğrulanmadı. Bekleyen çekirdek güncellemesinde sunucu sahibiyle birlikte bakılacak.
+- ✅ (17.10.2026) Sunucu yeniden başlatıldı (çekirdek güncellemesi). Relay soket etkinleştirmesiyle
+  kendiliğinden kalktı; Unix soketi ve HTTPS üzerinden sağlık 200, drop-in yüklü, canlı uygulama sağlıklı.
 - `go test -race` bu makinede çalıştırılamadı (cgo yok).
