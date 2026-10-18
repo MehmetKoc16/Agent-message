@@ -35,9 +35,10 @@ func TestMain(m *testing.M) {
 	code := func() int {
 		defer os.RemoveAll(dir)
 		executables = make(map[string]string)
+		// Testleri çalıştıran Go kurulumunun go aracı (CI'da Program Files'ta değildir).
 		goExe := filepath.Join(runtime.GOROOT(), "bin", "go")
 		if runtime.GOOS == "windows" {
-			goExe = `C:\Program Files\Go\bin\go.exe`
+			goExe += ".exe"
 		}
 		for _, runner := range []string{"codex", "agy"} {
 			p := filepath.Join(dir, "fake"+runner+".exe")
