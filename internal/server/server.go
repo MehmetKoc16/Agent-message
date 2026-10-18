@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -228,13 +229,22 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request, a store.Agen
 	// JSON kaçışları gövdeyi büyütebilir; okuma sınırı bu yüzden max_body'nin birkaç katıdır.
 	// Asıl gövde sınırı çözümlendikten sonra aşağıda uygulanır.
 	r.Body = http.MaxBytesReader(w, r.Body, int64(4*s.cfg.MaxBody+1024))
-	var in postRequest
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
 			writeErr(w, http.StatusRequestEntityTooLarge, "govde_cok_buyuk")
 			return
 		}
+		writeErr(w, http.StatusBadRequest, "gecersiz_json")
+		return
+	}
+	if !utf8.Valid(raw) {
+		writeErr(w, http.StatusBadRequest, "gecersiz_govde")
+		return
+	}
+	var in postRequest
+	if err := json.Unmarshal(raw, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "gecersiz_json")
 		return
 	}

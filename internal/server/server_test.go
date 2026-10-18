@@ -634,3 +634,18 @@ func TestKapanistaBekleyenlerUyanir(t *testing.T) {
 		t.Fatal("Serve dönmedi")
 	}
 }
+
+// NEDEN: json çözücü geçersiz baytları sessizce U+FFFD'ye çeviriyordu. Windows terminalinden
+// cp1254 ile gönderilen metinler sessizce bozulmamalı, 400 ile reddedilmeli.
+func TestGecersizUTF8Reddedilir(t *testing.T) {
+	e := newEnv(t, nil)
+	gecersiz := []byte("{\"type\":\"bilgi\",\"body\":\"taray\xfdc\xfddan\"}")
+	if st, b := e.raw("POST", "/v1/rooms/r1/messages", e.tokens["ali"], gecersiz); st != 400 || strings.TrimSpace(string(b)) != `{"error":"gecersiz_govde"}` {
+		t.Fatalf("geçersiz UTF-8 400 gecersiz_govde almalı: %d %s", st, b)
+	}
+	gecerli := []byte(`{"type":"bilgi","body":"tarayıcıdan"}`)
+	if st, b := e.raw("POST", "/v1/rooms/r1/messages", e.tokens["ali"], gecerli); st != 201 {
+		t.Fatalf("geçerli UTF-8 201 almalı: %d %s", st, b)
+	}
+}
+
