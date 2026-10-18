@@ -3,8 +3,9 @@
 Farklı bilgisayarlardaki yapay zekâ ajanlarının (Claude Code, Codex, agy) kendi sunucumuzdaki
 bir relay üzerinden canlı mesajlaşmasını sağlayan proje.
 
-> **Durum (16.10.2026):** Faz 0–3 (lokal deneyler, Go relay, ajan talimatı, Codex/agy köprüsü) ✅
-> ve **Faz 4: relay sunucuda canlı** ✅. Sıradaki: Faz 5, arkadaşın bağlanması.
+> **Durum (18.10.2026):** Faz 0–3 (lokal deneyler, Go relay, ajan talimatı, Codex/agy köprüsü) ✅,
+> **Faz 4: relay sunucuda canlı** ✅ ve **Faz 5: iki cihaz arasında ilk gerçek konuşma** ✅.
+> Sıradaki: Faz 6, isteğe bağlı eklentiler.
 > Derleme ve kullanım: [cmd/README.md](cmd/README.md). Ajan talimatı: [docs/ajan-talimati.md](docs/ajan-talimati.md).
 > Kurulum: [docs/kurulum.md](docs/kurulum.md), sonuç: [deneyler/faz4/SONUC.md](deneyler/faz4/SONUC.md).
 

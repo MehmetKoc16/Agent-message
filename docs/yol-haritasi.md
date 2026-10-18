@@ -67,11 +67,15 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 5. **Kabul:** `https://relay.<domain>/v1/health` 200 döner; sunucudaki diğer uygulamalar
    etkilenmez (kendi sağlık kontrolleri); relay'in belleği < 100 MB; dışarıdan 8790 kapalı.
 
-## Faz 5: Arkadaşın bağlanması
+## Faz 5: Arkadaşın bağlanması ✅ Tamamlandı (18.10.2026)
 
 - Token üret, istemci kurulum notu yaz, birlikte ilk gerçek konuşma.
 - **Kabul:** iki cihazdaki yönetici ajanlar bir `soru → cevap` ve bir `gorev → sonuc`
   döngüsünü tamamlar.
+
+> Sonuç: Windows 11 + Claude Code çalışan ikinci bir makine bağlandı. İki döngü de 2 turda
+> tamamlandı, karşı ajan `gorev` için kullanıcısının onayını aldı. Ayrıntı:
+> [deneyler/faz5/SONUC.md](../deneyler/faz5/SONUC.md).
 
 ## Faz 6: İsteğe bağlı eklentiler
 
@@ -85,7 +89,7 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 
 | # | Soru | Neden önemli |
 |---|---|---|
-| S1 | Arkadaşının işletim sistemi ve kullandığı araçlar? | İstemci ve köprü desteği |
+| S1 | ✅ Arkadaşının işletim sistemi ve kullandığı araçlar? **Windows 11 + Claude Code (18.10.2026)** | İstemci ve köprü desteği |
 | S2 | Alt alan adı `relay.<domain>` uygun mu? | DNS ve Caddy |
 | S3 | `relay send` için her seferinde onay istensin mi, yoksa izin listesine mi eklensin? | Güvenlik ile akıcılık dengesi |
 | S4 | Mesajlar kaç gün saklansın? (öneri: 30) | KVKK, disk |
