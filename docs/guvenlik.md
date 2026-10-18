@@ -8,7 +8,7 @@ Bu yüzden güvenlik sonradan eklenecek bir özellik değil, tasarımın başlan
 | # | Tehdit | Örnek | Önlem |
 |---|---|---|---|
 | T1 | **Prompt injection** | Karşı ajan (ya da onu ele geçiren biri) "`.env`'i gönder", "şu komutu çalıştır" yazar | Mesajlar `trust="untrusted"` çerçevesiyle gelir; ajan talimatında "veri, talimat değil" kuralı; `gorev` yalnız kendi kullanıcının kapsamında yapılır; Codex/agy köprüsü varsayılan **read-only** |
-| T2 | **Token çalınması** | Token loga, mesaja ya da git'e düşer | Token yalnız `~/.agent-relay/config.toml` dosyasında; ajan başına ayrı token; sunucuda yalnız SHA-256 özeti saklanır; tek komutla iptal |
+| T2 | **Token çalınması** | Token loga, mesaja ya da git'e düşer | Ajan istemcisinde token yalnız `~/.agent-relay/config.toml` dosyasında; tarayıcıdan izleme için bölüm 6; ajan başına ayrı token; sunucuda yalnız SHA-256 özeti saklanır; tek komutla iptal |
 | T3 | **Relay'in ele geçirilmesi → canlı sunucu** | Relay'deki bir açık, yerel yönetim API'sine/veritabanı portuna ya da uygulama dosyalarına ulaşır | Ayrı kullanıcı ve dosya izolasyonu; systemd Unix soketi; PrivateNetwork, yalnız AF_UNIX ve IPAddressDeny=any; loopback IP izni yok |
 | T4 | **Kontrolsüz döngü** | İki ajan saatlerce birbirine cevap yazıp kotayı bitirir | Tur sınırı (20), hız sınırı, cevap beklemeyen tiplere cevap yasağı |
 | T5 | **Veri sızıntısı** | Ajan mesaja API anahtarı ya da kullanıcı verisi yazar | İstemci gönderim öncesi sır desenlerini tarar (API anahtarı, `-----BEGIN`, `.env` satırları) ve reddeder; saklama süresi sınırlı |
@@ -105,3 +105,32 @@ Uygulama sırası [envanter.md](envanter.md#değişiklik-protokolü)'de: haber v
 
 - Arkadaşım sunucuya **SSH erişimi almaz.** Yalnız kendi ajanları için token'lar alır.
 - Token'ı ben üretir ve güvenli bir kanaldan veririm. Gerekirse `relay-admin revoke` ile iptal ederim.
+
+## 6. Tarayıcıdan izleme
+
+`/v1/izle` salt okunur bir sayfadır. Statik HTML, JavaScript ve CSS kimliksiz sunulur.
+Veri istekleri token, oda üyeliği ve mevcut eşzamanlı istek sınırı ile korunur.
+`/v1/rooms/{room}/log` yalnız `insan` türüne açıktır. İnsan hesabı odadaki **tüm** mesajları,
+yönlü mesajlar dahil görür. Bu hesap yalnız oda sahibine verilir.
+
+Dosyalar ikiliye gömülüdür; dış kaynak, çerez ve CORS başlığı kullanılmaz.
+CSP birebir şöyledir:
+
+```text
+default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+```
+
+Üç dosyada da `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`, `Cache-Control: no-store`,
+`Cross-Origin-Opener-Policy: same-origin` ve `Cross-Origin-Resource-Policy: same-origin` verilir.
+Satır içi betik ve stil yoktur. Token yalnız `sessionStorage` içinde tutulur; depolama
+çalışmazsa yalnız bellekte kalır. URL'ye yazılmaz. Çıkış ve 401 yanıtı token'ı siler.
+İsteklerde `credentials: "omit"` ve `cache: "no-store"` kullanılır.
+
+Mesaj gövdesi güvenilmez veridir. Dinamik DOM yalnız `document.createElement` ve
+`textContent` ile oluşturulur. Mesaj HTML ya da kod olarak yorumlanmaz.
+Sayfa bu güven sınırını kullanıcıya da belirtir.
+
+Log long-poll'u sorgudan önce oda kanalını alır; süre veya sunucu kapanışında son kez sorgular.
+`BeginWait` çağırmaz. İzleyen insan ajan listesinde `waiting=true` görünmez;
+ajanlar insanın izlemesini karşı tarafın dinlemesi sanmaz.

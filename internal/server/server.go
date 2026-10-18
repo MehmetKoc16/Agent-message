@@ -65,13 +65,21 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("POST /v1/rooms/{room}/messages", s.room(s.handlePost))
 	mux.HandleFunc("GET /v1/rooms/{room}/messages", s.room(s.handleFetch))
+	mux.HandleFunc("GET /v1/rooms/{room}/log", s.room(s.handleLog))
 	mux.HandleFunc("GET /v1/rooms/{room}/threads/{thread}", s.room(s.handleThread))
 	mux.HandleFunc("POST /v1/rooms/{room}/threads/{thread}/close", s.room(s.handleClose))
 	mux.HandleFunc("GET /v1/rooms/{room}/agents", s.room(s.handleAgents))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "bulunamadi")
 	})
-	return s.logging(mux)
+	return s.logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// ServeMux temizlemeden önce izleme yollarını tam eşleştir.
+		if r.URL.Path == "/v1/izle" || strings.HasPrefix(r.URL.Path, "/v1/izle/") {
+			handleIzle(w, r)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
 }
 
 // ---- ortak yardımcılar ----
@@ -252,6 +260,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, a store.Agent, roo
 }
 
 func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request, a store.Agent, room string) {
+	s.fetchMessages(w, r, a, room, false)
+}
+
+func (s *Server) fetchMessages(w http.ResponseWriter, r *http.Request, a store.Agent, room string, roomLog bool) {
 	q := r.URL.Query()
 	var after int64
 	if v := q.Get("after"); v != "" {
@@ -274,14 +286,16 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request, a store.Age
 
 	var timeout <-chan time.Time
 	if wait > 0 {
-		defer s.hub.BeginWait(room, a.Name)()
+		if !roomLog {
+			defer s.hub.BeginWait(room, a.Name)()
+		}
 		t := time.NewTimer(time.Duration(wait) * time.Second)
 		defer t.Stop()
 		timeout = t.C
 	}
 	for {
 		ch := s.hub.Chan(room) // sorgudan ÖNCE alınır (kaçırılan bildirim olmasın)
-		msgs, err := s.st.Fetch(r.Context(), room, a.Name, after, maxFetch)
+		msgs, err := s.readMessages(r.Context(), room, a.Name, after, roomLog)
 		if err != nil {
 			if r.Context().Err() != nil {
 				w.WriteHeader(499)
@@ -297,10 +311,10 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request, a store.Age
 		select {
 		case <-ch:
 		case <-timeout:
-			s.finalFetch(w, r, room, a.Name, after)
+			s.finalMessages(w, r, room, a.Name, after, roomLog)
 			return
 		case <-s.hub.Done():
-			s.finalFetch(w, r, room, a.Name, after)
+			s.finalMessages(w, r, room, a.Name, after, roomLog)
 			return
 		case <-r.Context().Done():
 			w.WriteHeader(499) // istemci koptu; bekleme bırakıldı
@@ -309,10 +323,10 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request, a store.Age
 	}
 }
 
-// finalFetch bekleme bitince (süre ya da kapanış) son bir kez bakar: süre dolarken gelen
+// finalMessages bekleme bitince (süre ya da kapanış) son bir kez bakar: süre dolarken gelen
 // mesaj select'te kaybolmasın.
-func (s *Server) finalFetch(w http.ResponseWriter, r *http.Request, room, agent string, after int64) {
-	msgs, err := s.st.Fetch(r.Context(), room, agent, after, maxFetch)
+func (s *Server) finalMessages(w http.ResponseWriter, r *http.Request, room, agent string, after int64, roomLog bool) {
+	msgs, err := s.readMessages(r.Context(), room, agent, after, roomLog)
 	if err != nil {
 		if r.Context().Err() != nil {
 			w.WriteHeader(499)

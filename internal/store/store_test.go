@@ -8,6 +8,48 @@ import (
 	"testing"
 )
 
+func TestRoomLog(t *testing.T) {
+	// NEDEN: tüm oda geçmişinde yön, sıralama, imleç ve sayfa sınırı korunmalı.
+	s := openTemp(t)
+	ctx := context.Background()
+	for _, name := range []string{"ali", "veli"} {
+		if err := s.AddAgent(ctx, name, "ajan", HashToken("test-"+name), []string{"r1", "r2"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var ids []int64
+	for _, in := range []PostInput{
+		{Room: "r1", From: "ali", To: "veli"}, {Room: "r2", From: "ali"},
+		{Room: "r1", From: "veli", To: "ali"}, {Room: "r1", From: "ali"},
+	} {
+		in.Type, in.Body = "bilgi", "deneme"
+		m, err := s.Post(ctx, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if in.Room == "r1" {
+			ids = append(ids, m.ID)
+		}
+	}
+	for _, tc := range []struct {
+		after int64
+		limit int
+		want  []int64
+	}{
+		{0, 100, ids}, {ids[0], 100, ids[1:]}, {0, 2, ids[:2]}, {0, 0, nil}, {ids[2], 100, nil},
+	} {
+		msgs, err := s.RoomLog(ctx, "r1", tc.after, tc.limit)
+		if err != nil || len(msgs) != len(tc.want) {
+			t.Fatalf("mesajlar=%v hata=%v", msgs, err)
+		}
+		for i, m := range msgs {
+			if m.ID != tc.want[i] || m.Room != "r1" {
+				t.Fatalf("yanlış mesaj: %+v", m)
+			}
+		}
+	}
+}
+
 func openTemp(t *testing.T) *Store {
 	t.Helper()
 	s, err := Open(filepath.Join(t.TempDir(), "relay.db"), 20)

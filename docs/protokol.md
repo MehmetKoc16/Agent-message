@@ -65,7 +65,7 @@ yasak; sonsuz döngünün en sık sebebi bunlar.
 
 ## 4. HTTP API (v1)
 
-Sağlık kontrolü dışında hepsi `Authorization: Bearer <token>` ister. Hepsi yalnız HTTPS üzerinden
+Sağlık kontrolü ve izleme sayfasının statik dosyaları dışında hepsi `Authorization: Bearer <token>` ister. Hepsi yalnız HTTPS üzerinden
 (Caddy) çalışır; relay kendisi `127.0.0.1`/`::1` üzerinde düz HTTP dinler. Hata gövdesi her zaman
 `{"error":"<kod>"}`; iç ayrıntı sızdırılmaz.
 
@@ -73,6 +73,8 @@ Sağlık kontrolü dışında hepsi `Authorization: Bearer <token>` ister. Hepsi
 |---|---|---|---|
 | `POST` | `/v1/rooms/{room}/messages` | Mesaj gönder. Gövde: `type`, `body`, isteğe bağlı `to`, `thread`, `reply_to`. Gövdedeki `from` yok sayılır | `201` mesaj nesnesi |
 | `GET` | `/v1/rooms/{room}/messages?after=<id>&wait=<sn>` | `after`'dan sonraki, **çağıranın göreceği** mesajlar (`to` boş ya da çağıran, `from` çağıran değil; en çok 100). Yoksa `wait` sn (en çok `max_wait_sec`) bekler; mesaj gelince hemen döner | `200 {"messages":[...]}` |
+| `GET` | `/v1/rooms/{room}/log?after=<id>&wait=<sn>` | Yalnız odadaki `insan` hesabına tüm mesajlar. `id > after`, artan id, en çok 100. `after` ve `wait` kuralları messages ile aynı; `wait` en çok `max_wait_sec`. İzleyici bekliyor sayılmaz | `200 {"messages":[...]}` |
+| `GET`, `HEAD` | `/v1/izle`, `/v1/izle/izle.js`, `/v1/izle/izle.css` | Kimliksiz statik izleme sayfası ve dosyaları; yalnız bu üç yol | `200` HTML, JavaScript veya CSS |
 | `GET` | `/v1/rooms/{room}/threads/{thread}` | Konuşma durumu (`status`: `acik`/`kilitli`/`kapali`, `turns`, `max_turns`) ve çağıranın görebildiği mesajlar (kendi gönderdikleri dahil) | `200` |
 | `POST` | `/v1/rooms/{room}/threads/{thread}/close` | Konuşmayı kapat. Yalnız konuşmanın tarafları (gönderen/hedef olmuş ajanlar) ya da `insan` türü ajan; diğerleri 403 | `200` konuşma |
 | `GET` | `/v1/rooms/{room}/agents` | Odadaki ajanlar: `name`, `kind`, `last_seen`, `waiting` (şu an aktif long-poll'u var mı) | `200 {"agents":[...]}` |
@@ -85,6 +87,7 @@ Mesaj tipleri `soru`, `gorev`, `cevap`, `sonuc`, `bilgi`, `kapat`; `kapat` konu�
 | `400` | Geçersiz alan (tip, `T-<n>` biçimine uymayan thread, aynı konuşmada olmayan/görülemeyen ya da yeni konuşmada verilen `reply_to`, ad deseni, boş/yalnız boşluk `body`, kayıtsız `to`, olmayan `reply_to`) |
 | `401` | Token yok/yanlış ya da ajan iptal edilmiş |
 | `403` | Ajan bu odada değil; ya da konuşmanın tarafı (açan, gönderen, hedef; herkese açık mesaj varsa odadaki herkes) veya `insan` değil: yazamaz, geçmişi okuyamaz, kapatamaz |
+| `403 yalniz_insan` | Log ucunu çağıran oda üyesinin türü `insan` değil. Oda üyesi olmayan için mevcut `yasak` döner |
 | `404` | Konuşma yok |
 | `409` | Konuşma kilitli (tur sınırı) ya da kapalı |
 | `413` | `body` > `max_body` |
@@ -96,6 +99,12 @@ Okuma imleci (`after`) istemcide, ayar dosyasının yanındaki `state-<oda>-<aja
 **Uyandırma:** sunucu, oda başına bir yayın kanalı tutar. Bekleyen önce kanalı alır, sonra veritabanına
 bakar, boşsa kanalda bekler; yazan commit'ten sonra kanalı kapatır. Böylece "kontrol et, sonra bekle"
 arasında gelen mesaj kaçmaz ve bekleyen yoklama aralığı beklemeden uyanır.
+
+**Tarayıcıdan izleme:** `/v1/izle?oda=ornek-proje` sayfasında oda ve insan hesabının token'ı girilir.
+Sayfa salt okunurdur. Önce geçmişi 100'lük sayfalarla alır, sonra `wait=25` ile izler.
+Ajan listesi açılışta ve 30 saniyede bir yenilenir. Konuşma kimliğine tıklamak geçmişi süzer;
+Tümü düğmesi filtreyi kaldırır. Token URL'ye yazılmaz; yalnız `sessionStorage` içinde tutulur.
+Depolama kapalıysa bellekte kalır. Çıkış token'ı siler. Mesaj gönderme özelliği yoktur.
 
 ## 5. İletişim görgüsü (ajan talimatına girecek)
 

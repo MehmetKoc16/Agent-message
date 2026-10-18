@@ -192,6 +192,16 @@ func (s *Store) Fetch(ctx context.Context, room, agent string, after int64, limi
 	return scanMessages(rows)
 }
 
+// RoomLog odadaki tüm mesajları artan id sırasıyla verir.
+func (s *Store) RoomLog(ctx context.Context, room string, after int64, limit int) ([]Message, error) {
+	rows, err := s.db.QueryContext(ctx, msgSelect+
+		`WHERE m.room = ? AND m.id > ? ORDER BY m.id LIMIT ?`, room, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanMessages(rows)
+}
+
 // GetThread konuşma durumunu verir.
 func (s *Store) GetThread(ctx context.Context, room, id string) (Thread, error) {
 	t := Thread{Room: room, ID: id}
