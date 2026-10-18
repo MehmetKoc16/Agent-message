@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -101,7 +102,13 @@ func TestIzleBilinmeyenYol404(t *testing.T) {
 
 func TestIzleGomuluDosyalarGuvenli(t *testing.T) {
 	// NEDEN: güvenilmeyen mesajlar kod olamaz; dosyalar dış kaynak kullanmamalı.
-	for _, path := range []string{"izle/index.html", "izle/izle.js", "izle/izle.css"} {
+	err := fs.WalkDir(izleFiles, "izle", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
 		b, err := izleFiles.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
@@ -112,11 +119,21 @@ func TestIzleGomuluDosyalarGuvenli(t *testing.T) {
 				t.Errorf("%s yasak ifade: %s", path, banned)
 			}
 		}
+		if strings.HasSuffix(path, ".js") && regexp.MustCompile(`\bsetTimeout\s*\(\s*["'`+"`"+`]`).MatchString(s) {
+			t.Fatal("string ile zamanlayıcı çalıştırılamaz")
+		}
 		if strings.HasSuffix(path, ".html") {
+			if regexp.MustCompile(`(?i)\b(method|action)\s*=`).MatchString(s) {
+				t.Fatal("form method/action içermemeli")
+			}
 			if regexp.MustCompile(`(?is)<script\b[^>]*>\s*\S.*?</script>`).MatchString(s) || regexp.MustCompile(`(?i)style\s*=`).MatchString(s) {
 				t.Fatal("satır içi betik veya stil var")
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

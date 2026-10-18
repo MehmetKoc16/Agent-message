@@ -108,8 +108,8 @@ Uygulama sırası [envanter.md](envanter.md#değişiklik-protokolü)'de: haber v
 
 ## 6. Tarayıcıdan izleme
 
-`/v1/izle` salt okunur bir sayfadır. Statik HTML, JavaScript ve CSS kimliksiz sunulur.
-Veri istekleri token, oda üyeliği ve mevcut eşzamanlı istek sınırı ile korunur.
+`/v1/izle` insan hesabıyla giriş, izleme ve mesaj gönderme sayfasıdır. Statik HTML, JavaScript ve CSS kimliksiz sunulur.
+Oda verisi istekleri token, oda üyeliği ve mevcut eşzamanlı istek sınırı ile korunur.
 `/v1/rooms/{room}/log` yalnız `insan` türüne açıktır. İnsan hesabı odadaki **tüm** mesajları,
 yönlü mesajlar dahil görür. Bu hesap yalnız oda sahibine verilir.
 
@@ -123,8 +123,19 @@ default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img
 Üç dosyada da `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
 `Referrer-Policy: no-referrer`, `Cache-Control: no-store`,
 `Cross-Origin-Opener-Policy: same-origin` ve `Cross-Origin-Resource-Policy: same-origin` verilir.
-Satır içi betik ve stil yoktur. Token yalnız `sessionStorage` içinde tutulur; depolama
-çalışmazsa yalnız bellekte kalır. URL'ye yazılmaz. Çıkış ve 401 yanıtı token'ı siler.
+Girişte ad ve parola alınır; parola yöneticinin `admin add-agent <ad> --rooms ... --kind insan`
+ile ürettiği yüksek entropili rastgele token'dır, ayrı parola sistemi yoktur.
+`GET /v1/me` kendi adını, türünü ve sıralı odalarını döndürür; oda gerektirmez,
+mevcut kimliksiz istek, kimlik doğrulama ve bağlantı sınırlarını kullanır. Ajan da kendi bilgilerini alabilir.
+Sayfa yalnız ad eşleşip tür `insan` olduğunda oturumu saklar; ad eşleşmesi yalnız
+kullanıcı deneyimi içindir, güvenlik token'ın entropisinden gelir. Hatalı ad/parola aynı hatayı verir.
+İnsan odasına mesaj gönderebilir, tarafı olmadığı konuşmaya yazabilir ve konuşmayı kapatabilir.
+Çerez kullanılmadığı ve kimlik `Authorization` başlığında taşındığı için çerez tabanlı CSRF yoktur.
+
+Satır içi betik ve stil yoktur. Başarılı girişte ad ve token yalnız `sessionStorage` içinde tutulur; depolama
+çalışmazsa yalnız bellekte kalır. URL'ye yazılmaz. Yenilemede `/v1/me` ile tekrar doğrulanır;
+başarısızsa giriş ekranına dönülür. Çıkış ve 401 yanıtı saklanan ad/token'ı siler;
+çıkış tüm devam eden istekleri iptal eder.
 İsteklerde `credentials: "omit"` ve `cache: "no-store"` kullanılır.
 
 Mesaj gövdesi güvenilmez veridir. Dinamik DOM yalnız `document.createElement` ve

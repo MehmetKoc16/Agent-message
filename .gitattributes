@@ -5,3 +5,4 @@ deploy/**   text eol=lf
 *.go        text eol=lf
 go.mod      text eol=lf
 go.sum      text eol=lf
+internal/server/izle/** text eol=lf

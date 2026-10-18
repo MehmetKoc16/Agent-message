@@ -135,3 +135,29 @@ func TestSorgularParametreli(t *testing.T) {
 		t.Fatal("enjeksiyon token'ı geçmemeli")
 	}
 }
+
+func TestAgentRooms(t *testing.T) {
+	// NEDEN: kendi odaları sıralı gelmeli; odasız hesap JSON'da null üretmemeli.
+	s := openTemp(t)
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name  string
+		rooms []string
+	}{
+		{"dolu", []string{"z-oda", "a-oda", "m-oda"}}, {"bos", nil},
+	} {
+		if err := s.AddAgent(ctx, tc.name, "insan", HashToken("test-odalar-"+tc.name), tc.rooms); err != nil {
+			t.Fatal(err)
+		}
+		rooms, err := s.AgentRooms(ctx, tc.name)
+		if err != nil || rooms == nil {
+			t.Fatalf("odalar=%v hata=%v", rooms, err)
+		}
+		if tc.name == "bos" && len(rooms) != 0 {
+			t.Fatal(rooms)
+		}
+		if tc.name == "dolu" && strings.Join(rooms, ",") != "a-oda,m-oda,z-oda" {
+			t.Fatal(rooms)
+		}
+	}
+}

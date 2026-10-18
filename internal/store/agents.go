@@ -105,6 +105,24 @@ func (s *Store) HasRoom(ctx context.Context, agent, room string) (bool, error) {
 	return err == nil, err
 }
 
+// AgentRooms ajanın odalarını ada göre sıralı döndürür; odası yoksa boş listedir.
+func (s *Store) AgentRooms(ctx context.Context, name string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT room FROM agent_rooms WHERE agent = ? ORDER BY room`, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var room string
+		if err := rows.Scan(&room); err != nil {
+			return nil, err
+		}
+		out = append(out, room)
+	}
+	return out, rows.Err()
+}
+
 // Touch last_seen alanını günceller.
 func (s *Store) Touch(ctx context.Context, name string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE agents SET last_seen = ? WHERE name = ?`, s.stamp(), name)

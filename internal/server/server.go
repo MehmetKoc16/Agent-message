@@ -60,6 +60,7 @@ func (s *Server) Close() { s.hub.Close() }
 // Handler tüm yolları (log ve çökme koruması dahil) döndürür.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/me", s.authed(s.handleMe))
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
@@ -110,6 +111,29 @@ type roomHandler func(w http.ResponseWriter, r *http.Request, a store.Agent, roo
 
 // room kimlik doğrulama, oda üyeliği, eşzamanlı istek ve hız sınırını uygular.
 func (s *Server) room(h roomHandler) http.HandlerFunc {
+	return s.authed(func(w http.ResponseWriter, r *http.Request, a store.Agent) {
+		room := r.PathValue("room")
+		member, err := s.st.HasRoom(r.Context(), a.Name, room)
+		if err != nil {
+			s.internal(w, "oda denetimi", err)
+			return
+		}
+		if !member {
+			writeErr(w, http.StatusForbidden, "yasak")
+			return
+		}
+		if r.Method == http.MethodPost && !s.rate.Allow(a.Name) {
+			writeErr(w, http.StatusTooManyRequests, "hiz_siniri")
+			return
+		}
+		s.touch(a.Name)
+		h(w, r, a, room)
+	})
+}
+
+// authed oda gerektirmeyen kimlik ve eşzamanlı istek denetimidir.
+// touch çağrısı işleyicide kalır: odalarda üyelik ve POST sınırından sonra çalışır.
+func (s *Server) authed(h func(http.ResponseWriter, *http.Request, store.Agent)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		info := infoFrom(r.Context())
 		token := bearer(r)
@@ -146,23 +170,22 @@ func (s *Server) room(h roomHandler) http.HandlerFunc {
 			return
 		}
 		defer release()
-		room := r.PathValue("room")
-		member, err := s.st.HasRoom(r.Context(), a.Name, room)
-		if err != nil {
-			s.internal(w, "oda denetimi", err)
-			return
-		}
-		if !member {
-			writeErr(w, http.StatusForbidden, "yasak")
-			return
-		}
-		if r.Method == http.MethodPost && !s.rate.Allow(a.Name) {
-			writeErr(w, http.StatusTooManyRequests, "hiz_siniri")
-			return
-		}
-		s.touch(a.Name)
-		h(w, r, a, room)
+		h(w, r, a)
 	}
+}
+
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, a store.Agent) {
+	s.touch(a.Name)
+	rooms, err := s.st.AgentRooms(r.Context(), a.Name)
+	if err != nil {
+		s.internal(w, "hesabın odaları", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Name  string   `json:"name"`
+		Kind  string   `json:"kind"`
+		Rooms []string `json:"rooms"`
+	}{a.Name, a.Kind, rooms})
 }
 
 func (s *Server) internal(w http.ResponseWriter, what string, err error) {

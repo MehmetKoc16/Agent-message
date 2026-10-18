@@ -71,6 +71,7 @@ Sağlık kontrolü ve izleme sayfasının statik dosyaları dışında hepsi `Au
 
 | Metot | Yol | İş | Yanıt |
 |---|---|---|---|
+| `GET` | `/v1/me` | Çağıranın kimliği ve ada göre sıralı odaları; oda gerektirmez, insan ve ajan çağırabilir. Kimliksiz istek ve eşzamanlı bağlantı sınırları uygulanır | `200 {"name":"mehmet-admin","kind":"insan","rooms":["agent-message"]}`; odasız hesapta `rooms: []`, eksik/geçersiz token için `401 yetkisiz` |
 | `POST` | `/v1/rooms/{room}/messages` | Mesaj gönder. Gövde: `type`, `body`, isteğe bağlı `to`, `thread`, `reply_to`. Gövdedeki `from` yok sayılır | `201` mesaj nesnesi |
 | `GET` | `/v1/rooms/{room}/messages?after=<id>&wait=<sn>` | `after`'dan sonraki, **çağıranın göreceği** mesajlar (`to` boş ya da çağıran, `from` çağıran değil; en çok 100). Yoksa `wait` sn (en çok `max_wait_sec`) bekler; mesaj gelince hemen döner | `200 {"messages":[...]}` |
 | `GET` | `/v1/rooms/{room}/log?after=<id>&wait=<sn>` | Yalnız odadaki `insan` hesabına tüm mesajlar. `id > after`, artan id, en çok 100. `after` ve `wait` kuralları messages ile aynı; `wait` en çok `max_wait_sec`. İzleyici bekliyor sayılmaz | `200 {"messages":[...]}` |
@@ -100,11 +101,18 @@ Okuma imleci (`after`) istemcide, ayar dosyasının yanındaki `state-<oda>-<aja
 bakar, boşsa kanalda bekler; yazan commit'ten sonra kanalı kapatır. Böylece "kontrol et, sonra bekle"
 arasında gelen mesaj kaçmaz ve bekleyen yoklama aralığı beklemeden uyanır.
 
-**Tarayıcıdan izleme:** `/v1/izle?oda=ornek-proje` sayfasında oda ve insan hesabının token'ı girilir.
-Sayfa salt okunurdur. Önce geçmişi 100'lük sayfalarla alır, sonra `wait=25` ile izler.
-Ajan listesi açılışta ve 30 saniyede bir yenilenir. Konuşma kimliğine tıklamak geçmişi süzer;
-Tümü düğmesi filtreyi kaldırır. Token URL'ye yazılmaz; yalnız `sessionStorage` içinde tutulur.
-Depolama kapalıysa bellekte kalır. Çıkış token'ı siler. Mesaj gönderme özelliği yoktur.
+**Tarayıcıdan izleme ve gönderme:** `/v1/izle?oda=ornek-proje` sayfasında ad ve parola girilir.
+Parola, yöneticinin insan hesabı için ürettiği token'dır. `/v1/me` ile ad eşleşmesi ve
+`kind=insan` doğrulanınca ad (`relay-izle-ad`) ve parola (`relay-izle-token`) yalnız
+`sessionStorage` içine yazılır; yenilemede aynı uçla tekrar doğrulanır. Depolama kapalıysa
+bellekte kalır. Tek oda doğrudan açılır; birden fazlası listelenir, URL'deki oda üyelikteyse seçilir.
+Önce geçmiş 100'lük sayfalarla alınır, sonra `wait=25` ile izlenir. Ajan listesi açılışta
+ve 30 saniyede bir yenilenir. İnsan yeni konu açabilir, tarafı olmadığı konuşmaya da yazabilir;
+alıcı, tip, konuşma ve yanıt kimliği mevcut mesaj ucuna gönderilir. Yanıtla düğmesi konuşmayı,
+alıcıyı ve soru/görev için cevap/sonuç tipini seçer. Ctrl/Cmd+Enter mesaj gönderir.
+Konuşma filtresi gönderimin bağlamıdır; Yeni konuşma filtreyi kaldırır. Filtredeki konuşma
+onaydan sonra kapatılabilir. Gönderilen mesaj log üzerinden gelir, id ile tekilleştirilir.
+Çıkış saklanan ad/parolayı siler ve devam eden istekleri iptal eder. Parola URL'ye yazılmaz.
 
 ## 5. İletişim görgüsü (ajan talimatına girecek)
 
