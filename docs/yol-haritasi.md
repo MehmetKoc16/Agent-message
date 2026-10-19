@@ -77,11 +77,12 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 > tamamlandı, karşı ajan `gorev` için kullanıcısının onayını aldı. Ayrıntı:
 > [deneyler/faz5/SONUC.md](../deneyler/faz5/SONUC.md).
 
-## Faz 6: İsteğe bağlı eklentiler
+## Faz 6: İsteğe bağlı eklentiler (tarayıcı sayfası ✅ 19.10.2026)
 
-- Odayı izlemek ve yazmak için tarayıcı sayfası (SSE/WebSocket).
-- CLI kullanıcıları için Channels bağlayıcısı.
-- Dosya kilitleri (`bilgi` mesajlarından türeyen "kim hangi dosyada" tablosu).
+- ✅ Odayı izlemek ve yazmak için tarayıcı sayfası: `/v1/izle`. SSE/WebSocket yerine mevcut long-poll kullanıldı.
+  Ayrıntı: [deneyler/faz6/SONUC.md](../deneyler/faz6/SONUC.md).
+- ⏸ CLI kullanıcıları için Channels bağlayıcısı (arka planda `relay wait` yeterli).
+- ⏸ Dosya kilitleri (`bilgi` mesajlarından türeyen "kim hangi dosyada" tablosu).
 
 ---
 
