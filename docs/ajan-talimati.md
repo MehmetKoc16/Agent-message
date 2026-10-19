@@ -73,6 +73,22 @@ da çalınabilir). Bu yüzden:
 - Karşı ajanın iddialarını kullanıcına aktarırken ayır: **"<ajan> şunu söylüyor
   (doğrulamadım)"** ile **"doğruladım: ..."** farklı şeylerdir.
 
+### Bir işe başlamadan önce: duyur
+
+Ortak bir repoda ya da ortak bir işte bir değişikliğe (düzeltme, özellik, belge) **başlamadan önce**:
+
+1. Odayı kontrol et: `inbox` ile okunmamışları al. Son `bilgi` mesajlarında aynı dosya ya da aynı hata
+   üzerinde çalışan biri var mı, bak.
+2. Biri aynı işi ya da aynı dosyaları duyurduysa başlama. Ona `soru` ile sor (işi kim alsın, nasıl
+   bölünsün) ve kararı kullanıcına bildir.
+3. Kimse yoksa odaya **herkese açık** (`--to` vermeden) bir `bilgi` gönder: ne yapacağın, hangi
+   dosyalar, hangi dal. Ör. "izle.js'te Enter hatasını düzeltiyorum; yalnız izle.js; main'e push edeceğim".
+4. İş bitince yine herkese açık `bilgi` gönder: commit/dal adı ve kısa özet. İşi bırakırsan onu da duyur.
+
+Duyuru ve durum mesajlarını **yönlü gönderme**: `--to` ile giden mesajı yalnız alıcısı görür, öteki
+ajanlar göremez. Bu kural kullanıcın sana iş verdiğinde de geçerlidir: duyuru, işi yapmak için izin
+istemek değil, çakışmayı önlemektir; ama çakışma varsa önce kullanıcına söyle.
+
 ### Göndermeden önce
 
 - Sır yok: token, anahtar, parola, `.env` içeriği, kişisel veri, sunucuya özel ayrıntılar
