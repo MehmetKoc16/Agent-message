@@ -1,48 +1,1046 @@
-:root { color-scheme: light dark; font-family: system-ui, sans-serif; background: #f5f7fa; color: #192331; }
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-body { margin: 0; }
-main { max-width: 1000px; margin: auto; padding: 16px; min-width: 0; }
-h1 { font-size: 1.6rem; }
-h2 { font-size: 1.2rem; overflow-wrap: anywhere; }
-form { display: grid; gap: 10px; max-width: 420px; }
-input, button { font: inherit; border: 1px solid #8a96a5; border-radius: 6px; padding: 9px; }
-input { min-width: 0; width: 100%; background: #fff; color: inherit; }
-button { cursor: pointer; background: #e6edf5; color: inherit; }
-button:focus-visible, input:focus-visible, #mesajlar:focus-visible { outline: 3px solid #377ac5; outline-offset: 2px; }
-.araclar, .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-#ajanlar { padding-left: 20px; overflow-wrap: anywhere; }
-.bekliyor { color: #187739; }
-#mesajlar { height: 60vh; height: 60dvh; overflow-y: auto; margin-top: 12px; border: 1px solid #8a96a5; border-radius: 8px; }
-.mesaj { padding: 12px; border-bottom: 1px solid #b2bfcc; background: #fff; min-width: 0; }
-.meta { font-size: .85rem; overflow-wrap: anywhere; }
-.meta > * { min-width: 0; max-width: 100%; }
-.govde { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 10px; line-height: 1.5; }
-.etiket { border-radius: 5px; padding: 3px 7px; color: #fff; }
-.soru { background: #285aa0; } .gorev { background: #754399; }
-.cevap { background: #18663d; } .sonuc { background: #805012; }
-.bilgi { background: #3b606b; } .kapat { background: #a13438; }
-.not { font-size: .8rem; opacity: .8; }
-#durum { overflow-wrap: anywhere; }
-#yeni { position: sticky; bottom: 12px; margin-top: 8px; }
-@media (prefers-color-scheme: dark) {
-  :root { background: #131a23; color: #e5eaf0; }
-  .mesaj, input { background: #1b2532; }
-  button { background: #2b3e54; }
-  .bekliyor { color: #65df8b; }
+:root {
+  color-scheme: light dark;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+
+  /* Light Theme (Warm Sand/Cream, Terracotta, Coral & Peach) */
+  --bg-page: #fbf7f2;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.94);
+  --bg-header: #fdfaf6;
+
+  --text-main: #2b1d16;
+  --text-muted: #664f43;
+  --text-subtle: #826c60;
+
+  --border-subtle: #ebdcd1;
+  --border-hover: #d9c3b4;
+  --border-focus: #c84e27;
+
+  /* Message Bubbles */
+  --bubble-other-bg: #ffffff;
+  --bubble-other-border: #f0e4da;
+  --bubble-other-text: #2b1d16;
+  --sender-other: #b3441e;
+  --time-other: #735e53;
+
+  --bubble-own-bg: #fde8db;
+  --bubble-own-border: #f7d2bc;
+  --bubble-own-text: #2b1d16;
+  --sender-own: #9c3412;
+  --time-own: #6e4838;
+
+  --bubble-shadow: rgba(94, 58, 38, 0.05);
+
+  /* Warm Accent & Primary Actions */
+  --accent-coral: #c84e27;
+  --accent-coral-hover: #b03f1a;
+  --accent-coral-text: #ffffff;
+  --accent-peach: #f98453;
+  --accent-amber: #e69138;
+  --accent-rose: #d6455d;
+
+  /* Badges & Secondary Controls */
+  --badge-bg: #f4eae1;
+  --badge-text: #593f31;
+  --badge-border: #e6d7ca;
+
+  /* Pastel Type Pills (WCAG AA Contrast) */
+  --type-soru-bg: #fef3c7;
+  --type-soru-text: #78350f;
+  --type-gorev-bg: #fae8ff;
+  --type-gorev-text: #701a75;
+  --type-cevap-bg: #dcfce7;
+  --type-cevap-text: #14532d;
+  --type-sonuc-bg: #ffedd5;
+  --type-sonuc-text: #7c2d12;
+  --type-bilgi-bg: #e0f2fe;
+  --type-bilgi-text: #074b73;
+  --type-kapat-bg: #ffe4e6;
+  --type-kapat-text: #881337;
+
+  /* Waiting Agent */
+  --status-waiting: #15652f;
+  --status-waiting-dot: #1b873f;
+  --status-waiting-glow: rgba(27, 135, 63, 0.35);
+
+  /* Elevation Shadows */
+  --shadow-sm: 0 1px 3px rgba(66, 38, 22, 0.06);
+  --shadow-card: 0 14px 34px rgba(77, 43, 25, 0.09);
+  --shadow-composer: 0 6px 24px rgba(77, 43, 25, 0.08);
+  --shadow-btn: 0 2px 8px rgba(200, 78, 39, 0.28);
+
+  /* Focus Ring */
+  --focus-ring: #c84e27;
 }
-@media (max-width: 400px) { main { padding: 10px; } .mesaj { padding: 8px; } }
-select, textarea { font: inherit; min-width: 0; max-width: 100%; border: 1px solid #8a96a5; border-radius: 6px; padding: 9px; background: #fff; color: inherit; }
-textarea { width: 100%; resize: vertical; }
-button { max-width: 100%; overflow-wrap: anywhere; }
-button:disabled { cursor: wait; opacity: .6; }
-select:focus-visible, textarea:focus-visible { outline: 3px solid #377ac5; outline-offset: 2px; }
-#mesajlar { height: 45vh; height: 45dvh; }
-#gonderme { position: sticky; bottom: 0; max-width: none; background: #f5f7fa; border-top: 1px solid #8a96a5; padding: 10px 0; gap: 6px; }
-#gonderim-durum { margin: 0; overflow-wrap: anywhere; }
-.kendi { background: #e6f3ff; border-left: 4px solid #377ac5; }
+
 @media (prefers-color-scheme: dark) {
-  select, textarea { background: #1b2532; }
-  #gonderme { background: #131a23; }
-  .kendi { background: #19334b; }
+  :root {
+    /* Dark Theme (Warm Coffee/Plum, Terracotta & Deep Peach) */
+    --bg-page: #191214;
+    --bg-surface: #251c1f;
+    --bg-surface-glass: rgba(37, 28, 31, 0.94);
+    --bg-header: #21191c;
+
+    --text-main: #f5ebe6;
+    --text-muted: #c9b4ab;
+    --text-subtle: #9e877e;
+
+    --border-subtle: #3f2f35;
+    --border-hover: #58424b;
+    --border-focus: #ff8a65;
+
+    /* Message Bubbles */
+    --bubble-other-bg: #291f24;
+    --bubble-other-border: #42323a;
+    --bubble-other-text: #f5ebe6;
+    --sender-other: #ff9d78;
+    --time-other: #bfa79d;
+
+    --bubble-own-bg: #44221a;
+    --bubble-own-border: #663529;
+    --bubble-own-text: #fff2ec;
+    --sender-own: #ffb197;
+    --time-own: #d6b8ac;
+
+    --bubble-shadow: rgba(0, 0, 0, 0.25);
+
+    /* Warm Accent & Primary Actions */
+    --accent-coral: #d44a1e;
+    --accent-coral-hover: #e65a2d;
+    --accent-coral-text: #ffffff;
+    --accent-peach: #fb9264;
+    --accent-amber: #f59e0b;
+    --accent-rose: #f43f5e;
+
+    /* Badges & Secondary Controls */
+    --badge-bg: #382a30;
+    --badge-text: #ecd8d0;
+    --badge-border: #523c46;
+
+    /* Dark Pastel Type Pills (WCAG AA Contrast) */
+    --type-soru-bg: #452c0a;
+    --type-soru-text: #fef08a;
+    --type-gorev-bg: #42144a;
+    --type-gorev-text: #f5d0fe;
+    --type-cevap-bg: #0e3d1f;
+    --type-cevap-text: #bbf7d0;
+    --type-sonuc-bg: #4c1c0c;
+    --type-sonuc-text: #fed7aa;
+    --type-bilgi-bg: #0e374d;
+    --type-bilgi-text: #bae6fd;
+    --type-kapat-bg: #4c1122;
+    --type-kapat-text: #fecdd3;
+
+    /* Waiting Agent */
+    --status-waiting: #5ae083;
+    --status-waiting-dot: #4ade80;
+    --status-waiting-glow: rgba(74, 222, 128, 0.45);
+
+    /* Elevation Shadows */
+    --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.35);
+    --shadow-card: 0 16px 40px rgba(0, 0, 0, 0.45);
+    --shadow-composer: 0 8px 30px rgba(0, 0, 0, 0.4);
+    --shadow-btn: 0 2px 10px rgba(212, 74, 30, 0.4);
+
+    /* Focus Ring */
+    --focus-ring: #ff8a65;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html, body {
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-page);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.ana-konteyner {
+  height: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Accessibility: Screen-reader-only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Accessible focus ring for all interactive elements */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* =========================================================
+   Top Bar (Header)
+   ========================================================= */
+.ust-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.marka {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.marka-ikon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.marka h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+#durum {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-border);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+#durum::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-coral);
+  flex-shrink: 0;
+}
+
+/* When logged in and active, make dot green */
+body:has(#izleme:not([hidden])) #durum::before {
+  background: var(--status-waiting-dot);
+  box-shadow: 0 0 6px var(--status-waiting-glow);
+}
+
+/* =========================================================
+   Login Form (Card with Warm Gradient Wave / Strip)
+   ========================================================= */
+#giris {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
+  padding: 32px 24px 28px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: auto;
+}
+
+.giris-degrade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, var(--accent-coral), var(--accent-peach), var(--accent-amber), var(--accent-rose), var(--accent-coral));
+  background-size: 200% 100%;
+}
+
+.giris-kart-baslik h2 {
+  margin: 0 0 4px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.giris-ipucu {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.alan-grup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alan-grup label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.alan-grup input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-page);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.95rem;
+  transition: border-color 0.15s ease;
+}
+
+.alan-grup input:focus-visible {
+  border-color: var(--border-focus);
+}
+
+#giris-dugme {
+  margin-top: 6px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: var(--accent-coral);
+  color: var(--accent-coral-text);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-btn);
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+#giris-dugme:hover:not(:disabled) {
+  background: var(--accent-coral-hover);
+  transform: translateY(-1px);
+}
+
+#giris-dugme:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+#giris-dugme:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* =========================================================
+   Live Chat Section (100dvh Layout)
+   ========================================================= */
+#izleme {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.sohbet-ust-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.oda-etiketi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.oda-ikon {
+  font-size: 1.1rem;
+}
+
+#oda-baslik {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+}
+
+#cikis {
+  padding: 5px 14px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+#cikis:hover {
+  background: var(--border-hover);
+  color: var(--text-main);
+}
+
+.oda-secimi-kutu {
+  padding: 6px 16px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.oda-secimi-kutu label {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.oda-secimi-kutu select {
+  font: inherit;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  font-size: 0.8rem;
+}
+
+#oda-icerik {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Odadakiler & Filter Bar */
+.sohbet-arac-paneli {
+  padding: 6px 16px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.odadakiler-detay {
+  font-size: 0.8rem;
+}
+
+.odadakiler-ozet {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-muted);
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.odadakiler-ozet:hover {
+  color: var(--text-main);
+}
+
+#ajanlar {
+  margin: 6px 0 0;
+  padding: 6px 12px;
+  list-style: none;
+  background: var(--bg-surface);
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  max-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+}
+
+#ajanlar li {
+  padding: 3px 0;
+  color: var(--text-muted);
+  border-bottom: 1px dashed var(--border-subtle);
+  overflow-wrap: anywhere;
+}
+
+#ajanlar li:last-child {
+  border-bottom: none;
+}
+
+.bekliyor {
+  color: var(--status-waiting) !important;
+  font-weight: 600;
+}
+
+.bekliyor::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-waiting-dot);
+  margin-right: 6px;
+  box-shadow: 0 0 6px var(--status-waiting-glow);
+  vertical-align: middle;
+}
+
+.filtre-cubugu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+
+#tumu {
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+#tumu:hover {
+  background: var(--border-hover);
+}
+
+#filtre {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+#kapat {
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid var(--type-kapat-bg);
+  background: var(--type-kapat-bg);
+  color: var(--type-kapat-text);
+  cursor: pointer;
+  margin-left: auto;
+  transition: opacity 0.15s ease;
+}
+
+#kapat:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+/* =========================================================
+   Messages Feed (#mesajlar)
+   ========================================================= */
+#mesajlar {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Message Bubble (WhatsApp / iMessage Tail & Aesthetics) */
+.mesaj {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: min(85%, 620px);
+  min-width: 160px;
+  padding: 8px 14px 6px;
+  background: var(--bubble-other-bg);
+  color: var(--bubble-other-text);
+  border: 1px solid var(--bubble-other-border);
+  border-radius: 18px 18px 18px 4px; /* Less rounded bottom-left for tail effect */
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
+  word-break: break-word;
+  position: relative;
+  transition: transform 0.1s ease;
+}
+
+.mesaj.kendi {
+  background: var(--bubble-own-bg);
+  color: var(--bubble-own-text);
+  border: 1px solid var(--bubble-own-border);
+  border-radius: 18px 18px 4px 18px; /* Less rounded bottom-right for tail effect */
+  align-self: flex-end;
+}
+
+/* Container for metadata flattened into flex container */
+.meta {
+  display: contents;
+}
+
+/* Sender name at top of bubble: small and colored */
+.meta > span:first-of-type,
+.taraflar {
+  order: 1;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--sender-other);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.mesaj.kendi .meta > span:first-of-type,
+.mesaj.kendi .taraflar {
+  color: var(--sender-own);
+}
+
+/* Rounded Pill Type Tags (Pastel Colors) */
+.etiket {
+  order: 2;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.soru  { background: var(--type-soru-bg);  color: var(--type-soru-text);  }
+.gorev { background: var(--type-gorev-bg); color: var(--type-gorev-text); }
+.cevap { background: var(--type-cevap-bg); color: var(--type-cevap-text); }
+.sonuc { background: var(--type-sonuc-bg); color: var(--type-sonuc-text); }
+.bilgi { background: var(--type-bilgi-bg); color: var(--type-bilgi-text); }
+.kapat { background: var(--type-kapat-bg); color: var(--type-kapat-text); }
+
+/* Thread & Reply Pill Buttons */
+.meta > button:first-of-type,
+.konusma {
+  order: 3;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.meta > button:first-of-type:hover,
+.konusma:hover {
+  background: var(--border-hover);
+}
+
+.meta > button:last-of-type,
+.yanitla {
+  order: 4;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.meta > button:last-of-type:hover,
+.yanitla:hover {
+  background: var(--border-hover);
+}
+
+/* Message Body */
+.govde {
+  order: 10;
+  flex-basis: 100%;
+  width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  margin: 6px 0 4px;
+  line-height: 1.55;
+  font-size: 0.92rem;
+  color: inherit;
+}
+
+/* Timestamp at bottom right of bubble */
+.meta > time,
+.zaman,
+time {
+  order: 20;
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--time-other);
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.mesaj.kendi .meta > time,
+.mesaj.kendi .zaman,
+.mesaj.kendi time {
+  color: var(--time-own);
+}
+
+/* =========================================================
+   Floating "Yeni mesaj · aşağı git" Button (#yeni)
+   ========================================================= */
+#yeni {
+  position: absolute;
+  bottom: 145px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: var(--bg-surface);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-composer);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+#yeni:hover {
+  background: var(--badge-bg);
+  border-color: var(--border-hover);
+  transform: translateX(-50%) translateY(-1px);
+}
+
+.yeni-ikon {
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+/* =========================================================
+   Floating Capsule Composer (#gonderme)
+   ========================================================= */
+#gonderme {
+  flex-shrink: 0;
+  margin: 6px 16px 10px;
+  padding: 10px 14px;
+  background: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  box-shadow: var(--shadow-composer);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  z-index: 10;
+}
+
+.gonderme-ust {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  gap: 8px;
+}
+
+#baglam {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+#yeni-konusma {
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+#yeni-konusma:hover {
+  background: var(--border-hover);
+}
+
+#yanit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: var(--type-soru-bg);
+  border-left: 3px solid var(--accent-coral);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--type-soru-text);
+}
+
+.yanit-icerik {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.yanit-ikon {
+  font-weight: bold;
+}
+
+#yanit-sil {
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+  border-radius: 4px;
+}
+
+.gonderme-kontroller {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.secim-grup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.secim-grup label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.secim-grup select {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-page);
+  color: var(--text-main);
+  max-width: 150px;
+}
+
+.metin-alani-sarma {
+  width: 100%;
+}
+
+#metin {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-page);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.92rem;
+  resize: vertical;
+  min-height: 44px;
+  max-height: 120px;
+  line-height: 1.4;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+
+#metin:focus-visible {
+  border-color: var(--border-focus);
+}
+
+.gonderme-alt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gonderme-ipucu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+}
+
+/* Circular Send Button with Arrow */
+#gonder {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-coral);
+  color: var(--accent-coral-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-btn);
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+#gonder:hover:not(:disabled) {
+  background: var(--accent-coral-hover);
+  transform: scale(1.08);
+}
+
+#gonder:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+#gonder:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.gonder-ok {
+  font-size: 1.15rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+#gonderim-durum {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.not {
+  font-size: 0.72rem;
+  text-align: center;
+  color: var(--text-subtle);
+  margin: 0 0 6px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+/* =========================================================
+   Mobile Viewport Adjustments (<= 480px and 360px)
+   ========================================================= */
+@media (max-width: 480px) {
+  .ust-bar {
+    padding: 6px 12px;
+  }
+
+  .sohbet-ust-bar {
+    padding: 6px 12px;
+  }
+
+  .sohbet-arac-paneli {
+    padding: 4px 12px;
+  }
+
+  #mesajlar {
+    padding: 8px 10px;
+    gap: 10px;
+  }
+
+  .mesaj {
+    max-width: 92%;
+    min-width: 140px;
+    padding: 7px 10px 5px;
+  }
+
+  #gonderme {
+    margin: 4px 8px 8px;
+    padding: 8px 10px;
+    border-radius: 16px;
+  }
+
+  .kisayol-ipucu {
+    display: none;
+  }
+
+  #yeni {
+    bottom: 140px;
+  }
+}
+
+/* =========================================================
+   Reduced Motion Preferences
+   ========================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

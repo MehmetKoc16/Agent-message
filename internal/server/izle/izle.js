@@ -64,13 +64,13 @@
       ids.add(m.id);
       const row = node("article", undefined, "mesaj" + (m.from === session.name ? " kendi" : ""));
       const meta = node("div", undefined, "meta");
-      meta.append(node("time", new Date(m.created_at).toLocaleString("tr-TR")));
-      meta.append(node("span", m.from + " → " + (m.to || "herkes")));
+      meta.append(node("time", new Date(m.created_at).toLocaleString("tr-TR"), "zaman"));
+      meta.append(node("span", m.from + " → " + (m.to || "herkes"), "taraflar"));
       const types = ["soru", "gorev", "cevap", "sonuc", "bilgi", "kapat"];
       meta.append(node("span", m.type, "etiket " + (types.includes(m.type) ? m.type : "bilgi")));
-      const thread = node("button", m.thread + " · " + m.turn + "/" + m.max_turns);
+      const thread = node("button", m.thread + " · " + m.turn + "/" + m.max_turns, "konusma");
       thread.type = "button"; thread.addEventListener("click", () => showFilter(m.thread));
-      const answer = node("button", "Yanıtla"); answer.type = "button";
+      const answer = node("button", "Yanıtla", "yanitla"); answer.type = "button";
       answer.addEventListener("click", () => {
         showFilter(m.thread); reply = m.id;
         if (m.from !== session.name) {

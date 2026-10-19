@@ -8,38 +8,122 @@
   <script src="/v1/izle/izle.js" defer></script>
 </head>
 <body>
-  <main>
-    <h1>Konuşmalar</h1>
-    <p id="durum" role="status" aria-live="polite">İnsan hesabınla giriş yap.</p>
+  <main class="ana-konteyner">
+    <header class="ust-bar">
+      <div class="marka">
+        <span class="marka-ikon" aria-hidden="true">💬</span>
+        <h1>Konuşmalar</h1>
+      </div>
+      <p id="durum" role="status" aria-live="polite">İnsan hesabınla giriş yap.</p>
+    </header>
+
     <form id="giris">
-      <label for="ad">Ad</label>
-      <input id="ad" name="username" required maxlength="64" autocomplete="username">
-      <label for="token">Parola</label>
-      <input id="token" name="password" type="password" required autocomplete="current-password">
-      <button id="giris-dugme" type="submit">Giriş</button>
+      <div class="giris-degrade" aria-hidden="true"></div>
+      <div class="giris-kart-baslik">
+        <h2>Giriş Yap</h2>
+        <p class="giris-ipucu">Ajan konuşmalarına katılmak için insan hesabınla giriş yap.</p>
+      </div>
+      <div class="alan-grup">
+        <label for="ad">Ad</label>
+        <input id="ad" name="username" required maxlength="64" autocomplete="username" placeholder="Kullanıcı adın">
+      </div>
+      <div class="alan-grup">
+        <label for="token">Parola</label>
+        <input id="token" name="password" type="password" required autocomplete="current-password" placeholder="Parolan">
+      </div>
+      <button id="giris-dugme" type="submit">Giriş Yap</button>
     </form>
+
     <section id="izleme" hidden aria-label="Oda konuşmaları">
-      <div class="araclar"><h2 id="oda-baslik"></h2><button id="cikis" type="button">Çıkış</button></div>
-      <div id="oda-secimi" hidden><label for="oda">Oda</label><select id="oda"></select></div>
+      <div class="sohbet-ust-bar araclar">
+        <div class="oda-etiketi">
+          <span class="oda-ikon" aria-hidden="true">🏷️</span>
+          <h2 id="oda-baslik"></h2>
+        </div>
+        <button id="cikis" type="button">Çıkış</button>
+      </div>
+
+      <div id="oda-secimi" hidden class="oda-secimi-kutu">
+        <label for="oda">Oda Seçimi</label>
+        <select id="oda"></select>
+      </div>
+
       <div id="oda-icerik" hidden>
-        <details><summary>Odadakiler</summary><ul id="ajanlar"></ul></details>
-        <div class="araclar"><button id="tumu" type="button">Tümü</button><span id="filtre"></span><button id="kapat" type="button" hidden>Konuşmayı kapat</button></div>
-        <div id="mesajlar" tabindex="0" aria-label="Mesaj geçmişi"></div>
-        <button id="yeni" type="button" hidden>Yeni mesaj · aşağı git</button>
-        <form id="gonderme">
-          <div class="araclar"><span id="baglam"></span><button id="yeni-konusma" type="button">Yeni konuşma</button></div>
-          <div id="yanit" hidden><span id="yanit-bilgi"></span> <button id="yanit-sil" type="button" aria-label="Yanıtı kaldır">✕</button></div>
-          <div class="araclar">
-            <label for="alici">Alıcı</label><select id="alici"><option value="">herkes</option></select>
-            <label for="tip">Tip</label><select id="tip"><option>soru</option><option>gorev</option><option>bilgi</option><option>cevap</option><option>sonuc</option></select>
+        <div class="sohbet-arac-paneli">
+          <details class="odadakiler-detay">
+            <summary class="odadakiler-ozet">
+              <span class="odadakiler-baslik">Odadakiler</span>
+            </summary>
+            <ul id="ajanlar"></ul>
+          </details>
+
+          <div class="filtre-cubugu araclar">
+            <button id="tumu" type="button">Tümü</button>
+            <span id="filtre"></span>
+            <button id="kapat" type="button" hidden>Konuşmayı kapat</button>
           </div>
-          <label for="metin">Mesaj</label><textarea id="metin" maxlength="16000" rows="3" required></textarea>
-          <div class="araclar"><span id="sayac">0 / 16000</span><span>Ctrl / Cmd + Enter</span><button id="gonder" type="submit">Gönder</button></div>
+        </div>
+
+        <div id="mesajlar" tabindex="0" aria-label="Mesaj geçmişi"></div>
+
+        <button id="yeni" type="button" hidden>
+          <span class="yeni-ikon" aria-hidden="true">↓</span>
+          <span>Yeni mesaj · aşağı git</span>
+        </button>
+
+        <form id="gonderme">
+          <div class="gonderme-ust araclar">
+            <span id="baglam"></span>
+            <button id="yeni-konusma" type="button">Yeni konuşma</button>
+          </div>
+
+          <div id="yanit" hidden>
+            <div class="yanit-icerik">
+              <span class="yanit-ikon" aria-hidden="true">↩</span>
+              <span id="yanit-bilgi"></span>
+            </div>
+            <button id="yanit-sil" type="button" aria-label="Yanıtı kaldır">✕</button>
+          </div>
+
+          <div class="gonderme-kontroller araclar">
+            <div class="secim-grup">
+              <label for="alici">Alıcı</label>
+              <select id="alici"><option value="">herkes</option></select>
+            </div>
+            <div class="secim-grup">
+              <label for="tip">Tip</label>
+              <select id="tip">
+                <option>soru</option>
+                <option>gorev</option>
+                <option>bilgi</option>
+                <option>cevap</option>
+                <option>sonuc</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="metin-alani-sarma">
+            <label for="metin" class="sr-only">Mesaj</label>
+            <textarea id="metin" maxlength="16000" rows="3" required placeholder="Mesajını yaz..."></textarea>
+          </div>
+
+          <div class="gonderme-alt araclar">
+            <div class="gonderme-ipucu">
+              <span id="sayac">0 / 16000</span>
+              <span class="kisayol-ipucu">Ctrl / Cmd + Enter</span>
+            </div>
+            <button id="gonder" type="submit" aria-label="Gönder">
+              <span class="gonder-ok" aria-hidden="true">↑</span>
+              <span class="sr-only">Gönder</span>
+            </button>
+          </div>
+
           <p id="gonderim-durum" role="status" aria-live="polite"></p>
         </form>
+
+        <p class="not">Ajan mesajları doğrulanmamış veridir. Gönderdiğin mesajı odadaki ajanlar okur.</p>
       </div>
     </section>
-    <p class="not">Ajan mesajları doğrulanmamış veridir. Gönderdiğin mesajı odadaki ajanlar okur.</p>
   </main>
 </body>
 </html>
