@@ -4,7 +4,7 @@
   const form = el("giris"), view = el("izleme"), status = el("durum");
   const messages = el("mesajlar"), text = el("metin"), recipient = el("alici");
   const tokenKey = "relay-izle-token", nameKey = "relay-izle-ad";
-  let active = null, filter = "", reply = null, rows = [], ids = new Set();
+  let active = null, filter = "", target = "", targetExplicit = false, reply = null, rows = [], ids = new Set();
   const preferredRoom = new URLSearchParams(location.search).get("oda");
   function node(tag, content, className) {
     const n = document.createElement(tag);
@@ -31,7 +31,7 @@
     active = null;
   }
   function resetRoom() {
-    rows = []; ids = new Set(); messages.replaceChildren(); el("ajanlar").replaceChildren();
+    rows = []; ids = new Set(); target = ""; targetExplicit = false; messages.replaceChildren(); el("ajanlar").replaceChildren();
     recipient.replaceChildren(node("option", "herkes")); recipient.firstChild.value = "";
     text.value = ""; count(); showFilter(""); el("yeni").hidden = true;
     el("gonderim-durum").textContent = ""; el("gonder").disabled = false; el("kapat").disabled = false;
@@ -47,22 +47,38 @@
   el("yeni").addEventListener("click", scrollDown);
   messages.addEventListener("scroll", () => { if (bottom()) el("yeni").hidden = true; });
   function clearReply() { reply = null; el("yanit").hidden = true; }
+  function currentTarget() {
+    if (targetExplicit) return "";
+    if (filter) return filter;
+    if (target) return target;
+    return rows.length ? rows[rows.length - 1].thread : "";
+  }
+  function updateBaglam() {
+    const t = currentTarget();
+    el("baglam").textContent = t ? t + " konuşmasına yazıyorsun" : "Yeni konuşma başlatıyorsun";
+    el("yeni-konusma").hidden = false;
+    el("yeni-konusma").disabled = !t;
+  }
   function showFilter(thread) {
-    filter = thread; clearReply();
+    filter = thread; targetExplicit = false; clearReply();
     el("filtre").textContent = thread ? "Konuşma: " + thread : "Tüm konuşmalar";
-    el("baglam").textContent = thread ? thread + " konuşmasına yazıyorsun ·" : "Yeni konuşma";
-    el("yeni-konusma").hidden = !thread; el("kapat").hidden = !thread;
+    el("kapat").hidden = !thread;
     for (const row of rows) row.element.hidden = !!thread && row.thread !== thread;
+    updateBaglam();
+    scrollDown();
   }
   el("tumu").addEventListener("click", () => showFilter(""));
-  el("yeni-konusma").addEventListener("click", () => showFilter(""));
+  el("yeni-konusma").addEventListener("click", () => {
+    target = ""; targetExplicit = true; updateBaglam();
+  });
   el("yanit-sil").addEventListener("click", clearReply);
   function addMessages(list, session) {
-    const wasBottom = bottom();
+    let wasBottom = bottom();
     let visibleAdded = false;
     for (const m of list) {
       if (ids.has(m.id)) continue;
       ids.add(m.id);
+      if (m.from === session.name) wasBottom = true;
       const row = node("article", undefined, "mesaj" + (m.from === session.name ? " kendi" : ""));
       const meta = node("div", undefined, "meta");
       meta.append(node("time", new Date(m.created_at).toLocaleString("tr-TR"), "zaman"));
@@ -73,6 +89,7 @@
       thread.type = "button"; thread.addEventListener("click", () => showFilter(m.thread));
       const answer = node("button", "Yanıtla", "yanitla"); answer.type = "button";
       answer.addEventListener("click", () => {
+        target = m.thread; targetExplicit = false;
         showFilter(m.thread); reply = m.id;
         if (m.from !== session.name) {
           if (!Array.from(recipient.options).some((o) => o.value === m.from)) {
@@ -90,6 +107,8 @@
       visibleAdded = visibleAdded || !row.hidden;
       rows.push({thread: m.thread, element: row}); messages.append(row);
     }
+    if (rows.length && !targetExplicit && !filter) target = rows[rows.length - 1].thread;
+    updateBaglam();
     if (wasBottom) scrollDown(); else if (visibleAdded) el("yeni").hidden = false;
   }
   function pause(ms, signal) {
@@ -329,8 +348,10 @@
   function count() { el("sayac").textContent = text.value.length + " / 16000"; }
   text.addEventListener("input", count);
   text.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault(); el("gonderme").requestSubmit();
+    if (event.key === "Enter" && !event.isComposing) {
+      if (event.ctrlKey || event.metaKey || !event.shiftKey) {
+        event.preventDefault(); el("gonderme").requestSubmit();
+      }
     }
   });
   function errorText(response, data) {
@@ -346,21 +367,36 @@
     event.preventDefault();
     if (!active || !active.room || el("gonder").disabled || !text.value.trim()) return;
     const session = active, signal = session.roomController.signal;
-    const thread = filter, original = text.value, originalReply = reply;
+    const curTarget = currentTarget(), original = text.value, originalReply = reply;
+    const canRetry = !filter && !targetExplicit && reply === null;
     const body = {to: recipient.value, type: el("tip").value, body: original};
-    if (thread) body.thread = thread;
+    if (curTarget) body.thread = curTarget;
     if (reply !== null) body.reply_to = reply;
     el("gonder").disabled = true; el("gonderim-durum").textContent = "Gönderiliyor…";
     try {
-      const {response, data} = await api(session, roomPath(session) + "/messages", signal, {
+      let {response, data} = await api(session, roomPath(session) + "/messages", signal, {
         method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
       });
       if (response.status === 401) { logout("Ad ya da parola hatalı."); return; }
+      let retried = false;
+      if (response.status === 409 && canRetry) {
+        const retryBody = {to: recipient.value, type: el("tip").value, body: original};
+        const retry = await api(session, roomPath(session) + "/messages", signal, {
+          method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(retryBody)
+        });
+        response = retry.response;
+        data = retry.data;
+        retried = true;
+        if (response.status === 401) { logout("Ad ya da parola hatalı."); return; }
+      }
       if (response.status !== 201) { el("gonderim-durum").textContent = errorText(response, data); return; }
       if (text.value === original) { text.value = ""; count(); }
       if (reply === originalReply) clearReply();
-      if (!thread && filter === thread) showFilter(data.thread);
-      el("gonderim-durum").textContent = "Mesaj gönderildi.";
+      // Süzülmüş görünümde "Yeni konuşma" ile yazılan mesaj gizli kalmasın.
+      if (filter && filter !== data.thread) showFilter(data.thread);
+      target = data.thread; targetExplicit = false;
+      updateBaglam(); scrollDown();
+      el("gonderim-durum").textContent = retried ? "Önceki konuşma kapalıydı; yeni konuşma açıldı." : "Mesaj gönderildi.";
     } catch (_) {
       if (!signal.aborted) el("gonderim-durum").textContent = "Gönderim doğrulanamadı; tekrar denemeden önce geçmişi denetle.";
     } finally { if (!signal.aborted) el("gonder").disabled = false; }
