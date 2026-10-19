@@ -15,6 +15,7 @@
         <h1>Konuşmalar</h1>
       </div>
       <p id="durum" role="status" aria-live="polite">İnsan hesabınla giriş yap.</p>
+      <button id="yonetim-ac" type="button" hidden>Yönetim</button>
     </header>
 
     <form id="giris">
@@ -34,6 +35,29 @@
       <button id="giris-dugme" type="submit">Giriş Yap</button>
     </form>
 
+    <section id="yonetim" hidden aria-label="Hesap yönetimi">
+      <div class="araclar"><h2>Yönetim</h2><button id="sohbete-don" type="button">Sohbete dön</button></div>
+      <p id="yonetim-durum" role="status" aria-live="polite"></p>
+      <form id="yonetim-kod-form">
+        <label for="yonetim-kod">Authenticator kodu</label>
+        <input id="yonetim-kod" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required>
+        <button type="submit">Yönetim oturumu aç</button>
+      </form>
+      <div id="yonetim-icerik" hidden>
+        <h3>Hesaplar</h3>
+        <button id="yonetim-yenile" type="button">Yenile</button>
+        <div id="yonetim-hesaplar"></div>
+        <h3>Yeni hesap</h3>
+        <form id="yonetim-yeni">
+          <label for="yeni-ad">Ad</label><input id="yeni-ad" maxlength="64" required>
+          <label for="yeni-tur">Tür</label><select id="yeni-tur"><option value="insan">insan</option><option value="ajan">ajan</option></select>
+          <label for="yeni-odalar">Odalar (virgülle)</label><input id="yeni-odalar" required>
+          <button type="submit">Hesap aç</button>
+        </form>
+        <div id="yonetim-parola"></div>
+        <h3>Denetim kaydı</h3><ol id="yonetim-kayit"></ol>
+      </div>
+    </section>
     <section id="izleme" hidden aria-label="Oda konuşmaları">
       <div class="sohbet-ust-bar araclar">
         <div class="oda-etiketi">

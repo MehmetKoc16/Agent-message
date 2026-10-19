@@ -22,6 +22,7 @@
     } catch (_) { /* Depolama kapalıysa oturum bellekte kalır. */ }
   }
   function stop() {
+    clearYonetim(); el("yonetim").hidden = true; el("yonetim-ac").hidden = true;
     if (active) {
       active.controller.abort();
       if (active.roomController) active.roomController.abort();
@@ -184,6 +185,7 @@
       if (!response.ok) { logout("Giriş yapılamadı; biraz sonra tekrar dene."); return; }
       if (data.kind !== "insan") { logout("Bu sayfa yalnız insan hesapları içindir."); return; }
       remember(token, name); el("token").value = "";
+      el("yonetim-ac").hidden = !data.yonetici;
       form.hidden = true; view.hidden = false; el("giris-dugme").disabled = false;
       el("oda-baslik").textContent = name;
       el("oda").replaceChildren(); el("oda-secimi").hidden = data.rooms.length < 2;
@@ -196,6 +198,133 @@
   }
   form.addEventListener("submit", (event) => {
     event.preventDefault(); login(el("ad").value.trim(), el("token").value.trim());
+  });
+  // Yönetim anahtarı yalnız bu kapanımda yaşar; tarayıcı depolarına aktarılmaz.
+  let managementSession = "", managementExpiry = 0, managementTimer = null;
+  function clearYonetim() {
+    managementSession = ""; managementExpiry = 0; clearTimeout(managementTimer);
+    el("yonetim-kod").value = ""; el("yonetim-parola").replaceChildren();
+    el("yonetim-hesaplar").replaceChildren(); el("yonetim-kayit").replaceChildren();
+    el("yonetim-kod-form").hidden = false; el("yonetim-icerik").hidden = true;
+  }
+  const managementErrors = {
+    yalniz_yonetici: "Bu işlem yalnız yönetici hesabına açık.",
+    kod_gecersiz: "Kod geçersiz veya daha önce kullanılmış. Yeni kodu bekle.",
+    cok_fazla_deneme: "Çok fazla hatalı kod. 15 dakika sonra tekrar dene.",
+    yonetim_oturumu_gerekli: "Yönetim oturumu sona erdi. Yeni kod gir.",
+    yoneticiye_dokunulamaz: "Yönetici hesabı yalnız SSH ile değiştirilebilir.",
+    zaten_var: "Bu adla bir hesap zaten var.", hesap_yok: "Hesap yok veya iptal edilmiş.",
+    gecersiz_ad: "Geçersiz hesap adı.", gecersiz_oda: "Geçersiz oda adı; en az bir oda gerekli.",
+    gecersiz_tur: "Tür ajan veya insan olmalı.", gecersiz_son: "Kayıt sayısı 1–1000 olmalı.",
+    gecersiz_json: "İstek biçimi geçersiz.", gecersiz_govde: "İstek metni geçersiz.",
+    govde_cok_buyuk: "İstek çok büyük.", hiz_siniri: "İstek sınırına ulaşıldı; biraz bekle.",
+    cok_fazla_baglanti: "Çok fazla eşzamanlı bağlantı; yeniden dene.",
+    kimliksiz_hiz_siniri: "Giriş sınırına ulaşıldı; biraz bekle.", yetkisiz: "Parola geçersiz veya hesap iptal edilmiş.",
+    sunucu_hatasi: "Sunucu işlemi tamamlayamadı."
+  };
+  async function managementAPI(path, method = "GET", body) {
+    const session = active;
+    const key = managementSession;
+    if (!session) throw new Error("Önce giriş yap.");
+    if (path !== "/oturum" && Date.now() >= managementExpiry) {
+      clearYonetim(); throw new Error(managementErrors.yonetim_oturumu_gerekli);
+    }
+    const {response, data} = await api(session, "/v1/yonetim" + path, session.controller.signal, {
+      method, headers: {"Content-Type": "application/json", "X-Yonetim-Oturum": managementSession},
+      ...(body === undefined ? {} : {body: JSON.stringify(body)})
+    });
+    if (active !== session) throw new Error("Oturum değişti.");
+    if (path !== "/oturum" && (key !== managementSession || Date.now() >= managementExpiry)) {
+      throw new Error(managementErrors.yonetim_oturumu_gerekli);
+    }
+    if (!response.ok) {
+      if (data.error === "yonetim_oturumu_gerekli" || data.error === "yalniz_yonetici") clearYonetim();
+      if (data.error === "yetkisiz") logout("Hesap iptal edilmiş veya parola geçersiz.");
+      throw new Error(managementErrors[data.error] || "İşlem tamamlanamadı.");
+    }
+    return data;
+  }
+  function managementAction(fn) {
+    return async () => { try { await fn(); } catch (error) { el("yonetim-durum").textContent = error.message; } };
+  }
+  function managementButton(label, fn) {
+    const b = node("button", label); b.type = "button"; b.addEventListener("click", managementAction(async () => {
+      b.disabled = true; try { await fn(); } finally { b.disabled = false; }
+    })); return b;
+  }
+  async function refreshManagement() {
+    const accounts = await managementAPI("/hesaplar");
+    const list = el("yonetim-hesaplar"); list.replaceChildren();
+    for (const a of accounts) {
+      const card = node("article", undefined, "yonetim-hesap");
+      card.append(node("h4", a.name + " · " + a.kind + (a.yonetici ? " · yönetici" : "")),
+        node("p", (a.revoked ? "İptal edilmiş" : "Aktif") + " · Son görülme: " +
+          (a.last_seen ? new Date(a.last_seen).toLocaleString("tr-TR") : "Henüz görülmedi")));
+      const base = "/hesaplar/" + encodeURIComponent(a.name);
+      const rooms = node("ul");
+      for (const room of a.rooms) {
+        const li = node("li", room + " ");
+        if (!a.yonetici) li.append(managementButton("çıkar", async () => {
+          await managementAPI(base + "/odalar/" + encodeURIComponent(room), "DELETE"); await refreshManagement();
+        })); rooms.append(li);
+      }
+      card.append(rooms);
+      if (!a.yonetici && !a.revoked) {
+        card.append(managementButton("Oda ekle", async () => {
+          const room = window.prompt(a.name + " için oda adı"); if (room === null) return;
+          await managementAPI(base + "/odalar", "POST", {oda: room.trim()}); await refreshManagement();
+        }), managementButton("İptal et", async () => {
+          if (!window.confirm(a.name + " hesabı iptal edilsin mi?")) return;
+          await managementAPI(base + "/iptal", "POST"); await refreshManagement();
+        }));
+      }
+      list.append(card);
+    }
+    const records = await managementAPI("/kayit?son=100");
+    el("yonetim-kayit").replaceChildren();
+    for (const k of records) el("yonetim-kayit").append(node("li",
+      new Date(k.zaman).toLocaleString("tr-TR") + " · " + k.yapan + " · " + k.islem + " · " + k.hedef + " · " + k.ayrinti));
+    el("yonetim-durum").textContent = "Yönetim oturumu 10 dakika geçerlidir.";
+  }
+  el("yonetim-ac").addEventListener("click", managementAction(async () => {
+    view.hidden = true; el("yonetim").hidden = false;
+    if (managementSession && Date.now() < managementExpiry) await refreshManagement();
+    else { clearYonetim(); el("yonetim-kod").focus(); }
+  }));
+  el("sohbete-don").addEventListener("click", () => {
+    el("yonetim").hidden = true; view.hidden = false; el("yonetim-parola").replaceChildren();
+  });
+  el("yonetim-yenile").addEventListener("click", managementAction(refreshManagement));
+  el("yonetim-kod-form").addEventListener("submit", (event) => {
+    event.preventDefault(); const submit = event.submitter; submit.disabled = true;
+    managementAction(async () => {
+      try {
+      const kod = el("yonetim-kod").value; el("yonetim-kod").value = "";
+      const data = await managementAPI("/oturum", "POST", {kod});
+      managementSession = data.oturum; managementExpiry = Date.parse(data.bitis);
+      managementTimer = setTimeout(() => {
+        clearYonetim(); el("yonetim-durum").textContent = managementErrors.yonetim_oturumu_gerekli;
+      }, Math.max(0, managementExpiry - Date.now()));
+      el("yonetim-kod-form").hidden = true; el("yonetim-icerik").hidden = false; await refreshManagement();
+      } finally { submit.disabled = false; }
+    })();
+  });
+  el("yonetim-yeni").addEventListener("submit", (event) => {
+    event.preventDefault(); const submit = event.submitter;
+    managementAction(async () => {
+      submit.disabled = true;
+      try {
+        const data = await managementAPI("/hesaplar", "POST", {ad: el("yeni-ad").value.trim(),
+          tur: el("yeni-tur").value, odalar: el("yeni-odalar").value.split(",").map((s) => s.trim())});
+        const box = node("section", undefined, "yonetim-token");
+        box.append(node("p", data.ad + ": Bu parola bir daha gösterilmeyecek; kişiye güvenli kanaldan ilet"));
+        const secret = node("code", data.token); data.token = "";
+        box.append(secret, managementButton("Kopyala", async () => {
+          await navigator.clipboard.writeText(secret.textContent);
+        }), managementButton("Kapat", async () => { secret.textContent = ""; box.remove(); }));
+        el("yonetim-parola").replaceChildren(box); el("yonetim-yeni").reset(); await refreshManagement();
+      } finally { submit.disabled = false; }
+    })();
   });
   function count() { el("sayac").textContent = text.value.length + " / 16000"; }
   text.addEventListener("input", count);

@@ -228,6 +228,40 @@ Basılan token, sayfadaki "Parola"dır; Ad alanına hesap adı yazılır.
   ([ajan-talimati.md](ajan-talimati.md)). Tarayıcıdaki parola, ajana yetki veren bir kanal değildir.
 - Sayfanın güvenlik ayrıntıları: [guvenlik.md](guvenlik.md).
 
+### Yönetici ve tarayıcıdan yönetim
+
+Bu güncelleme şemayı v2'ye taşır. **Güncellemeden ÖNCE veritabanı yedeği alın**:
+"Günlük işletim ve yedek" bölümündeki SQLite `VACUUM INTO` ve `integrity_check`
+adımlarını izleyin; çalışan WAL veritabanında yalnız ana dosyayı kopyalamayın.
+v1 hesapları, üyelikler, konuşmalar ve mesajlar korunur. Göç tek transaction'dır;
+eski ikili v2'yi açamaz. Geri dönüş için tutarlı v1 yedeği gerekir.
+
+Günlük sohbet hesabından ayrı bir insan yönetici hesabını yalnız sunucuya SSH ile
+bağlanarak oluşturun (örnek ad ve odayı kendi değerlerinizle değiştirin):
+
+```bash
+sudo -u agentrelay /opt/agent-relay/agent-relay admin --config /etc/agent-relay/config.json add-agent mehmet-yonetici --rooms ornek-proje --kind insan
+sudo -u agentrelay /opt/agent-relay/agent-relay admin --config /etc/agent-relay/config.json yonetici-yap mehmet-yonetici
+```
+
+İlk komutun token'ını parola yöneticisinde saklayın. İkinci komut base32 TOTP sırrını
+ve `otpauth://` URI'sini yalnız bu çalıştırmada stdout'a basar. Google Authenticator →
+**Kurulum anahtarı gir → zamana dayalı** yolunda sırrı girin. **Sırrı sohbete ya da
+AI oturumuna yapıştırmayın.** Terminal çıktısını paylaşılan kayda almayın.
+`yonetici-yap` yeniden çalıştırılırsa yeni sır atanır; eski Authenticator kaydı geçersiz olur.
+
+`/v1/izle` sayfasına bu hesabın adı/parolasıyla girin, üstteki **Yönetim** düğmesini
+açıp altı haneli kodu yazın. Oturum 10 dakika geçerlidir; yenilemede veya süre
+bitiminde kod yeniden istenir. Hesaplar, oda üyelikleri, iptal ve denetim kayıtları
+paneldedir. Yeni hesabın parolası yalnız bir kez görünür; güvenli kanalla iletin,
+ardından **Kapat** ile kutuyu silin. **Sohbete dön** sohbet görünümünü açar.
+Yönetici hesabına web'den oda değişikliği veya iptal uygulanamaz.
+
+SSH karşılıkları `odaya-ekle <ad> <oda>`, `odadan-cikar <ad> <oda>`,
+`kayit --son 100` komutlarıdır. Yetkiyi kaldırmak için
+`yonetici-al mehmet-yonetici` kullanın; TOTP sırrı da temizlenir. Telefon
+kaybında SSH'den yetkiyi kaldırın veya `yonetici-yap` ile sırrı yenileyin.
+
 ## Güncelleme (yeni sürüm)
 
 Aynı kurucu, mevcut kurulumu yükseltir. Config, veri, hesaplar ve yerel drop-in korunur.

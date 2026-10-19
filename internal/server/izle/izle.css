@@ -73,6 +73,19 @@
   --focus-ring: #c84e27;
 }
 
+#yonetim { padding: 1.5rem; }
+#yonetim form { display: grid; gap: .65rem; margin-block: 1rem; }
+#yonetim input, #yonetim select { width: 100%; box-sizing: border-box; }
+.yonetim-hesap, .yonetim-token {
+  background: var(--bg-surface); color: var(--text-main);
+  border: 1px solid var(--border-subtle); border-radius: 12px;
+  padding: 1rem; margin-block: 1rem; overflow-wrap: anywhere;
+}
+.yonetim-hesap button { margin: .25rem; }
+.yonetim-token code { display: block; padding: 1rem; user-select: all; }
+#yonetim-kayit { padding-inline-start: 1.5rem; overflow-wrap: anywhere; }
+#yonetim-kayit li { margin-block: .6rem; color: var(--text-muted); }
+
 @media (prefers-color-scheme: dark) {
   :root {
     /* Dark Theme (Warm Coffee/Plum, Terracotta & Deep Peach) */

@@ -145,3 +145,64 @@ Sayfa bu güven sınırını kullanıcıya da belirtir.
 Log long-poll'u sorgudan önce oda kanalını alır; süre veya sunucu kapanışında son kez sorgular.
 `BeginWait` çağırmaz. İzleyen insan ajan listesinde `waiting=true` görünmez;
 ajanlar insanın izlemesini karşı tarafın dinlemesi sanmaz.
+
+## 7. Tarayıcıdan hesap yönetimi — tehdit modeli (Faz 7)
+
+Sohbet parolasının çalınması, saldırganın kendine hesap açıp diğer odalara erişmesine
+yetmemelidir. Yönetim için günlük sohbet hesabından **ayrı** bir insan hesabı kullanılır.
+Yetki yalnız sunucu sahibinin SSH'deki `yonetici-yap` / `yonetici-al` komutlarıyla
+atanır veya alınır; web API'sinde yetki verme yolu yoktur. Yeni hesap gövdesindeki
+`yonetici` alanı yok sayılır. Ajan türü ve yetkisiz insan hesapları 403 alır.
+Yönetici bütün hesap ve odalar üzerinde yetkilidir; bu hesabı başka kişilere vermeyin.
+
+Yönetim Bearer parolasına ek olarak zorunlu TOTP ister: 20 rastgele bayt sır,
+padding'siz base32, HMAC-SHA1, 30 saniye, altı hane ve ±1 adımlık saat toleransı.
+Kod karşılaştırması sabit zamanlıdır. Kullanılan adım DB'de atomik olarak ilerletilir;
+aynı ya da daha eski adım yeniden kullanılamaz (süreç yeniden başlasa da).
+15 dakikalık pencerede beş yanlış deneme hesabı beşinci denemeden itibaren 15 dakika
+kilitler; başarı sayacı temizler. Sayaç/kilit bellektedir, süreç yeniden başlayınca
+sıfırlanır. Bu koruma tek süreç içindir; hesap kilitleyerek hizmet engelleme mümkündür.
+Mevcut kimliksiz istek, hesap yazma ve bağlantı sınırları da korunur.
+
+İkinci faktörden sonra üretilen 32 rastgele baytlık yönetim anahtarı 10 dakika
+geçerlidir. Sunucu yalnız SHA-256 özetini, hesap bağını ve bitişini bellekte tutar.
+TOTP sırrının özetiyle bağlanması sır yenilendiğinde eski oturumu da geçersiz kılar.
+Her istekte insan türü ve yönetici yetkisi yeniden denetlenir. Her hesap için en son
+oturum geçerlidir; yeniden başlatmada oturumlar silinir. Tarayıcı anahtarı yalnız JS
+belleğinde tutar; `sessionStorage` dahil hiçbir depoya yazmaz. Bearer token için
+mevcut sekme oturumu davranışı sürer. Oturum süresi dolunca veya sayfa yenilenince
+yeniden kod girilir. İstekler HTTPS üzerinden, anahtarlar yalnız başlıklarda taşınır.
+
+**Caddy logu:** Örnek Caddyfile'daki log filtresi yalnız `Authorization` başlığını siler.
+`X-Yonetim-Oturum` başlığı bu yüzden Caddy erişim loguna yazılabilir. Bu anahtar tek başına
+yetki vermez:
+- Her yönetim isteği ayrıca loglanmayan Bearer parolasını ister.
+- Anahtar 10 dakikada geçersiz olur.
+- Anahtar, TOTP sırrına bağlıdır.
+
+Yine de log dosyası en az relay verisi kadar korunmalıdır. Caddy'ye dokunulan bir sonraki
+bakımda filtreye `request>headers>X-Yonetim-Oturum delete` satırı eklenebilir.
+
+Yönetici hedef hesaba web'den oda ekleme/çıkarma ve iptal yapılamaz; kendisi de
+buna dahildir. Hedef denetimi değişiklik transaction'ında tekrar yapılır; eşzamanlı
+SSH atamasıyla koruma atlanamaz. Yönetici yetkisi geri alma ve sır yenileme SSH işidir.
+Hesap açma ve üyelik/iptal değişikliği ile denetim kaydı aynı transaction'dadır;
+kayıt yazılamazsa değişiklik geri alınır. Oturum açma ve reddetme, hesap/kayıt
+listeleme de kaydedilir. SSH işlemlerinde yapan `ssh`, web'de hesap adıdır.
+Kayıt alanları zaman, yapan, işlem, hedef ve oda gibi ayrıntıdır; parola, oturum
+anahtarı, TOTP kodu/sırrı ve istek gövdesi kaydedilmez. Denetim tablosu kriptografik
+olarak mühürlenmiş değildir; DB yazma yetkisi olan kişi kaydı değiştirebilir.
+
+**TOTP sırrı doğrulama için gerekli olduğundan DB'de açık metin saklanır.** DB,
+WAL/SHM ve yedekleri yalnız `agentrelay` kullanıcısınca okunabilen erişimle
+korunmalıdır (sunucu root yetkisi bu sınırın dışındadır). Yeni göç dosya izinlerini
+değiştirmez; mevcut kurulum sahipliği/izinleri korunmalı ve işletimde doğrulanmalıdır.
+DB sızıntısı ikinci faktörü açığa çıkarır. DB'yi okuyabilen saldırganın oda içerikleri
+zaten elindedir; parola özeti tek başına rastgele Bearer parolası yerine geçmez.
+
+TOTP canlı kimlik avına, ele geçirilmiş tarayıcı/cihaza, aynı kaynakta çalışan kötü
+niyetli betiğe veya SSH/root ihlaline karşı koruma sağlamaz. CSP, metinle DOM üretme,
+aynı kaynak başlıkları ve dış bağımlılık kullanmama kuralları sürer. Yeni hesap
+token'ı yalnız oluşturma cevabında sunulur; kutu kapatılınca DOM'dan silinir,
+kopyalama yalnız açık kullanıcı eylemiyle panoya yapılır. Pano ve alıcıya güvenli
+iletim kullanıcının sorumluluğundadır. Göçten önce tutarlı v1 yedeği alınmalıdır.

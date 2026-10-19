@@ -35,6 +35,7 @@ relay.example.com {
 			wrap json
 			fields {
 				request>headers>Authorization delete
+				request>headers>X-Yonetim-Oturum delete
 				# URI alanını tamamen silmek sorguyu da gizler.
 				request>uri delete
 			}

@@ -19,7 +19,7 @@ import (
 	_ "modernc.org/sqlite" // sürücü adı: "sqlite"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 // Hata değerleri; server paketi bunları HTTP koduna çevirir.
 var (
@@ -65,21 +65,21 @@ func Open(path string, maxTurns int) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) migrate() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	var v int
-	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
 		return fmt.Errorf("şema sürümü okunamadı: %w", err)
 	}
 	if v > schemaVersion {
 		return fmt.Errorf("veritabanı şema sürümü (%d) bu sürümden yeni (%d)", v, schemaVersion)
 	}
 	if v == schemaVersion {
-		return nil
+		return tx.Commit()
 	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 	stmts := []string{
 		`CREATE TABLE agents (
 			name TEXT PRIMARY KEY,
@@ -121,6 +121,15 @@ func (s *Store) migrate() error {
 		`CREATE INDEX messages_thread ON messages(room, thread, id)`,
 		`CREATE INDEX messages_created ON messages(created_at)`,
 	}
+	if v != 0 {
+		stmts = nil
+	}
+	stmts = append(stmts,
+		`ALTER TABLE agents ADD COLUMN yonetici INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agents ADD COLUMN totp_secret TEXT`,
+		`ALTER TABLE agents ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0`,
+		`CREATE TABLE yonetim_kayit (id INTEGER PRIMARY KEY AUTOINCREMENT, zaman TEXT NOT NULL, yapan TEXT NOT NULL, islem TEXT NOT NULL, hedef TEXT NOT NULL, ayrinti TEXT NOT NULL DEFAULT '')`,
+	)
 	for _, q := range stmts {
 		if _, err := tx.Exec(q); err != nil {
 			return fmt.Errorf("şema kurulamadı: %w", err)

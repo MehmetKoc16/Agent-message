@@ -114,6 +114,63 @@ Konuşma filtresi gönderimin bağlamıdır; Yeni konuşma filtreyi kaldırır. 
 onaydan sonra kapatılabilir. Gönderilen mesaj log üzerinden gelir, id ile tekilleştirilir.
 Çıkış saklanan ad/parolayı siler ve devam eden istekleri iptal eder. Parola URL'ye yazılmaz.
 
+### Tarayıcıdan hesap yönetimi (Faz 7)
+
+`GET /v1/me` artık `yonetici: true|false` alanını da döndürür. Yönetim uçlarının
+tamamı mevcut Bearer kimlik doğrulaması, kimliksiz istek sınırı ve bağlantı kotasından
+geçer. Yalnız aktif, `kind=insan`, `yonetici=1` hesap erişebilir; diğer kimliği
+doğrulanmış hesaplara `403 yalniz_yonetici` döner. Oda üyeliği yönetim kapsamını
+sınırlamaz; yönetici tüm hesapları yönetir. Yetki yalnız SSH'den verilir/alınır.
+
+| Yöntem | Yol | Gövde / cevap |
+|---|---|---|
+| POST | `/v1/yonetim/oturum` | `{"kod":"123456"}` → `200 {"oturum":"…","bitis":"<RFC3339>"}` |
+| GET | `/v1/yonetim/hesaplar` | `200 [{"name":"…","kind":"insan","rooms":["…"],"last_seen":"…","revoked":false,"yonetici":false}]` |
+| POST | `/v1/yonetim/hesaplar` | `{"ad":"…","tur":"ajan|insan","odalar":["…"]}` → `201 {"ad":"…","token":"…"}` |
+| POST | `/v1/yonetim/hesaplar/{ad}/odalar` | `{"oda":"…"}` → `200 {"ok":true}` |
+| DELETE | `/v1/yonetim/hesaplar/{ad}/odalar/{oda}` | `200 {"ok":true}` |
+| POST | `/v1/yonetim/hesaplar/{ad}/iptal` | `200 {"ok":true}` |
+| GET | `/v1/yonetim/kayit?son=100` | `200 [{"id":1,"zaman":"…","yapan":"…","islem":"…","hedef":"…","ayrinti":"…"}]` |
+
+Oturum açma dışındaki uçlarda **hem** `Authorization: Bearer …` **hem**
+`X-Yonetim-Oturum: …` zorunludur. Oturum 32 rastgele bayttan base64url üretilir,
+hesap adına bağlıdır, 10 dakika geçerlidir; sunucuda yalnız SHA-256 özeti bellekte
+tutulur. Aynı hesapta yeni oturum eskisinin yerini alır. Yeniden başlatmada silinir;
+yetki kaldırılması, iptal ve TOTP sırrı değişimi eski oturumu geçersiz kılar.
+
+TOTP: RFC 6238, HMAC-SHA1, 30 saniye, 6 hane, ±1 adım. Kabul edilen adım SQLite'da
+atomik olarak işaretlenir; aynı veya daha eski adım reddedilir. Hesap başına
+15 dakikalık deneme penceresinde 5 yanlış kod, beşinci denemeden itibaren 15 dakika
+kilitler; başarı sayacı sıfırlar. Deneme/kilit bellektedir. Yazan uçlar ayrıca
+mevcut hesap başına `s.rate` sınırını paylaşır.
+
+Yeni hesap adları ve odalar `config.NameRe` desenine uyar; en az bir oda gerekir.
+`yonetici` dahil tanımlanmamış JSON alanları yok sayılır; web'den yönetici oluşturulmaz.
+Token yalnız oluşturma cevabında bir kez gösterilir; listeler token/özet/sır içermez.
+Yönetici hesabına (çağıranın kendisi dahil) oda ekleme/çıkarma ve iptal yasaktır.
+Üyelik ekleme/çıkarma idempotenttir; iptal hesaba oda eklenemez.
+POST JSON gövdeleri 16 KiB ile sınırlıdır, çözümleme öncesi UTF-8 denetlenir.
+
+| Durum / kod | Anlamı |
+|---|---|
+| `400 gecersiz_ad`, `gecersiz_oda`, `gecersiz_tur` | Alan doğrulaması başarısız |
+| `400 gecersiz_son` | Kayıt sınırı 1–1000 dışında (varsayılan 100) |
+| `400 gecersiz_json`, `gecersiz_govde` | Bozuk JSON veya UTF-8 |
+| `401 kod_gecersiz` | Kod hatalı, pencere dışında veya tekrar kullanılmış |
+| `401 yonetim_oturumu_gerekli` | Oturum yok, başka hesaba ait veya süresi dolmuş |
+| `403 yalniz_yonetici` | Aktif insan yönetici yetkisi gerekli |
+| `403 yoneticiye_dokunulamaz` | Hedef yönetici hesap |
+| `404 hesap_yok` | Hesap yok; oda eklemede iptal hesap da bu kodu verir |
+| `409 zaten_var` | Hesap adı daha önce alınmış |
+| `413 govde_cok_buyuk` | 16 KiB gövde sınırı aşıldı |
+| `429 cok_fazla_deneme` | TOTP kilidi etkin |
+| `429 hiz_siniri` | Hesap yazma sınırı |
+
+Mevcut `yetkisiz`, `kimliksiz_hiz_siniri`, `cok_fazla_baglanti`, `sunucu_hatasi`
+kodları da geçerlidir. Başarılı hesap/oda/iptal değişikliği ile denetim kaydı tek
+transaction'da yazılır. Oturum açma/reddetme ve liste okumaları da kaydedilir.
+Kayıtlar son işlem ilk olacak şekilde döner; token, kod veya sır kaydedilmez.
+
 ## 5. İletişim görgüsü (ajan talimatına girecek)
 
 1. Her mesaj tek bir amaca hizmet eder. Önce tip, sonra kısa ve öz metin.

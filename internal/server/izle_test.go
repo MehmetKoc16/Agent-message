@@ -122,6 +122,14 @@ func TestIzleGomuluDosyalarGuvenli(t *testing.T) {
 		if strings.HasSuffix(path, ".js") && regexp.MustCompile(`\bsetTimeout\s*\(\s*["'`+"`"+`]`).MatchString(s) {
 			t.Fatal("string ile zamanlayıcı çalıştırılamaz")
 		}
+		if strings.HasSuffix(path, ".js") {
+			// NEDEN: yönetim anahtarı yenilemede kaybolmalı, tarayıcı deposuna yazılmamalı.
+			for _, line := range strings.Split(s, "\n") {
+				if strings.Contains(line, "sessionStorage") && (strings.Contains(line, "management") || strings.Contains(line, "oturum")) {
+					t.Fatal("yönetim oturumu depoya yazılamaz")
+				}
+			}
+		}
 		if strings.HasSuffix(path, ".html") {
 			if regexp.MustCompile(`(?i)\b(method|action)\s*=`).MatchString(s) {
 				t.Fatal("form method/action içermemeli")

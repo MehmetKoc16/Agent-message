@@ -22,6 +22,11 @@ const usage = `kullanım: agent-relay admin --config <json> <komut>
   add-agent <ad> --rooms r1,r2 [--kind ajan|insan]   ajan ekler, token'ı BİR KEZ basar
   revoke <ad>                                         ajanı iptal eder
   list                                                ajanları listeler (token basmaz)
+  yonetici-yap <ad>                                    insan hesabına TOTP ile yetki verir
+  yonetici-al <ad>                                     yönetici yetkisini kaldırır
+  odaya-ekle <ad> <oda>                                oda üyeliği ekler
+  odadan-cikar <ad> <oda>                              oda üyeliğini kaldırır
+  kayit [--son N]                                      denetim kayıtlarını listeler
   reopen <oda> <thread>                               kilitli konuşmayı açar (+max_turns)
   purge                                               saklama süresi dolan mesajları siler`
 
@@ -58,6 +63,63 @@ func run(ctx context.Context, cfg config.Server, st *store.Store, cmd string, ar
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	switch cmd {
+	case "yonetici-yap", "yonetici-al", "odaya-ekle", "odadan-cikar":
+		pos, err := flagx.Parse(fs, args)
+		if err != nil {
+			return err
+		}
+		count := 1
+		if cmd == "odaya-ekle" || cmd == "odadan-cikar" {
+			count = 2
+		}
+		if len(pos) != count {
+			return fmt.Errorf("kullanım: %s <ad> [oda]", cmd)
+		}
+		for _, v := range pos {
+			if !config.NameRe.MatchString(v) {
+				return errors.New("geçersiz ad veya oda")
+			}
+		}
+		detail := ""
+		secret := ""
+		if cmd == "yonetici-yap" {
+			secret, err = NewTOTPSecret()
+			if err != nil {
+				return err
+			}
+		}
+		if len(pos) == 2 {
+			detail = pos[1]
+		}
+		if err = st.ChangeAccount(ctx, "ssh", cmd, pos[0], detail, secret, false); err != nil {
+			return err
+		}
+		if secret != "" {
+			fmt.Fprintln(stderr, "Google Authenticator → Kurulum anahtarı gir → zamana dayalı")
+			fmt.Fprintln(stdout, secret)
+			fmt.Fprintf(stdout, "otpauth://totp/Relay:%s?secret=%s&issuer=Relay&algorithm=SHA1&digits=6&period=30\n", pos[0], secret)
+		}
+		return nil
+	case "kayit":
+		limit := fs.Int("son", 100, "son kayıt sayısı")
+		pos, err := flagx.Parse(fs, args)
+		if err != nil {
+			return err
+		}
+		if len(pos) != 0 || *limit < 1 || *limit > 1000 {
+			return errors.New("kullanım: kayit [--son 1..1000]")
+		}
+		if err := st.AddKayit(ctx, "ssh", "kayit_listelendi", "", ""); err != nil {
+			return err
+		}
+		rows, err := st.ListKayit(ctx, *limit)
+		if err != nil {
+			return err
+		}
+		for _, k := range rows {
+			fmt.Fprintf(stdout, "%d\t%s\t%s\t%s\t%s\t%s\n", k.ID, k.Zaman, k.Yapan, k.Islem, k.Hedef, k.Ayrinti)
+		}
+		return nil
 	case "add-agent":
 		rooms := fs.String("rooms", "", "virgülle ayrılmış odalar")
 		kind := fs.String("kind", "ajan", "ajan | insan")
@@ -93,7 +155,7 @@ func run(ctx context.Context, cfg config.Server, st *store.Store, cmd string, ar
 		if err != nil {
 			return err
 		}
-		if err := st.AddAgent(ctx, name, *kind, store.HashToken(token), list); err != nil {
+		if err := st.AddAgentWithKayit(ctx, name, *kind, store.HashToken(token), list, "ssh", false); err != nil {
 			if errors.Is(err, store.ErrExists) {
 				return fmt.Errorf("ajan zaten var: %s", name)
 			}
@@ -111,7 +173,7 @@ func run(ctx context.Context, cfg config.Server, st *store.Store, cmd string, ar
 		if len(pos) != 1 {
 			return errors.New("kullanım: revoke <ad>")
 		}
-		if err := st.RevokeAgent(ctx, pos[0]); err != nil {
+		if err := st.ChangeAccount(ctx, "ssh", "revoke", pos[0], "", "", false); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return fmt.Errorf("ajan yok: %s", pos[0])
 			}

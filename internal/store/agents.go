@@ -18,6 +18,7 @@ type Agent struct {
 
 // AgentRow admin listesi içindir. Token ya da özeti içermez.
 type AgentRow struct {
+	Yonetici                                   bool
 	Name, Kind, CreatedAt, LastSeen, RevokedAt string
 	Rooms                                      []string
 }
@@ -37,11 +38,24 @@ func HashToken(token string) string {
 
 // AddAgent ajanı ve odalarını tek transaction'da ekler. Yalnız özet saklanır.
 func (s *Store) AddAgent(ctx context.Context, name, kind, tokenHash string, rooms []string) error {
+	return s.addAgent(ctx, name, kind, tokenHash, rooms, "", false)
+}
+
+// AddAgentWithKayit web/SSH hesabını ve denetim kaydını birlikte commit eder.
+func (s *Store) AddAgentWithKayit(ctx context.Context, name, kind, tokenHash string, rooms []string, yapan string, web bool) error {
+	return s.addAgent(ctx, name, kind, tokenHash, rooms, yapan, web)
+}
+func (s *Store) addAgent(ctx context.Context, name, kind, tokenHash string, rooms []string, yapan string, web bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if web {
+		if err := requireYoneticiTx(ctx, tx, yapan); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO agents (name, token_hash, kind, created_at) VALUES (?,?,?,?)`,
 		name, tokenHash, kind, s.stamp()); err != nil {
@@ -53,6 +67,11 @@ func (s *Store) AddAgent(ctx context.Context, name, kind, tokenHash string, room
 	for _, r := range rooms {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO agent_rooms (agent, room) VALUES (?,?)`, name, r); err != nil {
+			return err
+		}
+	}
+	if yapan != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO yonetim_kayit(zaman,yapan,islem,hedef,ayrinti) VALUES (?,?,'hesap_acildi',?,?)`, s.stamp(), yapan, name, strings.Join(rooms, ",")); err != nil {
 			return err
 		}
 	}
@@ -153,7 +172,7 @@ func (s *Store) RoomAgents(ctx context.Context, room string) ([]RoomAgent, error
 // ListAgents tüm ajanları (iptal edilenler dahil) listeler; token ya da özet içermez.
 func (s *Store) ListAgents(ctx context.Context) ([]AgentRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT name, kind, created_at, COALESCE(last_seen,''), COALESCE(revoked_at,'')
+		`SELECT name, kind, created_at, COALESCE(last_seen,''), COALESCE(revoked_at,''), yonetici
 		 FROM agents ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -161,7 +180,7 @@ func (s *Store) ListAgents(ctx context.Context) ([]AgentRow, error) {
 	var out []AgentRow
 	for rows.Next() {
 		var a AgentRow
-		if err := rows.Scan(&a.Name, &a.Kind, &a.CreatedAt, &a.LastSeen, &a.RevokedAt); err != nil {
+		if err := rows.Scan(&a.Name, &a.Kind, &a.CreatedAt, &a.LastSeen, &a.RevokedAt, &a.Yonetici); err != nil {
 			rows.Close()
 			return nil, err
 		}

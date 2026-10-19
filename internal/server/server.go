@@ -39,19 +39,24 @@ type Server struct {
 	unauth       *unauthLimiter
 	authenticate func(context.Context, string) (store.Agent, error)
 
-	touchMu sync.Mutex
-	touched map[string]time.Time
+	touchMu         sync.Mutex
+	touched         map[string]time.Time
+	yonetimMu       sync.Mutex
+	yonetimSessions map[string]yonetimSession
+	yonetimFailures map[string]yonetimFailure
 }
 
 // New sunucuyu kurar. Log hiçbir zaman gövde, token ya da Authorization içermez.
 func New(cfg config.Server, st *store.Store, log *slog.Logger) *Server {
 	return &Server{
 		cfg: cfg, st: st, log: log, hub: NewHub(),
-		rate:         newRateLimiter(cfg.RatePerMin, cfg.RatePerDay),
-		conns:        newConnLimiter(cfg.MaxConnsPerAgent),
-		unauth:       newUnauthLimiter(cfg.UnauthPerMin, cfg.UnauthGlobalPerMin),
-		authenticate: st.Authenticate,
-		touched:      map[string]time.Time{},
+		rate:            newRateLimiter(cfg.RatePerMin, cfg.RatePerDay),
+		conns:           newConnLimiter(cfg.MaxConnsPerAgent),
+		unauth:          newUnauthLimiter(cfg.UnauthPerMin, cfg.UnauthGlobalPerMin),
+		authenticate:    st.Authenticate,
+		touched:         map[string]time.Time{},
+		yonetimSessions: map[string]yonetimSession{},
+		yonetimFailures: map[string]yonetimFailure{},
 	}
 }
 
@@ -61,6 +66,7 @@ func (s *Server) Close() { s.hub.Close() }
 // Handler tüm yolları (log ve çökme koruması dahil) döndürür.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	s.yonetimRoutes(mux)
 	mux.HandleFunc("GET /v1/me", s.authed(s.handleMe))
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -176,6 +182,11 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, store.Agent))
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, a store.Agent) {
+	yonetici, err := s.st.IsYonetici(r.Context(), a.Name)
+	if err != nil {
+		s.internal(w, "yönetici denetimi", err)
+		return
+	}
 	s.touch(a.Name)
 	rooms, err := s.st.AgentRooms(r.Context(), a.Name)
 	if err != nil {
@@ -183,10 +194,11 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, a store.Agent)
 		return
 	}
 	writeJSON(w, http.StatusOK, struct {
-		Name  string   `json:"name"`
-		Kind  string   `json:"kind"`
-		Rooms []string `json:"rooms"`
-	}{a.Name, a.Kind, rooms})
+		Name     string   `json:"name"`
+		Kind     string   `json:"kind"`
+		Rooms    []string `json:"rooms"`
+		Yonetici bool     `json:"yonetici"`
+	}{a.Name, a.Kind, rooms, yonetici && a.Kind == "insan"})
 }
 
 func (s *Server) internal(w http.ResponseWriter, what string, err error) {

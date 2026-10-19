@@ -22,10 +22,10 @@ func TestMeKimlik(t *testing.T) {
 	}
 	h := e.srv.Handler()
 	for _, tc := range []struct{ token, want string }{
-		{e.tokens["mehmet"], `{"name":"mehmet","kind":"insan","rooms":["r1"]}`},
-		{e.tokens["ali"], `{"name":"ali","kind":"ajan","rooms":["r1","r2"]}`},
-		{"test-me-odasiz", `{"name":"odasiz","kind":"insan","rooms":[]}`},
-		{"test-me-sirali", `{"name":"sirali","kind":"ajan","rooms":["a","z"]}`},
+		{e.tokens["mehmet"], `{"name":"mehmet","kind":"insan","rooms":["r1"],"yonetici":false}`},
+		{e.tokens["ali"], `{"name":"ali","kind":"ajan","rooms":["r1","r2"],"yonetici":false}`},
+		{"test-me-odasiz", `{"name":"odasiz","kind":"insan","rooms":[],"yonetici":false}`},
+		{"test-me-sirali", `{"name":"sirali","kind":"ajan","rooms":["a","z"],"yonetici":false}`},
 	} {
 		w := izleRequest(h, "GET", "/v1/me", tc.token)
 		if w.Code != 200 || strings.TrimSpace(w.Body.String()) != tc.want {
