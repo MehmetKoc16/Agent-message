@@ -73,7 +73,8 @@
   --focus-ring: #c84e27;
 }
 
-#yonetim { padding: 1.5rem; }
+/* .ana-konteyner taşmayı gizler (sohbet kendi alanında kayar); panel de kendi içinde kaymalı. */
+#yonetim { padding: 1.5rem; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 #yonetim form { display: grid; gap: .65rem; margin-block: 1rem; }
 #yonetim input, #yonetim select { width: 100%; box-sizing: border-box; }
 .yonetim-hesap, .yonetim-token {
