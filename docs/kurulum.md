@@ -210,6 +210,54 @@ relay agents
 Token'ı gizli giriş istemine yapıştırın; argümana veya ortam değişkenine koymayın.
 Kurulum ve köprü kullanımı: [cmd/README.md](../cmd/README.md).
 
+## 8. Tarayıcı sayfası (insan hesabı)
+
+İnsanlar odayı `https://relay.example.com/v1/izle` adresinden izler ve odaya yazar. Sayfa ikiliye
+gömülüdür. Caddy zaten `/v1/*` yolunu ilettiği için Caddy'de değişiklik gerekmez.
+Her kişi için ayrı bir **insan** hesabı açın:
+
+```bash
+sudo -u agentrelay /opt/agent-relay/agent-relay admin --config /etc/agent-relay/config.json add-agent ornek-admin --rooms ornek-proje --kind insan
+```
+
+Basılan token, sayfadaki "Parola"dır; Ad alanına hesap adı yazılır.
+- Token'ı yalnız bir kez gösterilir. Doğrudan parola yöneticisine kaydedin; sohbete ya da bir yapay zekâ
+  oturumuna yapıştırmayın.
+- İnsan hesabı odadaki **tüm** mesajları görür. Yalnız odanın sahiplerine açın.
+- Ajanlar insan hesabından gelen mesajı da veri sayar
+  ([ajan-talimati.md](ajan-talimati.md)). Tarayıcıdaki parola, ajana yetki veren bir kanal değildir.
+- Sayfanın güvenlik ayrıntıları: [guvenlik.md](guvenlik.md).
+
+## Güncelleme (yeni sürüm)
+
+Aynı kurucu, mevcut kurulumu yükseltir. Config, veri, hesaplar ve yerel drop-in korunur.
+Yalnız `agent-relay` yeniden başlatılır; Caddy'ye dokunulmaz. Kesinti birkaç saniyedir.
+
+1. Sunucu sahibine değişikliği, commit aralığını ve kurulum penceresini bildirin; onay alın.
+2. Bölüm 1'deki gibi derleyin. Yeni ikiliyi, `SHA256SUMS`'u ve `deploy/`'u **yeni ve boş** bir
+   aktarım dizinine gönderin.
+3. Önce canlı uygulamanın sağlığını ölçün, sonra kuru çalışmayı yapın. SHA uyuşmazsa durun:
+   ```bash
+   sudo bash deploy/kurulum.sh --ikili agent-relay-linux-amd64 --ozet SHA256SUMS
+   ```
+4. Uygulayın. Sağlık 10 saniyede 200 dönmezse önceki ikili kendiliğinden geri konur:
+   ```bash
+   sudo bash deploy/kurulum.sh --ikili agent-relay-linux-amd64 --ozet SHA256SUMS --uygula
+   ```
+5. Kontrol edin:
+   - Relay `/v1/health` 200 dönmeli (soket ve HTTPS).
+   - Canlı uygulamanın sağlığı değişmemiş olmalı.
+   - `systemd-analyze security agent-relay --no-pager` puanı aynı kalmalı.
+   - `systemctl show -p InaccessiblePaths agent-relay` sayısı aynı kalmalı.
+   - `ss -ltnp` çıktısında relay TCP dinleyicisi olmamalı.
+
+   Çıktıları sunucu sahibine iletin.
+6. Aktarım dizinini silin. Sorun çıkarsa elle geri dönmek için: `agent-relay.onceki` dosyasını `agent-relay`
+   yerine koyup `systemctl restart agent-relay` çalıştırın.
+
+Yalnız istemci (`relay`) değiştiyse sunucuya dokunulmaz. Yeni `relay` ikilisi `SHA256SUMS` ile birlikte
+kullanıcılara dağıtılır.
+
 ## Geri alma ve kaldırma
 
 Önce haber verin. Caddy yedeğini, alındığından beri yapılan **bütün** değişikliklerle
