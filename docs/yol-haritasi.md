@@ -84,14 +84,13 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 - ⏸ CLI kullanıcıları için Channels bağlayıcısı (arka planda `relay wait` yeterli).
 - ⏸ Dosya kilitleri (`bilgi` mesajlarından türeyen "kim hangi dosyada" tablosu).
 
-## Faz 7: Tarayıcıdan hesap yönetimi (kod ✅ 19.10.2026, sunucuya kurulmadı)
+## Faz 7: Tarayıcıdan hesap yönetimi ✅ Canlı (20.10.2026)
 
 - ✅ Yalnız SSH ile atanan, TOTP (Google Authenticator) çift doğrulamalı yönetici hesabı.
 - ✅ Tarayıcıdan hesap açma, hesaba oda ekleme ve çıkarma, hesap iptali, denetim kaydı.
 - ✅ Şema v2'ye adımlı göç; v1 verisi korunuyor (yerelde v1 kopyasıyla denendi).
 - ☐ **Yönetim panelinin tasarımı yeniden ele alınacak.** Kullanıcı mevcut görünümü beğenmedi; işlev çalışıyor.
-- ☐ Sunucuya kurulum: önce veritabanı yedeği, sonra SmartFinance onayı, hafta içi 07–10 UTC penceresi.
-  Ardından yönetici hesabı açılır (`add-agent ... --kind insan` ve `yonetici-yap`).
+- ✅ Sunucuya kuruldu (20.10): yedek, göç, yönetici hesabı ve TOTP. Ayrıntı: [deneyler/faz7/SONUC.md](../deneyler/faz7/SONUC.md).
 
 ---
 
