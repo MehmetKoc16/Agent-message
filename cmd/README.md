@@ -35,6 +35,12 @@ ile doldurur; verilmemişse ikisi de `dev` olur.
 
 ## Sunucuyu lokalde başlatma
 
+Yalnız arayüz tasarımını incelemek için Go derlemesi gerekmez:
+`node tools/ui-preview/server.mjs` çalıştırıp `http://127.0.0.1:8791/v1/izle`
+adresini açın (örnek kullanıcı `demo`, parola `relay-demo`). Bu önizleme gerçek
+ajanlara bağlanmaz; değişiklikleri sayfayı yenileyerek gösterir.
+Ayrıntılar: [yerel tasarım önizlemesi](../tools/ui-preview/README.md).
+
 1. `cmd/agent-relay/config.example.json` dosyasını kopyalayıp düzenleyin (`db` yolunu yazılabilir bir yere verin). `host` yalnız `127.0.0.1` ya da `::1` olabilir; bilinmeyen alan hatadır.
 2. Ajan ekleyin. Token **yalnız bir kez** ekrana basılır:
 
