@@ -6,11 +6,64 @@
   const tokenKey = "relay-izle-token", nameKey = "relay-izle-ad";
   let active = null, filter = "", target = "", targetExplicit = false, reply = null, rows = [], ids = new Set();
   const preferredRoom = new URLSearchParams(location.search).get("oda");
+  const threads = new Map();
+  const narrow = matchMedia("(max-width: 1150px)");
+  function panel(open, focus = false) {
+    el("katilimci-panel").hidden = !open;
+    view.classList.toggle("bilgi-kapali", !open);
+    el("katilimcilar-ac").setAttribute("aria-expanded", String(open));
+    if (focus) (open ? el("katilimcilar-kapat") : el("katilimcilar-ac")).focus();
+  }
+  function menu(open, focus = false) {
+    view.classList.toggle("menu-acik", open);
+    el("menu-perde").hidden = !open;
+    el("menu-ac").setAttribute("aria-expanded", String(open));
+    if (focus) (open ? el("menu-kapat") : el("menu-ac")).focus();
+  }
+  el("menu-ac").addEventListener("click", () => { panel(false); menu(true, true); });
+  el("menu-kapat").addEventListener("click", () => menu(false, true));
+  el("menu-perde").addEventListener("click", () => menu(false, true));
+  el("katilimcilar-ac").addEventListener("click", () => { menu(false); panel(el("katilimci-panel").hidden, true); });
+  el("katilimcilar-kapat").addEventListener("click", () => panel(false, true));
+  narrow.addEventListener("change", () => { if (active && active.room) panel(!narrow.matches); });
+  matchMedia("(max-width: 760px)").addEventListener("change", () => menu(false));
+  document.addEventListener("keydown", (event) => {
+    const drawer = view.classList.contains("menu-acik") ? el("gezinme") :
+      narrow.matches && !el("katilimci-panel").hidden ? el("katilimci-panel") : null;
+    if (event.key === "Tab" && drawer) {
+      const controls = [...drawer.querySelectorAll("button:not(:disabled), select, a[href], [tabindex='0']")]
+        .filter((n) => n.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!controls.includes(document.activeElement) || (!event.shiftKey && document.activeElement === last)) {
+        event.preventDefault(); first?.focus();
+      } else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    }
+    if (event.key !== "Escape") return;
+    if (view.classList.contains("menu-acik")) menu(false, true);
+    else if (narrow.matches && !el("katilimci-panel").hidden) panel(false, true);
+  });
+  try {
+    const theme = sessionStorage.getItem("relay-izle-tema");
+    if (theme === "acik" || theme === "koyu") document.documentElement.dataset.tema = theme;
+  } catch (_) { /* Tema depolama olmadan da değişir. */ }
+  el("tema").addEventListener("click", () => {
+    const current = document.documentElement.dataset.tema;
+    const dark = current ? current === "koyu" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const theme = dark ? "acik" : "koyu";
+    document.documentElement.dataset.tema = theme;
+    try { sessionStorage.setItem("relay-izle-tema", theme); } catch (_) { /* Bellekte kalır. */ }
+  });
   function node(tag, content, className) {
     const n = document.createElement(tag);
     if (content !== undefined) n.textContent = content;
     if (className) n.className = className;
     return n;
+  }
+  function accountAvatar(name, className) {
+    const avatar = node("span", name.slice(0, 2).toLocaleUpperCase("tr-TR"), className);
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.dataset.renk = String(Array.from(name).reduce((sum, c) => sum + c.charCodeAt(0), 0) % 2);
+    return avatar;
   }
   function remember(token, name) {
     try {
@@ -22,6 +75,7 @@
     } catch (_) { /* Depolama kapalıysa oturum bellekte kalır. */ }
   }
   function stop() {
+    status.classList.remove("canli");
     clearYonetim(); el("yonetim").hidden = true; el("yonetim-ac").hidden = true;
     if (active) {
       active.controller.abort();
@@ -29,9 +83,13 @@
       active.token = "";
     }
     active = null;
+    menu(false); panel(false);
   }
   function resetRoom() {
     rows = []; ids = new Set(); target = ""; targetExplicit = false; messages.replaceChildren(); el("ajanlar").replaceChildren();
+    threads.clear(); el("konusma-listesi").replaceChildren();
+    el("konusma-sayisi").textContent = "0"; el("konusma-bos").hidden = false;
+    el("katilimci-sayisi").textContent = "0";
     recipient.replaceChildren(node("option", "herkes")); recipient.firstChild.value = "";
     text.value = ""; count(); showFilter(""); el("yeni").hidden = true;
     el("gonderim-durum").textContent = ""; el("gonder").disabled = false; el("kapat").disabled = false;
@@ -40,6 +98,7 @@
     stop(); remember("", ""); el("token").value = ""; resetRoom();
     view.hidden = true; form.hidden = false; el("giris-dugme").disabled = false;
     status.textContent = message;
+    el("giris-ekrani").hidden = false; document.body.classList.remove("oturum-acik");
   }
   el("cikis").addEventListener("click", () => logout("Çıkış yapıldı."));
   function bottom() { return messages.scrollHeight - messages.scrollTop - messages.clientHeight < 48; }
@@ -57,19 +116,53 @@
     const t = currentTarget();
     el("baglam").textContent = t ? t + " konuşmasına yazıyorsun" : "Yeni konuşma başlatıyorsun";
     el("yeni-konusma").hidden = false;
-    el("yeni-konusma").disabled = !t;
+    el("yeni-konusma").disabled = !active || !active.room;
   }
   function showFilter(thread) {
     filter = thread; targetExplicit = false; clearReply();
     el("filtre").textContent = thread ? "Konuşma: " + thread : "Tüm konuşmalar";
     el("kapat").hidden = !thread;
     for (const row of rows) row.element.hidden = !!thread && row.thread !== thread;
+    refreshContext();
+    if (view.classList.contains("menu-acik")) { menu(false); el("menu-ac").focus(); }
     updateBaglam();
     scrollDown();
   }
+  function refreshContext() {
+    const visible = rows.filter((row) => !filter || row.thread === filter);
+    const count = visible.length + " mesaj";
+    el("mesaj-sayisi").textContent = count; el("ozet-mesaj").textContent = count;
+    el("bos-durum").hidden = visible.length > 0;
+    el("ozet-baslik").textContent = filter || "Tüm konuşmalar";
+    el("ozet-aciklama").textContent = filter && threads.has(filter) ? threads.get(filter).title :
+      "Odadaki mesajları bir arada görüyorsun. Bir konuşma seçerek odağını daralt.";
+    el("tumu").classList.toggle("secili", !filter);
+    el("tumu").setAttribute("aria-pressed", String(!filter));
+    for (const [id, thread] of threads) {
+      thread.button.classList.toggle("secili", id === filter);
+      thread.button.setAttribute("aria-pressed", String(id === filter));
+    }
+  }
+  function updateThread(m) {
+    let thread = threads.get(m.thread);
+    if (!thread) {
+      const button = node("button", undefined, "konusma-satir"); button.type = "button";
+      const top = node("span", undefined, "konusma-satir-ust");
+      const count = node("span"); top.append(node("span", m.thread), count);
+      const title = m.body.split("\n").find((s) => s.trim()) || "Yeni konuşma";
+      button.append(top, node("span", title, "konusma-satir-baslik"));
+      button.title = title; button.addEventListener("click", () => showFilter(m.thread));
+      thread = {button, count, title, total: 0}; threads.set(m.thread, thread);
+      el("konusma-listesi").prepend(button);
+    }
+    thread.total++;
+    thread.count.textContent = m.type === "kapat" ? "Kapalı" : thread.total + " mesaj";
+    el("konusma-sayisi").textContent = String(threads.size);
+    el("konusma-bos").hidden = true;
+  }
   el("tumu").addEventListener("click", () => showFilter(""));
   el("yeni-konusma").addEventListener("click", () => {
-    target = ""; targetExplicit = true; updateBaglam();
+    showFilter(""); target = ""; targetExplicit = true; updateBaglam(); text.focus();
   });
   el("yanit-sil").addEventListener("click", clearReply);
   function addMessages(list, session) {
@@ -80,11 +173,15 @@
       ids.add(m.id);
       if (m.from === session.name) wasBottom = true;
       const row = node("article", undefined, "mesaj" + (m.from === session.name ? " kendi" : ""));
+      const avatar = accountAvatar(m.from, "mesaj-avatar");
       const meta = node("div", undefined, "meta");
-      meta.append(node("time", new Date(m.created_at).toLocaleString("tr-TR"), "zaman"));
-      meta.append(node("span", m.from + " → " + (m.to || "herkes"), "taraflar"));
+      meta.append(node("span", m.from, "gonderen"), node("span", "→ " + (m.to || "herkes"), "alici-bilgi"));
       const types = ["soru", "gorev", "cevap", "sonuc", "bilgi", "kapat"];
-      meta.append(node("span", m.type, "etiket " + (types.includes(m.type) ? m.type : "bilgi")));
+      const typeNames = {soru: "Soru", gorev: "Görev", cevap: "Cevap", sonuc: "Sonuç", bilgi: "Bilgi", kapat: "Kapalı"};
+      meta.append(node("span", typeNames[m.type] || m.type, "etiket " + (types.includes(m.type) ? m.type : "bilgi")));
+      const stamp = new Date(m.created_at);
+      const time = node("time", stamp.toLocaleString("tr-TR", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}), "zaman");
+      time.dateTime = m.created_at; time.title = stamp.toLocaleString("tr-TR"); meta.append(time);
       const thread = node("button", m.thread + " · " + m.turn + "/" + m.max_turns, "konusma");
       thread.type = "button"; thread.addEventListener("click", () => showFilter(m.thread));
       const answer = node("button", "Yanıtla", "yanitla"); answer.type = "button";
@@ -102,13 +199,16 @@
         el("yanit-bilgi").textContent = "#" + m.id + " yanıtlanıyor";
         el("yanit").hidden = false; text.focus();
       });
-      meta.append(thread, answer); row.append(meta, node("div", m.body, "govde"));
+      const actions = node("div", undefined, "mesaj-islemler"); actions.append(thread, answer);
+      row.append(avatar, meta, node("div", m.body, "govde"), actions);
       row.hidden = !!filter && filter !== m.thread;
       visibleAdded = visibleAdded || !row.hidden;
       rows.push({thread: m.thread, element: row}); messages.append(row);
+      updateThread(m);
     }
     if (rows.length && !targetExplicit && !filter) target = rows[rows.length - 1].thread;
     updateBaglam();
+    refreshContext();
     if (wasBottom) scrollDown(); else if (visibleAdded) el("yeni").hidden = false;
   }
   function pause(ms, signal) {
@@ -137,6 +237,7 @@
         if (response.status === 401) { logout("Ad ya da parola hatalı."); throw new Error("durdu"); }
         if (response.status === 403) { logout("Bu odaya erişimin yok."); throw new Error("durdu"); }
         if (response.status === 429) {
+          status.classList.remove("canli");
           status.textContent = "İstek sınırı: 30 saniye bekleniyor.";
           await pause(30000, signal); continue;
         }
@@ -144,6 +245,7 @@
         return data;
       } catch (error) {
         if (signal.aborted) throw error;
+        status.classList.remove("canli");
         status.textContent = "Bağlantı kesildi; " + backoff + " saniye sonra yeniden denenecek.";
         await pause(backoff * 1000, signal); backoff = Math.min(60, backoff * 2);
       }
@@ -159,6 +261,7 @@
       for (const m of data.messages) after = Math.max(after, m.id);
       if (history && data.messages.length < 100) history = false;
       status.textContent = history ? "Geçmiş yükleniyor…" : "Canlı izleniyor";
+      status.classList.toggle("canli", !history);
     }
   }
   async function agentsLoop(session, signal) {
@@ -169,23 +272,31 @@
       const selected = recipient.value;
       recipient.replaceChildren(node("option", "herkes")); recipient.firstChild.value = "";
       for (const a of data.agents) {
-        const li = node("li", a.name + " · " + a.kind + " · " +
-          (a.last_seen ? new Date(a.last_seen).toLocaleString("tr-TR") : "henüz görülmedi") +
-          (a.waiting ? " · bekliyor" : ""));
-        if (a.waiting) li.className = "bekliyor";
+        const li = node("li", undefined, "katilimci");
+        const avatar = accountAvatar(a.name, "mini-avatar");
+        const content = node("div", undefined, "katilimci-icerik");
+        const seen = a.last_seen ? new Date(a.last_seen).toLocaleString("tr-TR") : "Henüz görülmedi";
+        const label = node("span", a.waiting ? "Mesaj bekliyor" : (a.name === session.name ? "Sen" : "Beklemede değil"), "katilimci-durum" + (a.waiting ? " bekliyor" : ""));
+        label.title = "Son görülme: " + seen;
+        content.append(node("span", a.name, "katilimci-isim"), label);
+        li.append(avatar, content, node("span", a.kind === "insan" ? "İnsan" : "Ajan", "katilimci-tur"));
         el("ajanlar").append(li);
         if (a.name !== session.name) {
           const option = node("option", a.name); option.value = a.name; recipient.append(option);
         }
       }
+      el("katilimci-sayisi").textContent = String(data.agents.length);
       if (Array.from(recipient.options).some((o) => o.value === selected)) recipient.value = selected;
       await pause(30000, signal);
     }
   }
   function openRoom(session, room) {
     if (session.roomController) session.roomController.abort();
+    status.classList.remove("canli"); status.textContent = "Oda yükleniyor…";
     resetRoom(); session.room = room; session.roomController = new AbortController();
-    el("oda-baslik").textContent = session.name + " · " + room;
+    el("oda-baslik").textContent = room; el("tek-oda-ad").textContent = room;
+    el("ozet-oda").textContent = room; el("odasiz-durum").hidden = true;
+    menu(false); panel(!narrow.matches);
     el("oda-icerik").hidden = false;
     const signal = session.roomController.signal;
     logLoop(session, signal).catch(() => {}); agentsLoop(session, signal).catch(() => {});
@@ -206,10 +317,15 @@
       remember(token, name); el("token").value = "";
       el("yonetim-ac").hidden = !data.yonetici;
       form.hidden = true; view.hidden = false; el("giris-dugme").disabled = false;
+      el("giris-ekrani").hidden = true; document.body.classList.add("oturum-acik");
+      el("kullanici-ad").textContent = name;
+      el("kullanici-avatar").textContent = name.slice(0, 2).toLocaleUpperCase("tr-TR");
       el("oda-baslik").textContent = name;
       el("oda").replaceChildren(); el("oda-secimi").hidden = data.rooms.length < 2;
+      el("tek-oda").hidden = data.rooms.length !== 1;
       el("oda-icerik").hidden = true;
       for (const room of data.rooms) { const option = node("option", room); option.value = room; el("oda").append(option); }
+      el("odasiz-durum").hidden = data.rooms.length > 0;
       if (!data.rooms.length) { status.textContent = "Bu hesabın odası yok."; return; }
       el("oda").value = data.rooms.includes(preferredRoom) ? preferredRoom : data.rooms[0];
       openRoom(session, el("oda").value);
