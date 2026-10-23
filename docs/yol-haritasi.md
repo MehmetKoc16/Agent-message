@@ -99,6 +99,19 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 
 ---
 
+## Faz 8: Güvenlik, dayanıklılık ve geçmiş optimizasyonu (kod hazır; canlıya kurulmadı)
+
+- Bekleyen mesaj/log istekleri hesap ve oda yetkisini yanıt öncesinde ve beklerken saniyede bir yeniden kontrol eder.
+- Web'de kapalı konuşma sonrası yeniden gönderim ilk alıcı/tür/metni korur; UTF-8 boyutu sunucunun `max_body` değeriyle denetlenir.
+- Köprü hazır cevabı ve oturumu birlikte kaydeder; gönderim/imleç kesintisinde modeli tekrar çağırmadan aynı `request_id` ile sürdürür.
+- Şema v3: mesaj tekrar önleme kimliği ve oda başına konuşma sayacı; v1/v2 veri koruma testleri bulunur.
+- Tarayıcı son 100 mesajı açar; önceki sayfalar düğmeyle yüklenir, canlı görünüm 500 mesajla sınırlıdır.
+- CI: Actions commit SHA'ları sabit; web davranış/önizleme testleri ekli. Sunucu anahtarı veya otomatik deploy yok.
+- Kurulum elle, mevcut değişiklik protokolüyle yapılır. v3'ten eski ikiliye dönüş için yükseltme öncesi veritabanı yedeği gerekir.
+
+Sonraki özellik adayları: hesabı koruyarak token yenileme; görev kabul/ret/tamamlandı durumları;
+süreli dosya çalışma rezervasyonu; sır göstermeyen `relay doctor`. Bunlar henüz uygulanmadı.
+
 ## Açık sorular ❓
 
 | # | Soru | Neden önemli |

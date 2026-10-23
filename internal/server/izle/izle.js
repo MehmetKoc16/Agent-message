@@ -7,6 +7,7 @@
   let active = null, filter = "", target = "", targetExplicit = false, reply = null, rows = [], ids = new Set();
   const preferredRoom = new URLSearchParams(location.search).get("oda");
   const threads = new Map();
+  const maxRows = 500, encoder = new TextEncoder();
   const narrow = matchMedia("(max-width: 1150px)");
   function panel(open, focus = false) {
     el("katilimci-panel").hidden = !open;
@@ -96,6 +97,7 @@
     recipient.replaceChildren(node("option", "herkes")); recipient.firstChild.value = "";
     text.value = ""; count(); showFilter(""); el("yeni").hidden = true;
     el("gonderim-durum").textContent = ""; el("gonder").disabled = false; el("kapat").disabled = false;
+    el("gecmis").hidden = true; el("guncel").hidden = true; el("gecmis").disabled = false;
   }
   function logout(message) {
     stop(); remember("", ""); el("token").value = ""; resetRoom();
@@ -106,7 +108,9 @@
   el("cikis").addEventListener("click", () => logout("Çıkış yapıldı."));
   function bottom() { return messages.scrollHeight - messages.scrollTop - messages.clientHeight < 48; }
   function scrollDown() { messages.scrollTop = messages.scrollHeight; el("yeni").hidden = true; }
-  el("yeni").addEventListener("click", scrollDown);
+  el("yeni").addEventListener("click", () => {
+    if (active?.history?.browsing) openRoom(active, active.room); else scrollDown();
+  });
   messages.addEventListener("scroll", () => { if (bottom()) el("yeni").hidden = true; });
   function clearReply() { reply = null; el("yanit").hidden = true; }
   function currentTarget() {
@@ -206,8 +210,17 @@
       row.append(avatar, meta, node("div", m.body, "govde"), actions);
       row.hidden = !!filter && filter !== m.thread;
       visibleAdded = visibleAdded || !row.hidden;
-      rows.push({thread: m.thread, element: row}); messages.append(row);
-      updateThread(m);
+      rows.push({thread: m.thread, element: row, message: m}); messages.append(row);
+    }
+    if (rows.length > maxRows) {
+      for (const row of rows.splice(0, rows.length - maxRows)) { row.element.remove(); ids.delete(row.message.id); }
+      if (session.history) session.history.hasMore = true;
+    }
+    threads.clear(); el("konusma-listesi").replaceChildren();
+    for (const row of rows) updateThread(row.message);
+    if (session.history && rows.length) {
+      session.history.oldest = rows[0].message.id;
+      el("gecmis").hidden = !session.history.hasMore;
     }
     if (rows.length && !targetExplicit && !filter) target = rows[rows.length - 1].thread;
     updateBaglam();
@@ -256,17 +269,43 @@
     throw new Error("durdu");
   }
   async function logLoop(session, signal) {
-    let after = 0, history = true;
+    const history = session.history;
+    const initial = await request(session, "/log?tail=1", signal);
+    if (signal.aborted) return;
+    history.hasMore = initial.has_more;
+    addMessages(initial.messages, session);
+    let after = Math.max(0, ...initial.messages.map((m) => m.id));
     while (!signal.aborted) {
-      const data = await request(session, "/log?after=" + after + "&wait=" + (history ? 0 : 25), signal);
+      status.textContent = "Canlı izleniyor"; status.classList.add("canli");
+      const data = await request(session, "/log?after=" + after + "&wait=25", signal);
       if (signal.aborted) return;
-      addMessages(data.messages, session);
+      if (!history.browsing) addMessages(data.messages, session);
+      else if (data.messages.length) { el("yeni").textContent = "↓ Güncel mesajlara dön"; el("yeni").hidden = false; }
       for (const m of data.messages) after = Math.max(after, m.id);
-      if (history && data.messages.length < 100) history = false;
-      status.textContent = history ? "Geçmiş yükleniyor…" : "Canlı izleniyor";
-      status.classList.toggle("canli", !history);
     }
   }
+  el("guncel").addEventListener("click", () => { if (active) openRoom(active, active.room); });
+  el("gecmis").addEventListener("click", async () => {
+    const session = active, history = session?.history;
+    if (!session || !history || !history.oldest || el("gecmis").disabled) return;
+    const signal = session.roomController.signal;
+    el("gecmis").disabled = true;
+    // Canlı döngü yükleme sırasında sayfa imlecini değiştirmesin.
+    history.browsing = true; el("guncel").hidden = false;
+    try {
+      const data = await request(session, "/log?before=" + history.oldest, signal);
+      if (signal.aborted) return;
+      history.hasMore = data.has_more;
+      if (data.messages.length) {
+        rows = []; ids = new Set(); messages.replaceChildren(); threads.clear();
+        el("konusma-listesi").replaceChildren(); showFilter("");
+        addMessages(data.messages, session);
+        messages.scrollTop = 0;
+      }
+      el("gecmis").hidden = !history.hasMore;
+    } catch (_) { /* Oda değişimi ve çıkış bekleyen sayfayı iptal eder. */ }
+    finally { if (!signal.aborted) el("gecmis").disabled = false; }
+  });
   async function agentsLoop(session, signal) {
     while (!signal.aborted) {
       const data = await request(session, "/agents", signal);
@@ -302,6 +341,8 @@
     if (session.roomController) session.roomController.abort();
     status.classList.remove("canli"); status.textContent = "Oda yükleniyor…";
     resetRoom(); session.room = room; session.roomController = new AbortController();
+    session.history = {oldest: 0, hasMore: false, browsing: false};
+    el("yeni").textContent = "↓ Yeni mesajlar";
     el("oda-baslik").textContent = room; el("tek-oda-ad").textContent = room;
     el("ozet-oda").textContent = room; el("odasiz-durum").hidden = true;
     menu(false); panel(!narrow.matches);
@@ -322,6 +363,8 @@
       }
       if (!response.ok) { logout("Giriş yapılamadı; biraz sonra tekrar dene."); return; }
       if (data.kind !== "insan") { logout("Bu sayfa yalnız insan hesapları içindir."); return; }
+      session.maxBody = Number.isInteger(data.max_body) && data.max_body > 0 && data.max_body <= 1048576 ? data.max_body : 16384;
+      text.maxLength = session.maxBody; count();
       remember(token, name); el("token").value = "";
       el("yonetim-ac").hidden = !data.yonetici;
       form.hidden = true; view.hidden = false; el("giris-dugme").disabled = false;
@@ -698,7 +741,11 @@
       } finally { submit.disabled = false; }
     })();
   });
-  function count() { el("sayac").textContent = text.value.length + " / 16000"; }
+  function count() {
+    const size = encoder.encode(text.value).length, limit = active?.maxBody || 16384;
+    el("sayac").textContent = size + " / " + limit + " bayt";
+    text.setCustomValidity(size > limit ? "Mesajın UTF-8 boyutu sınırı aşıyor." : "");
+  }
   text.addEventListener("input", count);
   text.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.isComposing) {
@@ -719,6 +766,8 @@
   el("gonderme").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!active || !active.room || el("gonder").disabled || !text.value.trim()) return;
+    count();
+    if (!text.checkValidity()) { text.reportValidity(); return; }
     const session = active, signal = session.roomController.signal;
     const curTarget = currentTarget(), original = text.value, originalReply = reply;
     const canRetry = !filter && !targetExplicit && reply === null;
@@ -733,7 +782,7 @@
       if (response.status === 401) { logout("Ad ya da parola hatalı."); return; }
       let retried = false;
       if (response.status === 409 && canRetry) {
-        const retryBody = {to: recipient.value, type: el("tip").value, body: original};
+        const retryBody = {...body}; delete retryBody.thread; delete retryBody.reply_to;
         const retry = await api(session, roomPath(session) + "/messages", signal, {
           method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(retryBody)
         });

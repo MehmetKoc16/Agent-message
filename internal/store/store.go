@@ -19,18 +19,19 @@ import (
 	_ "modernc.org/sqlite" // sürücü adı: "sqlite"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 // Hata değerleri; server paketi bunları HTTP koduna çevirir.
 var (
-	ErrUnauthorized   = errors.New("yetkisiz")
-	ErrThreadNotFound = errors.New("konuşma yok")
-	ErrThreadClosed   = errors.New("konuşma kilitli ya da kapalı")
-	ErrBadRecipient   = errors.New("alıcı geçersiz")
-	ErrBadReplyTo     = errors.New("reply_to geçersiz")
-	ErrNotParty       = errors.New("konuşmanın tarafı değil")
-	ErrNotFound       = errors.New("bulunamadı")
-	ErrExists         = errors.New("zaten var")
+	ErrUnauthorized    = errors.New("yetkisiz")
+	ErrThreadNotFound  = errors.New("konuşma yok")
+	ErrThreadClosed    = errors.New("konuşma kilitli ya da kapalı")
+	ErrBadRecipient    = errors.New("alıcı geçersiz")
+	ErrBadReplyTo      = errors.New("reply_to geçersiz")
+	ErrNotParty        = errors.New("konuşmanın tarafı değil")
+	ErrNotFound        = errors.New("bulunamadı")
+	ErrExists          = errors.New("zaten var")
+	ErrRequestConflict = errors.New("istek kimliği farklı bir mesaj için kullanılmış")
 )
 
 // Store veritabanı erişim katmanıdır.
@@ -124,12 +125,22 @@ func (s *Store) migrate() error {
 	if v != 0 {
 		stmts = nil
 	}
-	stmts = append(stmts,
-		`ALTER TABLE agents ADD COLUMN yonetici INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE agents ADD COLUMN totp_secret TEXT`,
-		`ALTER TABLE agents ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0`,
-		`CREATE TABLE yonetim_kayit (id INTEGER PRIMARY KEY AUTOINCREMENT, zaman TEXT NOT NULL, yapan TEXT NOT NULL, islem TEXT NOT NULL, hedef TEXT NOT NULL, ayrinti TEXT NOT NULL DEFAULT '')`,
-	)
+	if v < 2 {
+		stmts = append(stmts,
+			`ALTER TABLE agents ADD COLUMN yonetici INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE agents ADD COLUMN totp_secret TEXT`,
+			`ALTER TABLE agents ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0`,
+			`CREATE TABLE yonetim_kayit (id INTEGER PRIMARY KEY AUTOINCREMENT, zaman TEXT NOT NULL, yapan TEXT NOT NULL, islem TEXT NOT NULL, hedef TEXT NOT NULL, ayrinti TEXT NOT NULL DEFAULT '')`,
+		)
+	}
+	if v < 3 {
+		stmts = append(stmts,
+			`ALTER TABLE messages ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`,
+			`CREATE UNIQUE INDEX messages_request ON messages(room, from_agent, request_id) WHERE request_id <> ''`,
+			`CREATE TABLE room_counters (room TEXT PRIMARY KEY, last_thread INTEGER NOT NULL)`,
+			`INSERT INTO room_counters(room,last_thread) SELECT room,MAX(CAST(substr(id,3) AS INTEGER)) FROM threads GROUP BY room`,
+		)
+	}
 	for _, q := range stmts {
 		if _, err := tx.Exec(q); err != nil {
 			return fmt.Errorf("şema kurulamadı: %w", err)

@@ -16,6 +16,21 @@ async function preview(t) {
 }
 const post = (data) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
+test("history opens at the tail and earlier pages exclude the boundary", async (t) => {
+  const request = await preview(t);
+  for (let i=0; i<105; i++) {
+    assert.equal((await request("/v1/rooms/agent-message/messages", post({type:"bilgi",body:"history"}))).status,201);
+  }
+  const tail = await (await request("/v1/rooms/agent-message/log?tail=1")).json();
+  assert.equal(tail.messages.length,100); assert.equal(tail.has_more,true);
+  const old = await (await request("/v1/rooms/agent-message/log?before="+tail.messages[0].id)).json();
+  assert.equal(old.messages.length,9); assert.equal(old.has_more,false);
+  assert.ok(old.messages.every((m)=>m.id<tail.messages[0].id));
+  for (const query of ["tail=0","before=0","tail=1&after=0","tail=1&before=2"]) {
+    assert.equal((await request("/v1/rooms/agent-message/log?"+query)).status,400);
+  }
+});
+
 test("preview serves the product assets with CSP and an explicit demo notice", async (t) => {
   const request = await preview(t);
   const html = await request("/v1/izle", { headers: { Authorization: "" } });

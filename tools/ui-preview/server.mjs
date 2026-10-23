@@ -73,7 +73,7 @@ export function createPreviewServer() {
       if (!url.pathname.startsWith("/v1/")) { send(404, { error: "bulunamadi" }); return; }
       if (req.headers.authorization !== "Bearer " + demoToken) { send(401, { error: "yetkisiz" }); return; }
       if (url.pathname === "/v1/me" && req.method === "GET") {
-        send(200, { name: "demo", kind: "insan", rooms, yonetici: false }); return;
+        send(200, { name: "demo", kind: "insan", rooms, yonetici: false, max_body: 16384 }); return;
       }
       const route = /^\/v1\/rooms\/([^/]+)\/(log|agents|messages|threads\/T-\d+\/close)$/.exec(url.pathname);
       if (!route) { send(404, { error: "bulunamadi" }); return; }
@@ -86,6 +86,17 @@ export function createPreviewServer() {
         })) }); return;
       }
       if (action === "log" && req.method === "GET") {
+        if (url.searchParams.has("tail") || url.searchParams.has("before")) {
+          const before = url.searchParams.has("before") ? Number(url.searchParams.get("before")) : 0;
+          if ((url.searchParams.has("before") && (!Number.isSafeInteger(before) || before < 1)) ||
+              (url.searchParams.has("tail") && url.searchParams.get("tail") !== "1") ||
+              (url.searchParams.has("before") && url.searchParams.has("tail")) || url.searchParams.has("after") ||
+              Number(url.searchParams.get("wait") || 0) !== 0) {
+            send(400, {error: "gecersiz_sayfa"}); return;
+          }
+          const page = messages.filter((m) => m.room === room && (!before || m.id < before)).slice(-100);
+          send(200, {messages: page, has_more: page.length === 100}); return;
+        }
         const after = Number(url.searchParams.get("after") || 0);
         const wait = Number(url.searchParams.get("wait") || 0);
         if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(wait) || wait < 0 || wait > 25) {

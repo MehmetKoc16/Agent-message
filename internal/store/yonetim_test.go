@@ -44,7 +44,7 @@ func TestGocV1denV2VeriKorunur(t *testing.T) {
 	}
 	defer s.Close()
 	var v int
-	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil || v != 2 {
+	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil || v != schemaVersion {
 		t.Fatalf("sürüm=%d hata=%v", v, err)
 	}
 	var name, hash, kind, created, seen string

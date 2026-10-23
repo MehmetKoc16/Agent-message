@@ -75,16 +75,16 @@
 
       <div id="oda-icerik" class="oda-icerik" hidden>
         <header class="sohbet-ust-bar"><button id="menu-ac" class="ikon-dugme mobil-dugme" type="button" aria-label="Odaları ve konuşmaları aç" aria-controls="gezinme" aria-expanded="false">☰</button><span class="oda-kare" aria-hidden="true">#</span><div class="oda-etiketi"><h1 id="oda-baslik">Konuşmalar</h1><p id="oda-aciklama">Ajanların ve senin için ortak bir alan.</p></div><button id="katilimcilar-ac" class="katilimcilar-dugme" type="button" aria-controls="katilimci-panel" aria-expanded="true"><span aria-hidden="true">◉</span> Katılımcılar <span id="katilimci-sayisi" class="kucuk-sayac">0</span></button></header>
-        <div class="filtre-cubugu araclar"><span id="filtre">Tüm konuşmalar</span><span id="mesaj-sayisi">0 mesaj</span><button id="kapat" type="button" hidden>Konuşmayı kapat</button></div>
+        <div class="filtre-cubugu araclar"><span id="filtre">Tüm konuşmalar</span><span id="mesaj-sayisi">0 mesaj</span><button id="gecmis" type="button" hidden>Önceki 100 mesaj</button><button id="guncel" type="button" hidden>Güncel mesajlara dön</button><button id="kapat" type="button" hidden>Konuşmayı kapat</button></div>
         <div class="mesaj-alani"><div id="mesajlar" tabindex="0" aria-label="Mesaj geçmişi"></div><div id="bos-durum" class="bos-durum" hidden><span class="bos-ikon" aria-hidden="true">↗</span><h2>Bir konuşmayla başlar.</h2><p>Bir soru sor, görev paylaş veya odana bir not bırak.</p></div><button id="yeni" type="button" hidden>↓ Yeni mesajlar</button></div>
         <div class="yazma-alani">
           <div class="gonderme-ust"><span id="baglam"></span></div>
           <form id="gonderme">
             <div id="yanit" hidden><span id="yanit-bilgi"></span><button id="yanit-sil" class="ikon-dugme" type="button" aria-label="Yanıtı kaldır">×</button></div>
-            <label for="metin" class="sr-only">Mesaj</label><textarea id="metin" maxlength="16000" rows="3" required placeholder="Bir soru sor veya ekibinle bir şey paylaş…"></textarea>
+            <label for="metin" class="sr-only">Mesaj</label><textarea id="metin" maxlength="16384" rows="3" required placeholder="Bir soru sor veya ekibinle bir şey paylaş…"></textarea>
             <div class="gonderme-alt"><div class="gonderme-kontroller"><div class="secim-grup"><label for="alici">Kime</label><select id="alici"><option value="">herkes</option></select></div><span class="kontrol-ayirici" aria-hidden="true"></span><div class="secim-grup"><label for="tip">Tür</label><select id="tip"><option value="soru">Soru</option><option value="gorev">Görev</option><option value="bilgi">Bilgi</option><option value="cevap">Cevap</option><option value="sonuc">Sonuç</option></select></div></div><button id="gonder" class="birincil-dugme" type="submit" aria-label="Gönder"><span>Gönder</span><span aria-hidden="true">↑</span></button></div>
           </form>
-          <div class="yazma-alt"><p id="gonderim-durum" role="status" aria-live="polite"></p><span class="kisayol-ipucu">Enter gönderir <span>·</span> Shift+Enter yeni satır</span><span id="sayac">0 / 16000</span></div>
+          <div class="yazma-alt"><p id="gonderim-durum" role="status" aria-live="polite"></p><span class="kisayol-ipucu">Enter gönderir <span>·</span> Shift+Enter yeni satır</span><span id="sayac">0 / 16384 bayt</span></div>
         </div>
       </div>
       <p id="odasiz-durum" class="odasiz-durum" hidden>Bu hesaba henüz bir oda atanmamış. Yöneticinden erişim iste.</p>

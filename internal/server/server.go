@@ -22,6 +22,7 @@ import (
 
 var (
 	threadRe  = regexp.MustCompile(`^T-[0-9]{1,9}$`)
+	requestRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`)
 	msgTypes  = map[string]bool{"soru": true, "gorev": true, "cevap": true, "sonuc": true, "bilgi": true, "kapat": true}
 	touchEach = 30 * time.Second
 )
@@ -198,7 +199,8 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, a store.Agent)
 		Kind     string   `json:"kind"`
 		Rooms    []string `json:"rooms"`
 		Yonetici bool     `json:"yonetici"`
-	}{a.Name, a.Kind, rooms, yonetici && a.Kind == "insan"})
+		MaxBody  int      `json:"max_body"`
+	}{a.Name, a.Kind, rooms, yonetici && a.Kind == "insan", s.cfg.MaxBody})
 }
 
 func (s *Server) internal(w http.ResponseWriter, what string, err error) {
@@ -229,11 +231,12 @@ func (s *Server) touch(name string) {
 // ---- işleyiciler ----
 
 type postRequest struct {
-	To      string `json:"to"`
-	Type    string `json:"type"`
-	Thread  string `json:"thread"`
-	ReplyTo *int64 `json:"reply_to"`
-	Body    string `json:"body"`
+	To        string `json:"to"`
+	Type      string `json:"type"`
+	Thread    string `json:"thread"`
+	ReplyTo   *int64 `json:"reply_to"`
+	Body      string `json:"body"`
+	RequestID string `json:"request_id,omitempty"`
 	// "from" alanı bilerek yok: gövdede gelse de yok sayılır (kimlik token'dandır).
 }
 
@@ -275,6 +278,8 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request, a store.Agen
 		writeErr(w, http.StatusBadRequest, "gecersiz_thread")
 	case in.ReplyTo != nil && *in.ReplyTo < 1:
 		writeErr(w, http.StatusBadRequest, "gecersiz_reply_to")
+	case in.RequestID != "" && !requestRe.MatchString(in.RequestID):
+		writeErr(w, http.StatusBadRequest, "gecersiz_request_id")
 	default:
 		s.post(w, r, a, room, in)
 	}
@@ -283,7 +288,7 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request, a store.Agen
 func (s *Server) post(w http.ResponseWriter, r *http.Request, a store.Agent, room string, in postRequest) {
 	m, err := s.st.Post(r.Context(), store.PostInput{
 		Room: room, From: a.Name, FromKind: a.Kind, To: in.To, Type: in.Type, Thread: in.Thread,
-		ReplyTo: in.ReplyTo, Body: in.Body,
+		ReplyTo: in.ReplyTo, Body: in.Body, RequestID: in.RequestID,
 	})
 	switch {
 	case errors.Is(err, store.ErrBadRecipient):
@@ -296,6 +301,8 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, a store.Agent, roo
 		writeErr(w, http.StatusForbidden, "yasak")
 	case errors.Is(err, store.ErrThreadClosed):
 		writeErr(w, http.StatusConflict, "konusma_kilitli")
+	case errors.Is(err, store.ErrRequestConflict):
+		writeErr(w, http.StatusConflict, "istek_cakismasi")
 	case err != nil:
 		s.internal(w, "mesaj ekleme", err)
 	default:
@@ -306,6 +313,30 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, a store.Agent, roo
 
 func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request, a store.Agent, room string) {
 	s.fetchMessages(w, r, a, room, false)
+}
+
+// roomReadAllowed bekleyen isteklerin SSH/web üzerinden yapılan iptalleri de
+// görmesini sağlar. Kimlik önbelleğine veya isteğin ilk yetki kontrolüne güvenmez.
+func (s *Server) roomReadAllowed(w http.ResponseWriter, r *http.Request, agent, room string) bool {
+	a, err := s.authenticate(r.Context(), bearer(r))
+	if errors.Is(err, store.ErrUnauthorized) || (err == nil && a.Name != agent) {
+		writeErr(w, http.StatusUnauthorized, "yetkisiz")
+		return false
+	}
+	if err != nil {
+		s.internal(w, "bekleyen isteğin kimliği", err)
+		return false
+	}
+	member, err := s.st.HasRoom(r.Context(), agent, room)
+	if err != nil {
+		s.internal(w, "bekleyen isteğin odası", err)
+		return false
+	}
+	if !member {
+		writeErr(w, http.StatusForbidden, "yasak")
+		return false
+	}
+	return true
 }
 
 func (s *Server) fetchMessages(w http.ResponseWriter, r *http.Request, a store.Agent, room string, roomLog bool) {
@@ -328,9 +359,37 @@ func (s *Server) fetchMessages(w http.ResponseWriter, r *http.Request, a store.A
 		}
 		wait = min(n, s.cfg.MaxWaitSec)
 	}
+	if roomLog && (q.Has("before") || q.Has("tail")) {
+		var before int64
+		if q.Has("before") {
+			var err error
+			before, err = strconv.ParseInt(q.Get("before"), 10, 64)
+			if err != nil || before < 1 {
+				writeErr(w, http.StatusBadRequest, "gecersiz_before")
+				return
+			}
+		}
+		if (q.Has("tail") && q.Get("tail") != "1") || (q.Has("before") && q.Has("tail")) || q.Has("after") || wait != 0 {
+			writeErr(w, http.StatusBadRequest, "gecersiz_sayfa")
+			return
+		}
+		msgs, err := s.st.RoomLogPage(r.Context(), room, before, maxFetch)
+		if err != nil {
+			s.internal(w, "geçmiş sayfası", err)
+			return
+		}
+		if s.roomReadAllowed(w, r, a.Name, room) {
+			writeJSON(w, http.StatusOK, map[string]any{"messages": msgs, "has_more": len(msgs) == maxFetch})
+		}
+		return
+	}
 
 	var timeout <-chan time.Time
+	var accessCheck <-chan time.Time
 	if wait > 0 {
+		check := time.NewTicker(time.Second)
+		defer check.Stop()
+		accessCheck = check.C
 		if !roomLog {
 			defer s.hub.BeginWait(room, a.Name)()
 		}
@@ -340,6 +399,9 @@ func (s *Server) fetchMessages(w http.ResponseWriter, r *http.Request, a store.A
 	}
 	for {
 		ch := s.hub.Chan(room) // sorgudan ÖNCE alınır (kaçırılan bildirim olmasın)
+		if !s.roomReadAllowed(w, r, a.Name, room) {
+			return
+		}
 		msgs, err := s.readMessages(r.Context(), room, a.Name, after, roomLog)
 		if err != nil {
 			if r.Context().Err() != nil {
@@ -350,20 +412,31 @@ func (s *Server) fetchMessages(w http.ResponseWriter, r *http.Request, a store.A
 			return
 		}
 		if len(msgs) > 0 || wait == 0 {
-			writeJSON(w, http.StatusOK, map[string]any{"messages": msgs})
+			if s.roomReadAllowed(w, r, a.Name, room) {
+				writeJSON(w, http.StatusOK, map[string]any{"messages": msgs})
+			}
 			return
 		}
-		select {
-		case <-ch:
-		case <-timeout:
-			s.finalMessages(w, r, room, a.Name, after, roomLog)
-			return
-		case <-s.hub.Done():
-			s.finalMessages(w, r, room, a.Name, after, roomLog)
-			return
-		case <-r.Context().Done():
-			w.WriteHeader(499) // istemci koptu; bekleme bırakıldı
-			return
+	awaitChange:
+		for {
+			select {
+			case <-ch:
+				break awaitChange
+			case <-accessCheck:
+				if !s.roomReadAllowed(w, r, a.Name, room) {
+					return
+				}
+				// Yalnız yetkiyi denetle; mesaj gelene kadar sorguyu tekrar çalıştırma.
+			case <-timeout:
+				s.finalMessages(w, r, room, a.Name, after, roomLog)
+				return
+			case <-s.hub.Done():
+				s.finalMessages(w, r, room, a.Name, after, roomLog)
+				return
+			case <-r.Context().Done():
+				w.WriteHeader(499) // istemci koptu; bekleme bırakıldı
+				return
+			}
 		}
 	}
 }
@@ -380,7 +453,9 @@ func (s *Server) finalMessages(w http.ResponseWriter, r *http.Request, room, age
 		s.internal(w, "mesaj okuma", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"messages": msgs})
+	if s.roomReadAllowed(w, r, agent, room) {
+		writeJSON(w, http.StatusOK, map[string]any{"messages": msgs})
+	}
 }
 
 func (s *Server) handleThread(w http.ResponseWriter, r *http.Request, a store.Agent, room string) {

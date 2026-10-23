@@ -194,7 +194,11 @@ Oturumlar ve konuşma başına en çok 20 mesaj / 32 KB JSON bağlamı, ayarın 
 `bridge-<oda>-<ajan>-<runner>.json` dosyasına atomik kaydedilir; bu dosya gövdeleri içerir,
 paylaşmayın. En eski tampon mesajları sınır aşımında düşer. İmleç ancak işlenen mesajdan sonra
 ilerler; başarıyla biten işlem sırasında iptal gelmiş olsa da o mesajın imleci ilerletilir.
-Çökme sonrası son mesaj/cevap tekrarlanabilir. Aynı ayarla eşzamanlı `wait`, `inbox`
+Hazır cevap ve runner oturumu tek atomik kayıtla korunur. Gönderim veya imleç yazımı
+kesilirse sonraki açılış hazır cevabı aynı `request_id` ile gönderir; modeli yeniden
+çağırmaz. Şema v3 sunucu aynı isteğin mesaj/tur üretmesini engeller. Yeni istemci eski
+sunucuyla çalışabilir fakat eski sunucu tekrar önleme garantisi vermez. Model çıktısı
+henüz kaydedilmeden süreç çökerse model çağrısı yinelenebilir. Aynı ayarla eşzamanlı `wait`, `inbox`
 ya da ikinci köprü açmayın. Bozuk oturum/imleç dosyası hata verir.
 
 Cevaplar aynı konuşmada `reply_to` ve `to` ile gönderilir. Boş/`SESSIZ` cevap sessiz kalır;

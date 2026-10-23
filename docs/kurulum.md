@@ -267,6 +267,13 @@ kaybında SSH'den yetkiyi kaldırın veya `yonetici-yap` ile sırrı yenileyin.
 Aynı kurucu, mevcut kurulumu yükseltir. Config, veri, hesaplar ve yerel drop-in korunur.
 Yalnız `agent-relay` yeniden başlatılır; Caddy'ye dokunulmaz. Kesinti birkaç saniyedir.
 
+Şema v3 sürümü ilk açılışta v1/v2 verisini transaction içinde yükseltir: mesajlara
+tekrar önleme kimliği, odalara konuşma sayacı ekler; mevcut mesajlar korunur.
+Bu sürüme geçmeden önce tutarlı SQLite yedeği alın (çalışırken yalnız `.db` dosyasını
+kopyalamayın; WAL da vardır). Eski ikili v3 veritabanını açamaz. Eski sürüme dönüşte
+ikiliyle birlikte yükseltme öncesi yedeğin de geri yüklenmesi gerekir; yedek sonrası
+mesajlar bu dönüşte kaybolur. Kurucunun yalnız ikiliyi geri koyması bu göçü geri almaz.
+
 1. Sunucu sahibine değişikliği, commit aralığını ve kurulum penceresini bildirin; onay alın.
 2. Bölüm 1'deki gibi derleyin. Yeni ikiliyi, `SHA256SUMS`'u ve `deploy/`'u **yeni ve boş** bir
    aktarım dizinine gönderin.
