@@ -16,8 +16,14 @@ const (
 )
 
 type conversation struct {
-	Session string          `json:"session,omitempty"`
-	Pending []proto.Message `json:"pending,omitempty"`
+	Session  string           `json:"session,omitempty"`
+	Pending  []proto.Message  `json:"pending,omitempty"`
+	Delivery *pendingDelivery `json:"delivery,omitempty"`
+}
+
+type pendingDelivery struct {
+	Source proto.Message `json:"source"`
+	Reply  Outgoing      `json:"reply"`
 }
 
 type stateFile struct {
@@ -42,9 +48,17 @@ func (s stateStore) load() (stateFile, error) {
 	if json.Unmarshal(b, &f) != nil || f.Threads == nil {
 		return f, fmt.Errorf("köprü oturum dosyası bozuk: %s", s.path)
 	}
-	for _, c := range f.Threads {
+	for thread, c := range f.Threads {
 		if c == nil || (c.Session != "" && !sessionRE.MatchString(c.Session)) {
 			return f, fmt.Errorf("köprü oturum dosyası bozuk: %s", s.path)
+		}
+		if p := c.Delivery; p != nil {
+			if p.Source.ID < 1 || p.Source.Thread != thread || p.Reply.Thread != thread ||
+				p.Reply.ReplyTo != p.Source.ID || p.Reply.To != p.Source.From ||
+				p.Reply.RequestID == "" || len(p.Reply.RequestID) > 64 || len(p.Reply.Body) > maxBody ||
+				(p.Reply.Type != "cevap" && p.Reply.Type != "bilgi") {
+				return f, fmt.Errorf("köprü gönderim kaydı bozuk: %s", s.path)
+			}
 		}
 		c.trim()
 	}

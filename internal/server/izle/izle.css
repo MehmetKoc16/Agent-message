@@ -192,6 +192,7 @@ h1, h2, h3, p { margin: 0; }
 .kisayol-ipucu { margin-left: auto; }
 .kisayol-ipucu span { padding: 0 4px; }
 #sayac { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.filtre-cubugu { flex-wrap: wrap; }
 .sag-panel { border-left: 1px solid var(--cizgi); min-height: 0; overflow-y: auto; background: var(--yuzey); display: flex; flex-direction: column; scrollbar-width: thin; }
 .sag-panel-baslik { display: flex; align-items: center; justify-content: space-between; min-height: 82px; padding: 20px; }
 .sag-panel-baslik h2 { font-size: 12px; font-weight: 600; }

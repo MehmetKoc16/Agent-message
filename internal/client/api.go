@@ -112,11 +112,12 @@ func (a *api) do(parent context.Context, method, path string, payload, out any, 
 }
 
 type sendInput struct {
-	To      string `json:"to,omitempty"`
-	Type    string `json:"type"`
-	Thread  string `json:"thread,omitempty"`
-	ReplyTo *int64 `json:"reply_to,omitempty"`
-	Body    string `json:"body"`
+	To        string `json:"to,omitempty"`
+	Type      string `json:"type"`
+	Thread    string `json:"thread,omitempty"`
+	ReplyTo   *int64 `json:"reply_to,omitempty"`
+	Body      string `json:"body"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
 func (a *api) send(ctx context.Context, in sendInput) (proto.Message, error) {

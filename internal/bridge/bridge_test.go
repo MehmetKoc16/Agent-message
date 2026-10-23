@@ -701,8 +701,8 @@ func Test_gonderim_hatasi_imleci_ilerletmez(t *testing.T) {
 	f.status = 0
 	code, log := f.run(context.Background(), "codex")
 	mustOK(t, code, log)
-	if f.after() != 1 || len(readCalls(f.dir)) != 2 {
-		t.Fatal("mesaj yeniden alınmadı")
+	if f.after() != 1 || len(readCalls(f.dir)) != 1 {
+		t.Fatal("hazır cevap gönderilmedi veya ajan tekrar çalıştırıldı")
 	}
 }
 

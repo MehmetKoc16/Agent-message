@@ -20,6 +20,7 @@ type (
 type PostInput struct {
 	Room, From, FromKind, To, Type, Thread, Body string
 	ReplyTo                                      *int64
+	RequestID                                    string
 }
 
 // anyAgent, herkese açık (to boş) mesaj gönderilmiş konuşmalarda thread_parties'e
@@ -35,6 +36,24 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		return Message{}, err
 	}
 	defer tx.Rollback()
+	if in.RequestID != "" {
+		rows, err := tx.QueryContext(ctx, msgSelect+`WHERE m.room=? AND m.from_agent=? AND m.request_id=? AND m.request_id <> ''`, in.Room, in.From, in.RequestID)
+		if err != nil {
+			return Message{}, err
+		}
+		prior, err := scanMessages(rows)
+		if err != nil {
+			return Message{}, err
+		}
+		if len(prior) > 0 {
+			m := prior[0]
+			sameReply := (m.ReplyTo == nil && in.ReplyTo == nil) || (m.ReplyTo != nil && in.ReplyTo != nil && *m.ReplyTo == *in.ReplyTo)
+			if m.To != in.To || m.Type != in.Type || m.Body != in.Body || !sameReply || (in.Thread != "" && m.Thread != in.Thread) {
+				return Message{}, ErrRequestConflict
+			}
+			return m, tx.Commit()
+		}
+	}
 
 	if in.To != "" {
 		if in.To == in.From {
@@ -59,7 +78,8 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		}
 		var n int64
 		if err := tx.QueryRowContext(ctx,
-			`SELECT COALESCE(MAX(CAST(substr(id, 3) AS INTEGER)), 0) + 1 FROM threads WHERE room = ?`,
+			`INSERT INTO room_counters(room,last_thread) VALUES (?,1)
+			 ON CONFLICT(room) DO UPDATE SET last_thread=last_thread+1 RETURNING last_thread`,
 			in.Room).Scan(&n); err != nil {
 			return Message{}, err
 		}
@@ -141,9 +161,9 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO messages (room, from_agent, to_agent, type, thread, reply_to, turn, body, created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?)`,
-		in.Room, in.From, in.To, in.Type, threadID, in.ReplyTo, turn, in.Body, now)
+		`INSERT INTO messages (room, from_agent, to_agent, type, thread, reply_to, turn, body, created_at, request_id)
+		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		in.Room, in.From, in.To, in.Type, threadID, in.ReplyTo, turn, in.Body, now, in.RequestID)
 	if err != nil {
 		return Message{}, err
 	}
@@ -200,6 +220,26 @@ func (s *Store) RoomLog(ctx context.Context, room string, after int64, limit int
 		return nil, err
 	}
 	return scanMessages(rows)
+}
+
+// RoomLogPage en yeni veya before öncesindeki sayfayı, artan ID sırasıyla verir.
+func (s *Store) RoomLogPage(ctx context.Context, room string, before int64, limit int) ([]Message, error) {
+	where := `WHERE m.room = ? `
+	args := []any{room}
+	if before > 0 {
+		where += `AND m.id < ? `
+		args = append(args, before)
+	}
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, msgSelect+where+`ORDER BY m.id DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	msgs, err := scanMessages(rows)
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+	return msgs, err
 }
 
 // GetThread konuşma durumunu verir.

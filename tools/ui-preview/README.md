@@ -53,4 +53,8 @@ Gerçek uygulamanın kurulumu ve hesap oluşturma komutları: [cmd/README.md](..
 
 ```powershell
 node --test tools/ui-preview/server.test.mjs
+node --test tools/ui-preview/behavior.test.mjs
 ```
+
+İkinci komut ürün JavaScript'inin gönderim, UTF-8 ve bellek sınırı davranışlarını
+küçük bir DOM taklidiyle sınar; gerçek tarayıcıda görsel kontrolün yerine geçmez.

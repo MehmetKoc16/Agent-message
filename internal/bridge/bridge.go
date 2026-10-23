@@ -24,6 +24,7 @@ const (
 type Outgoing struct {
 	To, Type, Thread, Body string
 	ReplyTo                int64
+	RequestID              string
 }
 
 // Dependencies mevcut istemcinin HTTP, imleç, çerçeve ve sır taramasını paylaşır.
@@ -74,6 +75,9 @@ func Run(ctx context.Context, o Options, d Dependencies) error {
 	if _, err := d.Cursor.Read(); err != nil {
 		return err
 	}
+	if err := e.resumeDeliveries(ctx); err != nil {
+		return err
+	}
 	for ctx.Err() == nil {
 		after, err := d.Cursor.Read()
 		if err != nil {
@@ -115,6 +119,9 @@ func Run(ctx context.Context, o Options, d Dependencies) error {
 			if err := d.Cursor.Advance(m.ID); err != nil {
 				return err
 			}
+			if err := e.clearDelivery(m.Thread); err != nil {
+				return err
+			}
 			after = m.ID
 			if e.failures >= 3 {
 				return errors.New("köprü üç ardışık çalıştırıcı hatası nedeniyle durdu")
@@ -148,8 +155,69 @@ func (e *engine) allowed(now time.Time) bool {
 }
 
 func (e *engine) send(ctx context.Context, m proto.Message, typ, body string, duration time.Duration) error {
-	// Hazır cevap bu stack'te bellekte kalır; 429 sonrası yalnız HTTP gönderimi tekrarlanır.
-	pending := Outgoing{To: m.From, Type: typ, Thread: m.Thread, ReplyTo: m.ID, Body: body}
+	f, err := e.store.load()
+	if err != nil {
+		return err
+	}
+	c := f.Threads[m.Thread]
+	if c == nil {
+		c = &conversation{}
+	}
+	return e.sendReply(ctx, m, typ, body, duration, c)
+}
+
+func (e *engine) sendReply(ctx context.Context, m proto.Message, typ, body string, duration time.Duration, c *conversation) error {
+	// Cevap ve runner oturumu tek atomik yazımla, imleç onaylanana kadar saklanır.
+	pending := Outgoing{To: m.From, Type: typ, Thread: m.Thread, ReplyTo: m.ID, Body: body,
+		RequestID: fmt.Sprintf("bridge-%s-%d", e.o.Runner, m.ID)}
+	source := m
+	source.Body = "" // Yeniden gönderim için gelen mesajın gövdesi gerekmez.
+	c.Delivery = &pendingDelivery{Source: source, Reply: pending}
+	if err := e.store.update(m.Thread, c); err != nil {
+		return err
+	}
+	return e.deliver(ctx, m, pending, duration)
+}
+
+func (e *engine) clearDelivery(thread string) error {
+	f, err := e.store.load()
+	if err != nil {
+		return err
+	}
+	if c := f.Threads[thread]; c != nil && c.Delivery != nil {
+		c.Delivery = nil
+		return e.store.update(thread, c)
+	}
+	return nil
+}
+
+func (e *engine) resumeDeliveries(ctx context.Context) error {
+	f, err := e.store.load()
+	if err != nil {
+		return err
+	}
+	var pending []*pendingDelivery
+	for _, c := range f.Threads {
+		if c.Delivery != nil {
+			pending = append(pending, c.Delivery)
+		}
+	}
+	sort.Slice(pending, func(i, j int) bool { return pending[i].Source.ID < pending[j].Source.ID })
+	for _, p := range pending {
+		if err := e.deliver(ctx, p.Source, p.Reply, 0); err != nil {
+			return err
+		}
+		if err := e.d.Cursor.Advance(p.Source.ID); err != nil {
+			return err
+		}
+		if err := e.clearDelivery(p.Source.Thread); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *engine) deliver(ctx context.Context, m proto.Message, pending Outgoing, duration time.Duration) error {
 	for attempt := 1; attempt <= 5; attempt++ {
 		err := e.d.Send(ctx, pending)
 		if err == nil {
@@ -270,14 +338,11 @@ func (e *engine) process(ctx context.Context, m proto.Message) error {
 	e.failures = 0
 	e.log(m, "calistirildi", result.Duration, fmt.Sprintf(" çıkış=%d", result.ExitCode))
 	c.Session, c.Pending = result.Session, nil
-	if err := e.store.update(m.Thread, c); err != nil {
-		return err
-	}
 	body := strings.TrimSpace(strings.ToValidUTF8(result.Response, "�"))
 	silent, suspicious := responseKind(body)
 	if silent {
 		e.log(m, "sessiz", result.Duration, "")
-		return nil
+		return e.store.update(m.Thread, c)
 	}
 	if suspicious {
 		e.log(m, "supheli", result.Duration, " uyarı=şüpheli_cevap")
@@ -287,7 +352,7 @@ func (e *engine) process(ctx context.Context, m proto.Message) error {
 		e.log(m, "hata", result.Duration, fmt.Sprintf(" sır_deseni=%q", name))
 		body = secretReply
 	}
-	return e.send(ctx, m, "cevap", shorten(body), result.Duration)
+	return e.sendReply(ctx, m, "cevap", shorten(body), result.Duration, c)
 }
 
 func shorten(body string) string {

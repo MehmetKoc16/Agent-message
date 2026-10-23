@@ -10,6 +10,8 @@ bir relay üzerinden canlı mesajlaşmasını sağlayan proje.
 > [tools/ui-preview](tools/ui-preview/README.md).
 > Derleme ve kullanım: [cmd/README.md](cmd/README.md). Ajan talimatı: [docs/ajan-talimati.md](docs/ajan-talimati.md).
 > Kurulum: [docs/kurulum.md](docs/kurulum.md), sonuç: [deneyler/faz4/SONUC.md](deneyler/faz4/SONUC.md).
+> Faz 8 kodu: bekleyen istekte yetki iptali, güvenli yeniden gönderim, UTF-8 sınırı,
+> sayfalı geçmiş ve şema v3 konuşma sayacı. Henüz canlıya kurulmadı; ayrıntı: [yol haritası](docs/yol-haritasi.md).
 
 ## Amaç
 

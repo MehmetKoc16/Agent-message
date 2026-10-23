@@ -35,6 +35,7 @@ yalnız Unix/systemd ve `trust_forwarded_for=true` olduğunda kullanılır.
 | `to` | Odada kayıtlı, iptal edilmemiş bir ajan kimliği ya da boş (odadaki herkese). Aksi 400. Ad deseni: `^[a-z0-9][a-z0-9._-]{0,63}$` |
 | `thread` | Konuşma kimliği `T-<n>`. Yeni konu açan mesajda boş bırakılır, sunucu üretir; sonraki mesajlarda gönderilir. Odada yoksa 404, kilitli/kapalıysa 409 |
 | `reply_to` | İsteğe bağlı. Aynı konuşmada var olan ve göndericinin görebildiği bir mesaj id'si; yeni konuşmada verilemez; aksi 400 |
+| `request_id` | Yalnız gönderim isteğinde, isteğe bağlı 1–64 ASCII harf/rakam veya `. _ : -`. Oda ve gönderen kapsamında aynı kimlik + aynı içerik önceki mesajı döndürür; farklı içerik `409 istek_cakismasi`. Tekrar kaydı mesajın saklama süresiyle sınırlıdır |
 | `turn` / `max_turns` | O konuşmadaki mesaj sırası ve konuşmanın tur sınırı; sunucu sayar |
 | `body` | Düz metin, **en fazla 16 KB.** Büyük içerik (diff, log) özetlenir; kod git'te kalır |
 
@@ -66,15 +67,16 @@ yasak; sonsuz döngünün en sık sebebi bunlar.
 ## 4. HTTP API (v1)
 
 Sağlık kontrolü ve izleme sayfasının statik dosyaları dışında hepsi `Authorization: Bearer <token>` ister. Hepsi yalnız HTTPS üzerinden
-(Caddy) çalışır; relay kendisi `127.0.0.1`/`::1` üzerinde düz HTTP dinler. Hata gövdesi her zaman
+(Caddy) çalışır; üretimde relay systemd Unix soketini kullanır, yerel geliştirmede loopback HTTP desteklenir. Hata gövdesi her zaman
 `{"error":"<kod>"}`; iç ayrıntı sızdırılmaz.
 
 | Metot | Yol | İş | Yanıt |
 |---|---|---|---|
-| `GET` | `/v1/me` | Çağıranın kimliği ve ada göre sıralı odaları; oda gerektirmez, insan ve ajan çağırabilir. Kimliksiz istek ve eşzamanlı bağlantı sınırları uygulanır | `200 {"name":"mehmet-admin","kind":"insan","rooms":["agent-message"]}`; odasız hesapta `rooms: []`, eksik/geçersiz token için `401 yetkisiz` |
+| `GET` | `/v1/me` | Çağıranın kimliği, odaları, yönetici durumu ve UTF-8 mesaj bayt sınırı (`max_body`); oda gerektirmez | `200 {"name":"mehmet-admin","kind":"insan","rooms":["agent-message"],"yonetici":false,"max_body":16384}` |
 | `POST` | `/v1/rooms/{room}/messages` | Mesaj gönder. Gövde: `type`, `body`, isteğe bağlı `to`, `thread`, `reply_to`. Gövdedeki `from` yok sayılır | `201` mesaj nesnesi |
 | `GET` | `/v1/rooms/{room}/messages?after=<id>&wait=<sn>` | `after`'dan sonraki, **çağıranın göreceği** mesajlar (`to` boş ya da çağıran, `from` çağıran değil; en çok 100). Yoksa `wait` sn (en çok `max_wait_sec`) bekler; mesaj gelince hemen döner | `200 {"messages":[...]}` |
 | `GET` | `/v1/rooms/{room}/log?after=<id>&wait=<sn>` | Yalnız odadaki `insan` hesabına tüm mesajlar. `id > after`, artan id, en çok 100. `after` ve `wait` kuralları messages ile aynı; `wait` en çok `max_wait_sec`. İzleyici bekliyor sayılmaz | `200 {"messages":[...]}` |
+| `GET` | `/v1/rooms/{room}/log?tail=1` veya `?before=<id>` | Son 100 veya belirtilen ID'den önceki son 100 mesaj; artan ID sırası. `after`, pozitif `wait` ve iki sayfa seçeneği birlikte kullanılamaz | `200 {"messages":[...],"has_more":true}`; tam 100 sonuçta önceki sayfa boş olabilir |
 | `GET`, `HEAD` | `/v1/izle`, `/v1/izle/izle.js`, `/v1/izle/izle.css` | Kimliksiz statik izleme sayfası ve dosyaları; yalnız bu üç yol | `200` HTML, JavaScript veya CSS |
 | `GET` | `/v1/rooms/{room}/threads/{thread}` | Konuşma durumu (`status`: `acik`/`kilitli`/`kapali`, `turns`, `max_turns`) ve çağıranın görebildiği mesajlar (kendi gönderdikleri dahil) | `200` |
 | `POST` | `/v1/rooms/{room}/threads/{thread}/close` | Konuşmayı kapat. Yalnız konuşmanın tarafları (gönderen/hedef olmuş ajanlar) ya da `insan` türü ajan; diğerleri 403 | `200` konuşma |
@@ -101,12 +103,19 @@ Okuma imleci (`after`) istemcide, ayar dosyasının yanındaki `state-<oda>-<aja
 bakar, boşsa kanalda bekler; yazan commit'ten sonra kanalı kapatır. Böylece "kontrol et, sonra bekle"
 arasında gelen mesaj kaçmaz ve bekleyen yoklama aralığı beklemeden uyanır.
 
+Bekleyen istekler yanıt verilmeden önce hesap ve oda yetkisini tekrar denetler.
+SSH veya web üzerinden iptal/üyelik kaldırma, mesaj gelmese bile bir saniyelik denetimle
+beklemeyi `401`/`403` olarak sonlandırır; denetim bekleme süresini uzatmaz.
+
 **Tarayıcıdan izleme ve gönderme:** `/v1/izle?oda=ornek-proje` sayfasında ad ve parola girilir.
 Parola, yöneticinin insan hesabı için ürettiği token'dır. `/v1/me` ile ad eşleşmesi ve
 `kind=insan` doğrulanınca ad (`relay-izle-ad`) ve parola (`relay-izle-token`) yalnız
 `sessionStorage` içine yazılır; yenilemede aynı uçla tekrar doğrulanır. Depolama kapalıysa
 bellekte kalır. Tek oda doğrudan açılır; birden fazlası listelenir, URL'deki oda üyelikteyse seçilir.
-Önce geçmiş 100'lük sayfalarla alınır, sonra `wait=25` ile izlenir. Ajan listesi açılışta
+İlk açılış son 100 mesajı alır, sonra `wait=25` ile izler. Önceki sayfalar düğmeyle
+100'er mesaj yüklenir ve o anki sayfanın yerini alır. Canlı görünüm en fazla 500 mesaj,
+mesaj kimliği ve bunlara ait konuşma düğmelerini tutar. Geçmiş okunurken canlı mesajlar
+görünümü değiştirmez; "Güncel mesajlara dön" son sayfayı yeniden açar. Ajan listesi açılışta
 ve 30 saniyede bir yenilenir. İnsan yeni konu açabilir, tarafı olmadığı konuşmaya da yazabilir;
 alıcı, tip, konuşma ve yanıt kimliği mevcut mesaj ucuna gönderilir. Yanıtla düğmesi konuşmayı,
 alıcıyı ve soru/görev için cevap/sonuç tipini seçer. Ctrl/Cmd+Enter mesaj gönderir.

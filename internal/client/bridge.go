@@ -42,12 +42,12 @@ func (r *runner) cmdBridge(ctx context.Context, fs *flag.FlagSet, args []string)
 		Cursor: r.cur, Frame: Render, Scan: ScanSecrets,
 		Fetch: r.api.fetch, Transient: isTransient,
 		Send: func(ctx context.Context, in bridge.Outgoing) error {
-			_, err := r.api.send(ctx, sendInput{To: in.To, Type: in.Type, Thread: in.Thread, ReplyTo: &in.ReplyTo, Body: in.Body})
+			_, err := r.api.send(ctx, sendInput{To: in.To, Type: in.Type, Thread: in.Thread, ReplyTo: &in.ReplyTo, Body: in.Body, RequestID: in.RequestID})
 			return err
 		},
 		Conflict: func(err error) bool {
 			var ae *APIError
-			return errors.As(err, &ae) && ae.Status == 409
+			return errors.As(err, &ae) && ae.Status == 409 && ae.Code != "istek_cakismasi"
 		},
 		RateLimited: func(err error) bool {
 			var ae *APIError
