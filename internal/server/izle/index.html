@@ -35,14 +35,29 @@
     </div>
 
     <section id="yonetim" hidden aria-label="Hesap yönetimi">
-      <div class="yonetim-baslik araclar"><div><span class="ust-etiket">ÇALIŞMA ALANI</span><h2>Hesap yönetimi</h2></div><button id="sohbete-don" type="button">← Konuşmalara dön</button></div>
+      <aside class="yonetim-kenar" aria-label="Yönetim menüsü">
+        <strong class="yonetim-menu-baslik">YÖNETİM</strong>
+        <div class="yonetim-sekmeler" role="tablist" aria-label="Yönetim bölümleri" aria-orientation="vertical">
+          <button id="sekme-ozet" type="button" role="tab" aria-controls="panel-ozet" aria-selected="true" aria-label="Genel bakış"><span aria-hidden="true">▦</span><span class="yonetim-sekme-uzun">Genel bakış</span><span class="yonetim-sekme-kisa" aria-hidden="true">Özet</span></button>
+          <button id="sekme-hesaplar" type="button" role="tab" aria-controls="panel-hesaplar" aria-selected="false" tabindex="-1"><span aria-hidden="true">♙</span><span>Hesaplar</span></button>
+          <button id="sekme-yeni" type="button" role="tab" aria-controls="panel-yeni" aria-selected="false" tabindex="-1" aria-label="Yeni hesap"><span aria-hidden="true">＋</span><span class="yonetim-sekme-uzun">Yeni hesap</span><span class="yonetim-sekme-kisa" aria-hidden="true">Yeni</span></button>
+          <button id="sekme-kayit" type="button" role="tab" aria-controls="panel-kayit" aria-selected="false" tabindex="-1" aria-label="Denetim kaydı"><span aria-hidden="true">≡</span><span class="yonetim-sekme-uzun">Denetim kaydı</span><span class="yonetim-sekme-kisa" aria-hidden="true">Kayıt</span></button>
+        </div>
+        <button id="sohbete-don" type="button">← Konuşmalara dön</button>
+        <div class="yonetim-oturum-karti"><div id="yonetim-sure" hidden><span id="yonetim-sayac">10:00</span><span class="yonetim-sure-etiket"> oturum kaldı</span><progress id="yonetim-ilerleme" max="600" value="600" aria-label="Yönetim oturumu kalan süresi"></progress></div><button id="yonetim-yenile" type="button" hidden>Yenile</button></div>
+      </aside>
+      <div class="yonetim-ana">
+      <div class="yonetim-baslik"><div><span class="ust-etiket">ÇALIŞMA ALANI</span><h2>Hesap yönetimi</h2></div></div>
       <p id="yonetim-durum" role="status" aria-live="polite"></p>
       <form id="yonetim-kod-form"><h3>Yönetici doğrulaması</h3><label for="yonetim-kod">Authenticator kodu</label><input id="yonetim-kod" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required placeholder="000000"><button class="birincil-dugme" type="submit">Yönetim oturumu aç</button></form>
       <div id="yonetim-icerik" hidden>
-        <div class="araclar"><h3>Hesaplar</h3><button id="yonetim-yenile" type="button">Yenile</button></div><div id="yonetim-hesaplar"></div><h3>Yeni hesap</h3>
-        <form id="yonetim-yeni"><div class="alan-grup"><label for="yeni-ad">Ad</label><input id="yeni-ad" maxlength="64" required></div><div class="alan-grup"><label for="yeni-tur">Tür</label><select id="yeni-tur"><option value="insan">İnsan</option><option value="ajan">Ajan</option></select></div><div class="alan-grup"><label for="yeni-odalar">Odalar (virgülle)</label><input id="yeni-odalar" required></div><button class="birincil-dugme" type="submit">Hesap aç</button></form>
-        <div id="yonetim-parola"></div><h3>Denetim kaydı</h3><ol id="yonetim-kayit"></ol>
+        <div id="panel-ozet" role="tabpanel" aria-labelledby="sekme-ozet" tabindex="0"><div id="yonetim-metrikler" class="yonetim-metrikler"></div><div class="yonetim-ozet-grid"><article class="yonetim-kart"><h3>Son etkinlik</h3><ol id="yonetim-son-etkinlik" class="yonetim-liste"></ol></article><article class="yonetim-kart"><h3>Odalar</h3><ul id="yonetim-odalar" class="yonetim-liste"></ul></article></div><article class="yonetim-kart yonetim-uyari"><h3>24 saattir görülmeyen ajanlar</h3><ul id="yonetim-uyarilar" class="yonetim-liste"></ul></article></div>
+        <div id="panel-hesaplar" role="tabpanel" aria-labelledby="sekme-hesaplar" tabindex="0" hidden><div class="yonetim-filtreler"><div class="alan-grup"><label for="yonetim-arama">Hesap ara</label><input id="yonetim-arama" type="search" placeholder="Hesap adı…"></div><div class="alan-grup"><label for="yonetim-tur">Tür</label><select id="yonetim-tur"><option value="">Tümü</option><option value="ajan">Ajan</option><option value="insan">İnsan</option></select></div><div class="alan-grup"><label for="yonetim-filtre-durum">Durum</label><select id="yonetim-filtre-durum"><option value="aktif">Aktif</option><option value="iptal">İptal</option></select></div></div><div id="yonetim-hesaplar"></div></div>
+        <div id="panel-yeni" role="tabpanel" aria-labelledby="sekme-yeni" tabindex="0" hidden><form id="yonetim-yeni"><h3>Yeni hesap</h3><p>Çalışma alanına bir insan veya ajan ekle.</p><div class="alan-grup"><label for="yeni-ad">Ad</label><input id="yeni-ad" maxlength="64" required aria-describedby="yeni-ad-yardim"><p id="yeni-ad-yardim">Girişte kullanılacak benzersiz hesap adı.</p></div><div class="alan-grup"><label for="yeni-tur">Tür</label><select id="yeni-tur" aria-describedby="yeni-tur-yardim"><option value="insan">İnsan</option><option value="ajan">Ajan</option></select><p id="yeni-tur-yardim">Hesabı kullanacak kişi veya ajanı seç.</p></div><div class="alan-grup"><label for="yeni-odalar">Odalar</label><input id="yeni-odalar" required aria-describedby="yeni-odalar-yardim" placeholder="genel, proje"><p id="yeni-odalar-yardim">En az bir oda gir; birden fazlasını virgülle ayır.</p></div><button class="birincil-dugme" type="submit">Hesap aç</button></form><div id="yonetim-parola"></div></div>
+        <div id="panel-kayit" role="tabpanel" aria-labelledby="sekme-kayit" tabindex="0" hidden><div class="yonetim-filtreler"><h3>Denetim kaydı</h3><div class="alan-grup"><label for="yonetim-islem">İşlem</label><select id="yonetim-islem"><option value="degisiklikler">Değişiklikler</option><option value="">Tümü</option></select></div></div><ol id="yonetim-kayit"></ol></div>
       </div>
+      </div>
+      <dialog id="yonetim-iptal-dialog" aria-labelledby="yonetim-iptal-baslik" aria-describedby="yonetim-iptal-aciklama"><h3 id="yonetim-iptal-baslik">Hesabı iptal et</h3><p id="yonetim-iptal-aciklama"></p><div class="alan-grup"><label for="yonetim-iptal-ad">Hesabın adı</label><input id="yonetim-iptal-ad" autocomplete="off"></div><p id="yonetim-iptal-hata" role="alert"></p><div class="yonetim-dialog-islemler"><button id="yonetim-iptal-vazgec" type="button">Vazgeç</button><button id="yonetim-iptal-onay" class="yonetim-tehlike" type="button" disabled>Hesabı iptal et</button></div></dialog>
     </section>
 
     <section id="izleme" hidden aria-label="Oda konuşmaları">

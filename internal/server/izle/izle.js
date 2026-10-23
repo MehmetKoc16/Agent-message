@@ -341,6 +341,7 @@
     el("yonetim-kod").value = ""; el("yonetim-parola").replaceChildren();
     el("yonetim-hesaplar").replaceChildren(); el("yonetim-kayit").replaceChildren();
     el("yonetim-kod-form").hidden = false; el("yonetim-icerik").hidden = true;
+    resetManagementView();
   }
   const managementErrors = {
     yalniz_yonetici: "Bu işlem yalnız yönetici hesabına açık.",
@@ -380,46 +381,272 @@
     return data;
   }
   function managementAction(fn) {
-    return async () => { try { await fn(); } catch (error) { el("yonetim-durum").textContent = error.message; } };
+    return async () => { try { await fn(); } catch (error) { clearTimeout(managementToastTimer); el("yonetim-durum").textContent = error.message; } };
   }
   function managementButton(label, fn) {
     const b = node("button", label); b.type = "button"; b.addEventListener("click", managementAction(async () => {
       b.disabled = true; try { await fn(); } finally { b.disabled = false; }
     })); return b;
   }
+  let managementAccounts = [], managementRecords = [], managementEditor = "";
+  let managementClock = null, managementToastTimer = null, managementRevoke = null;
+  let managementRoomInput = null;
+  const managementTabs = ["ozet", "hesaplar", "yeni", "kayit"];
+  const managementMobile = window.matchMedia("(max-width: 760px)");
+  function managementTabOrientation() {
+    el("sekme-ozet").parentElement.setAttribute("aria-orientation", managementMobile.matches ? "horizontal" : "vertical");
+  }
+  managementMobile.addEventListener("change", managementTabOrientation);
+  managementTabOrientation();
+  function managementTab(name, focus = false) {
+    for (const key of managementTabs) {
+      const selected = key === name, tab = el("sekme-" + key);
+      tab.setAttribute("aria-selected", String(selected)); tab.tabIndex = selected ? 0 : -1;
+      el("panel-" + key).hidden = !selected;
+      if (selected && focus) tab.focus();
+    }
+  }
+  for (const [index, key] of managementTabs.entries()) {
+    el("sekme-" + key).addEventListener("click", () => managementTab(key));
+    el("sekme-" + key).addEventListener("keydown", (event) => {
+      let next;
+      if (event.key === (managementMobile.matches ? "ArrowRight" : "ArrowDown")) next = (index + 1) % managementTabs.length;
+      if (event.key === (managementMobile.matches ? "ArrowLeft" : "ArrowUp")) next = (index + managementTabs.length - 1) % managementTabs.length;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = managementTabs.length - 1;
+      if (next !== undefined) { event.preventDefault(); managementTab(managementTabs[next], true); }
+    });
+  }
+  function resetManagementView() {
+    clearInterval(managementClock); clearTimeout(managementToastTimer);
+    managementAccounts = []; managementRecords = []; managementEditor = ""; managementRevoke = null; managementRoomInput = null;
+    for (const id of ["yonetim-metrikler", "yonetim-son-etkinlik", "yonetim-odalar", "yonetim-uyarilar", "yonetim-durum"]) el(id).replaceChildren();
+    el("yonetim-iptal-dialog").close(); el("yonetim-iptal-ad").value = "";
+    el("yonetim-iptal-hata").textContent = "";
+    el("yonetim-iptal-aciklama").textContent = "";
+    el("yonetim-iptal-onay").textContent = "Hesabı iptal et"; el("yonetim-iptal-onay").disabled = true;
+    el("yonetim-sure").hidden = true; el("yonetim-yenile").hidden = true;
+    el("yonetim-arama").value = ""; el("yonetim-tur").value = "";
+    el("yonetim-filtre-durum").value = "aktif";
+    renderManagementOperationFilter();
+    managementTab("ozet");
+  }
+  function managementTime(value) {
+    const time = node("time"), date = new Date(value), ms = date.getTime();
+    if (!value || !Number.isFinite(ms)) { time.textContent = "Henüz görülmedi"; return time; }
+    time.dateTime = date.toISOString(); time.title = date.toLocaleString("tr-TR");
+    const minutes = Math.max(0, Math.floor((Date.now() - ms) / 60000));
+    time.textContent = minutes < 1 ? "Az önce" : minutes < 60 ? minutes + " dk önce" :
+      minutes < 1440 ? Math.floor(minutes / 60) + " saat önce" : Math.floor(minutes / 1440) + " gün önce";
+    return time;
+  }
+  function managementCountdown() {
+    const seconds = Math.max(0, Math.ceil((managementExpiry - Date.now()) / 1000));
+    el("yonetim-sayac").textContent = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
+    el("yonetim-ilerleme").value = Math.min(600, seconds);
+  }
+  function managementToast(message, undo) {
+    clearTimeout(managementToastTimer);
+    const area = el("yonetim-durum"); area.replaceChildren(node("span", message));
+    if (undo) area.append(managementButton("Geri al", async () => {
+      await undo(); managementToast("Oda üyeliği geri alındı.");
+    }));
+    area.append(managementButton("Kapat", async () => { clearTimeout(managementToastTimer); area.replaceChildren(); }));
+    managementToastTimer = setTimeout(() => area.replaceChildren(), 8000);
+  }
+  function managementCell(row, label, content) {
+    const cell = node("td"); cell.dataset.label = label;
+    cell.append(typeof content === "string" ? node("span", content) : content); row.append(cell); return cell;
+  }
+  function managementTable(headers, caption) {
+    const table = node("table", undefined, "yonetim-tablo"), head = node("thead"), row = node("tr");
+    table.append(node("caption", caption, "sr-only"));
+    for (const title of headers) { const th = node("th", title); th.scope = "col"; row.append(th); }
+    head.append(row); const body = node("tbody"); table.append(head, body); return {table, body};
+  }
+  function managementChips(rooms) {
+    const chips = node("div", undefined, "yonetim-chipler");
+    for (const room of rooms) chips.append(node("span", room, "yonetim-chip"));
+    if (!rooms.length) chips.append(node("span", "Oda yok")); return chips;
+  }
+  function renderManagementEditor(a, body) {
+    const row = node("tr", undefined, "yonetim-duzenleme"), cell = node("td"); cell.colSpan = 5;
+    const box = node("div", undefined, "yonetim-oda-editor"), chips = node("div", undefined, "yonetim-chipler");
+    const base = "/hesaplar/" + encodeURIComponent(a.name);
+    box.append(node("strong", a.name + " · Odaları düzenle"));
+    for (const room of a.rooms) {
+      const chip = node("span", room, "yonetim-chip");
+      const remove = managementButton("×", async () => {
+        await managementAPI(base + "/odalar/" + encodeURIComponent(room), "DELETE");
+        await refreshManagement();
+        managementToast(a.name + " · " + room + " odasından çıkarıldı", async () => {
+          await managementAPI(base + "/odalar", "POST", {oda: room}); await refreshManagement();
+        });
+      });
+      remove.setAttribute("aria-label", a.name + " hesabını " + room + " odasından çıkar"); chip.append(remove); chips.append(chip);
+    }
+    if (!a.rooms.length) chips.append(node("span", "Oda yok"));
+    const controls = node("div", undefined, "yonetim-oda-kontroller"), input = node("input");
+    input.id = "yonetim-oda-girdi"; input.placeholder = "Oda adı";
+    managementRoomInput = input;
+    const label = node("label", "Oda adı"); label.htmlFor = input.id;
+    const add = managementButton("Ekle", async () => {
+      await managementAPI(base + "/odalar", "POST", {oda: input.value.trim()}); await refreshManagement();
+      managementRoomInput?.focus();
+    }); add.disabled = true;
+    input.addEventListener("input", () => { add.disabled = !input.value.trim(); });
+    input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !add.disabled) { event.preventDefault(); add.click(); } });
+    controls.append(label, input, add, managementButton("Kapat", async () => {
+      managementEditor = ""; renderManagementAccounts(); el("yonetim-hesaplar").querySelectorAll("button[data-account]").forEach((button) => {
+        if (button.dataset.account === a.name) button.focus();
+      });
+    })); box.append(chips, controls); cell.append(box); row.append(cell); body.append(row);
+  }
+  function managementAccountTable(accounts) {
+    const {table, body} = managementTable(["Hesap", "Odalar", "Son görülme", "Durum", "İşlemler"], "Hesaplar");
+    for (const a of accounts) {
+      const row = node("tr", undefined, a.revoked ? "yonetim-iptal-satir" : "");
+      const identity = node("div", undefined, "yonetim-kimlik"), info = node("div");
+      info.append(node("strong", a.name), node("span", a.kind === "ajan" ? "Ajan" : "İnsan", "yonetim-rozet"));
+      if (a.yonetici) info.append(node("span", "Yönetici", "yonetim-rozet"));
+      identity.append(accountAvatar(a.name, "mini-avatar"), info); managementCell(row, "Hesap", identity);
+      managementCell(row, "Odalar", managementChips(a.rooms)); managementCell(row, "Son görülme", managementTime(a.last_seen));
+      managementCell(row, "Durum", node("span", a.revoked ? "İptal edilmiş" : "Aktif", "yonetim-durum-etiket" + (a.revoked ? " iptal" : "")));
+      const actions = node("div", undefined, "yonetim-satir-islemler");
+      if (a.yonetici) actions.append(node("span", "Yalnız SSH"));
+      else if (!a.revoked) {
+        const edit = managementButton("Odalar", async () => {
+          managementEditor = managementEditor === a.name ? "" : a.name; renderManagementAccounts();
+          if (managementEditor) managementRoomInput?.focus();
+          else el("yonetim-hesaplar").querySelectorAll("button[data-account]").forEach((b) => { if (b.dataset.account === a.name) b.focus(); });
+        });
+        edit.dataset.account = a.name; edit.setAttribute("aria-expanded", String(managementEditor === a.name));
+        const menu = node("details", undefined, "yonetim-islem-menu"), summary = node("summary", "⋯");
+        summary.setAttribute("aria-label", a.name + " hesabı işlemleri");
+        const revoke = managementButton("Hesabı iptal et", async () => { menu.open = false; openManagementRevoke(a, summary); });
+        revoke.className = "yonetim-tehlike"; menu.append(summary, revoke); actions.append(edit, menu);
+      } else actions.append(node("span", "—"));
+      managementCell(row, "İşlemler", actions); body.append(row);
+      if (!a.revoked && !a.yonetici && managementEditor === a.name) renderManagementEditor(a, body);
+    }
+    if (!accounts.length) { const row = node("tr"), cell = node("td", "Eşleşen hesap yok", "yonetim-bos"); cell.colSpan = 5; row.append(cell); body.append(row); }
+    return table;
+  }
+  function renderManagementAccounts() {
+    managementRoomInput = null;
+    const query = el("yonetim-arama").value.toLocaleLowerCase("tr-TR").trim(), kind = el("yonetim-tur").value;
+    const accounts = managementAccounts.filter((a) => a.name.toLocaleLowerCase("tr-TR").includes(query) && (!kind || kind === a.kind));
+    const list = el("yonetim-hesaplar"), revoked = accounts.filter((a) => a.revoked);
+    const wasOpen = list.querySelector(".yonetim-iptaller")?.open || false;
+    list.replaceChildren();
+    if (el("yonetim-filtre-durum").value === "aktif") list.append(managementAccountTable(accounts.filter((a) => !a.revoked)));
+    const details = node("details", undefined, "yonetim-iptaller");
+    details.open = wasOpen || el("yonetim-filtre-durum").value === "iptal";
+    details.append(node("summary", "İptal edilmiş (" + revoked.length + ")"), managementAccountTable(revoked)); list.append(details);
+  }
+  function managementOperationLabel(value) {
+    const labels = {
+      hesaplar_listelendi: "Hesaplar görüntülendi", kayit_listelendi: "Kayıt görüntülendi",
+      oturum_acildi: "Yönetim oturumu açıldı", oturum_reddedildi: "Yönetim oturumu reddedildi",
+      hesap_acildi: "Hesap açıldı", hesap_iptal: "Hesap iptal edildi", iptal: "Hesap iptal edildi", revoke: "Hesap iptal edildi",
+      odaya_eklendi: "Odaya eklendi", "odaya-ekle": "Odaya eklendi",
+      odadan_cikarildi: "Odadan çıkarıldı", "odadan-cikar": "Odadan çıkarıldı",
+      "yonetici-yap": "Yönetici yetkisi verildi", "yonetici-al": "Yönetici yetkisi kaldırıldı"
+    };
+    return Object.prototype.hasOwnProperty.call(labels, value) ? labels[value] : String(value || "—");
+  }
+  function managementReadOperation(value) {
+    return String(value || "").endsWith("_listelendi");
+  }
+  function renderManagementOperationFilter(selected = "degisiklikler") {
+    const select = el("yonetim-islem"), changes = node("option", "Değişiklikler"), all = node("option", "Tümü");
+    changes.value = "degisiklikler"; all.value = ""; select.replaceChildren(changes, all);
+    for (const type of [...new Set(managementRecords.map((k) => k.islem))].sort()) {
+      const option = node("option", managementOperationLabel(type)); option.value = type; select.append(option);
+    }
+    select.value = [...select.options].some((o) => o.value === selected) ? selected : "degisiklikler";
+  }
+  function managementOperation(value) {
+    const code = String(value || ""), tone = /iptal|revoke|reddedildi|sil|cikar|yonetici-al/.test(code) ? "tehlike" : /ekle|olustur|ac/.test(code) ? "olumlu" : "bilgi";
+    return node("span", managementOperationLabel(value), "yonetim-islem " + tone);
+  }
+  function renderManagementRecords() {
+    const {table, body} = managementTable(["Zaman", "Yapan", "İşlem", "Hedef", "Ayrıntı"], "Denetim kaydı");
+    const selected = el("yonetim-islem").value;
+    const records = managementRecords.filter((k) => selected === "degisiklikler" ? !managementReadOperation(k.islem) : !selected || k.islem === selected);
+    for (const k of records) {
+      const row = node("tr"); managementCell(row, "Zaman", managementTime(k.zaman));
+      managementCell(row, "Yapan", String(k.yapan || "—")); managementCell(row, "İşlem", managementOperation(k.islem));
+      managementCell(row, "Hedef", String(k.hedef || "—")); managementCell(row, "Ayrıntı", String(k.ayrinti || "—")); body.append(row);
+    }
+    if (!records.length) { const row = node("tr"), cell = node("td", "Kayıt bulunamadı", "yonetim-bos"); cell.colSpan = 5; row.append(cell); body.append(row); }
+    // Eski ol öğesinin kimliğini ve türünü koru; tabloyu tek liste öğesinde taşı.
+    const item = node("li"); item.append(table); el("yonetim-kayit").replaceChildren(item);
+  }
+  function renderManagementOverview() {
+    const accounts = managementAccounts, live = accounts.filter((a) => !a.revoked), metrics = el("yonetim-metrikler"); metrics.replaceChildren();
+    for (const [label, total] of [["Toplam hesap", accounts.length], ["Ajan", live.filter((a) => a.kind === "ajan").length], ["İnsan", live.filter((a) => a.kind === "insan").length], ["İptal edilmiş", accounts.length - live.length]]) {
+      const card = node("div", undefined, "yonetim-metrik"); card.append(node("span", label), node("strong", String(total)));
+      metrics.append(card);
+    }
+    const activity = el("yonetim-son-etkinlik"); activity.replaceChildren();
+    const recent = managementRecords.filter((k) => !managementReadOperation(k.islem)).slice(0, 5);
+    for (const k of recent) {
+      const target = String(k.hedef || "").trim();
+      const item = node("li"); item.append(managementOperation(k.islem), node("span", (k.yapan || "—") + (target ? " → " + target : "")), managementTime(k.zaman)); activity.append(item);
+    }
+    if (!recent.length) activity.append(node("li", "Henüz etkinlik yok."));
+    const rooms = new Map();
+    for (const a of live) for (const room of new Set(a.rooms)) { if (!rooms.has(room)) rooms.set(room, []); rooms.get(room).push(a); }
+    const roomList = el("yonetim-odalar"); roomList.replaceChildren();
+    for (const [name, members] of [...rooms].sort(([a], [b]) => a.localeCompare(b, "tr"))) {
+      const item = node("li"), stack = node("span", undefined, "yonetim-avatar-yigini");
+      for (const a of members.slice(0, 4)) { const avatar = accountAvatar(a.name, "mini-avatar"); avatar.title = a.name; stack.append(avatar); }
+      if (members.length > 4) stack.append(node("span", "+" + (members.length - 4), "mini-avatar"));
+      stack.setAttribute("aria-label", members.map((a) => a.name).join(", "));
+      item.append(node("strong", name), node("span", members.length + " üye"), stack); roomList.append(item);
+    }
+    if (!rooms.size) roomList.append(node("li", "Henüz oda yok."));
+    const warnings = el("yonetim-uyarilar"); warnings.replaceChildren();
+    for (const a of live.filter((a) => a.kind === "ajan" && (!a.last_seen || !Number.isFinite(Date.parse(a.last_seen)) || Date.now() - Date.parse(a.last_seen) >= 86400000))) {
+      const item = node("li"); item.append(accountAvatar(a.name, "mini-avatar"), node("strong", a.name), managementTime(a.last_seen)); warnings.append(item);
+    }
+    if (!warnings.childElementCount) warnings.append(node("li", "Tüm aktif ajanlar son 24 saatte görüldü."));
+  }
+  function openManagementRevoke(account, trigger) {
+    managementRevoke = {account, trigger}; el("yonetim-iptal-ad").value = "";
+    el("yonetim-iptal-aciklama").textContent = "Bu işlem geri alınamaz. Onaylamak için hesabın adını yaz: " + account.name;
+    el("yonetim-iptal-hata").textContent = ""; el("yonetim-iptal-onay").textContent = account.name + " hesabını iptal et";
+    el("yonetim-iptal-onay").disabled = true; el("yonetim-iptal-dialog").showModal(); el("yonetim-iptal-ad").focus();
+  }
+  el("yonetim-iptal-ad").addEventListener("input", () => {
+    el("yonetim-iptal-onay").disabled = !managementRevoke || el("yonetim-iptal-ad").value !== managementRevoke.account.name;
+  });
+  el("yonetim-iptal-vazgec").addEventListener("click", () => el("yonetim-iptal-dialog").close());
+  el("yonetim-iptal-dialog").addEventListener("close", () => {
+    managementRevoke?.trigger?.focus(); managementRevoke = null; el("yonetim-iptal-ad").value = "";
+  });
+  el("yonetim-iptal-onay").addEventListener("click", async () => {
+    if (!managementRevoke || el("yonetim-iptal-onay").disabled) return;
+    const account = managementRevoke.account, button = el("yonetim-iptal-onay"); button.disabled = true;
+    el("yonetim-iptal-ad").disabled = true;
+    try {
+      await managementAPI("/hesaplar/" + encodeURIComponent(account.name) + "/iptal", "POST");
+      el("yonetim-iptal-dialog").close(); await refreshManagement();
+      el("yonetim-arama").focus(); managementToast(account.name + " hesabı iptal edildi.");
+    } catch (error) { el("yonetim-iptal-hata").textContent = error.message; }
+    finally { el("yonetim-iptal-ad").disabled = false; button.disabled = !managementRevoke || el("yonetim-iptal-ad").value !== managementRevoke.account.name; }
+  });
+  for (const id of ["yonetim-arama", "yonetim-tur", "yonetim-filtre-durum"]) el(id).addEventListener(id === "yonetim-arama" ? "input" : "change", renderManagementAccounts);
+  el("yonetim-islem").addEventListener("change", renderManagementRecords);
   async function refreshManagement() {
     const accounts = await managementAPI("/hesaplar");
-    const list = el("yonetim-hesaplar"); list.replaceChildren();
-    for (const a of accounts) {
-      const card = node("article", undefined, "yonetim-hesap");
-      card.append(node("h4", a.name + " · " + a.kind + (a.yonetici ? " · yönetici" : "")),
-        node("p", (a.revoked ? "İptal edilmiş" : "Aktif") + " · Son görülme: " +
-          (a.last_seen ? new Date(a.last_seen).toLocaleString("tr-TR") : "Henüz görülmedi")));
-      const base = "/hesaplar/" + encodeURIComponent(a.name);
-      const rooms = node("ul");
-      for (const room of a.rooms) {
-        const li = node("li", room + " ");
-        if (!a.yonetici) li.append(managementButton("çıkar", async () => {
-          await managementAPI(base + "/odalar/" + encodeURIComponent(room), "DELETE"); await refreshManagement();
-        })); rooms.append(li);
-      }
-      card.append(rooms);
-      if (!a.yonetici && !a.revoked) {
-        card.append(managementButton("Oda ekle", async () => {
-          const room = window.prompt(a.name + " için oda adı"); if (room === null) return;
-          await managementAPI(base + "/odalar", "POST", {oda: room.trim()}); await refreshManagement();
-        }), managementButton("İptal et", async () => {
-          if (!window.confirm(a.name + " hesabı iptal edilsin mi?")) return;
-          await managementAPI(base + "/iptal", "POST"); await refreshManagement();
-        }));
-      }
-      list.append(card);
-    }
     const records = await managementAPI("/kayit?son=100");
-    el("yonetim-kayit").replaceChildren();
-    for (const k of records) el("yonetim-kayit").append(node("li",
-      new Date(k.zaman).toLocaleString("tr-TR") + " · " + k.yapan + " · " + k.islem + " · " + k.hedef + " · " + k.ayrinti));
-    el("yonetim-durum").textContent = "Yönetim oturumu 10 dakika geçerlidir.";
+    managementAccounts = accounts; managementRecords = [...records].sort((a, b) => Date.parse(b.zaman) - Date.parse(a.zaman));
+    renderManagementOperationFilter(el("yonetim-islem").value);
+    renderManagementAccounts(); renderManagementRecords(); renderManagementOverview();
+    el("yonetim-sure").hidden = false; el("yonetim-yenile").hidden = false;
+    managementCountdown(); clearInterval(managementClock); managementClock = setInterval(managementCountdown, 1000);
   }
   el("yonetim-ac").addEventListener("click", managementAction(async () => {
     view.hidden = true; el("yonetim").hidden = false;
@@ -440,6 +667,8 @@
       managementTimer = setTimeout(() => {
         clearYonetim(); el("yonetim-durum").textContent = managementErrors.yonetim_oturumu_gerekli;
       }, Math.max(0, managementExpiry - Date.now()));
+      // Önceki hatalı kodun bildirimi oturum açılınca kalmasın.
+      clearTimeout(managementToastTimer); el("yonetim-durum").replaceChildren();
       el("yonetim-kod-form").hidden = true; el("yonetim-icerik").hidden = false; await refreshManagement();
       } finally { submit.disabled = false; }
     })();
