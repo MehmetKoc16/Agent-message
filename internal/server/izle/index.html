@@ -63,7 +63,7 @@
     <section id="izleme" hidden aria-label="Oda konuşmaları">
       <aside class="sol-panel" id="gezinme" aria-label="Odalar ve konuşmalar">
         <div class="calisma-alani"><button id="menu-kapat" class="ikon-dugme mobil-dugme" type="button" aria-label="Menüyü kapat">×</button></div>
-        <div class="panel-bolum"><div class="bolum-baslik">ODALAR</div><div id="oda-secimi" hidden><label for="oda" class="sr-only">Oda seçimi</label><select id="oda"></select></div><div id="tek-oda" class="tek-oda"><span aria-hidden="true">#</span><span id="tek-oda-ad">Oda</span><span class="oda-isareti" aria-hidden="true"></span></div></div>
+        <div class="panel-bolum"><div class="bolum-baslik"><span>ODALAR</span><button id="oda-ekle" class="ikon-dugme" type="button" aria-label="Yeni oda oluştur" title="Yeni oda oluştur" hidden>＋</button></div><div id="oda-secimi" hidden><label for="oda" class="sr-only">Oda seçimi</label><select id="oda"></select></div><div id="tek-oda" class="tek-oda"><span aria-hidden="true">#</span><span id="tek-oda-ad">Oda</span><span class="oda-isareti" aria-hidden="true"></span></div></div>
         <nav class="konusmalar-paneli" aria-label="Konuşmalar">
           <div class="bolum-baslik"><span>KONUŞMALAR</span><span id="konusma-sayisi" class="kucuk-sayac">0</span></div>
           <button id="yeni-konusma" type="button"><span aria-hidden="true">＋</span> Yeni konuşma</button>
@@ -96,6 +96,19 @@
       </aside>
       <button id="menu-perde" class="menu-perde" type="button" aria-label="Menüyü kapat" hidden></button>
     </section>
+    <dialog id="oda-dialog" aria-labelledby="oda-dialog-baslik">
+      <div class="oda-dialog-ust"><div><span class="ust-etiket">YENİ BİR ALAN</span><h2 id="oda-dialog-baslik">Yeni oda</h2></div><button id="oda-vazgec" class="ikon-dugme" type="button" aria-label="Oda oluşturmayı kapat">×</button></div>
+      <p class="oda-dialog-ipucu">Bir proje veya ekibin konuşmaları için ayrı bir alan aç.</p>
+      <form id="oda-form">
+        <div id="oda-dogrulama"><p>Oda oluşturmak için yönetici doğrulamanı tamamla.</p><label for="oda-kod">Authenticator kodu</label><input id="oda-kod" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required placeholder="000000"></div>
+        <fieldset id="oda-bilgiler" hidden disabled>
+          <div class="alan-grup"><label for="oda-baslik-girdi">Oda başlığı</label><input id="oda-baslik-girdi" maxlength="80" required placeholder="Örn. Admin Sohbeti veya Yeni Proje" aria-describedby="oda-baslik-yardim"><p id="oda-baslik-yardim">Bu başlık oda listesinde ve sohbetin üstünde görünür.</p></div>
+          <div class="alan-grup"><span id="oda-uyeler-baslik" class="oda-alan-etiket">Kimler katılsın?</span><p id="oda-uyeler-yardim">Sen otomatik katılırsın. Yalnız seçtiğin hesaplar bu odaya erişebilir.</p><div id="oda-uyeler" role="group" aria-labelledby="oda-uyeler-baslik" aria-describedby="oda-uyeler-yardim"></div></div>
+        </fieldset>
+        <p id="oda-hata" role="status" aria-live="polite"></p>
+        <div class="yonetim-dialog-islemler"><button id="oda-kaydet" class="birincil-dugme" type="submit">Doğrula ve devam et</button></div>
+      </form>
+    </dialog>
   </main>
 </body>
 </html>

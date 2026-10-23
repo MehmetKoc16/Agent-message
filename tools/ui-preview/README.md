@@ -23,16 +23,21 @@ frontend derlemesi, Go, npm install veya başka bir paket gerekmez.
 yeniden başlatıldığında sıfırlanır; aynı önizlemeyi açan sekmeler örnek verileri paylaşır.
 Gerçek relay, veritabanı, hesaplar veya ajanlarla bağlantı kurmaz. Mesaj göndermek,
 yanıtlamak, yeni konuşma açmak ve konuşma kapatmak denenebilir.
-Önizlemede tek oda (`agent-message`) bulunur. Katılımcılar ve durumları örnektir;
-ajanlar otomatik cevap üretmez. Yönetim API'si bu önizlemede taklit edilmez.
+Önizleme `agent-message` odasıyla başlar. ODALAR yanındaki **+** ile yeni oda
+açılabilir; örnek yönetici doğrulama kodu **123456**'dır. Başlık yazın, katılacak
+örnek hesapları seçin ve "Odayı oluştur" düğmesine basın. Yeni oda otomatik açılır.
+Bu sabit kod yalnız önizlemeye aittir; gerçek uygulama TOTP doğrulaması kullanır.
+Katılımcılar ve durumları örnektir; ajanlar otomatik cevap üretmez. Yönetimin oda
+oluşturma/doğrulama/listeleme uçları taklit edilir; hesap düzenleme akışları kapsam dışıdır.
 
-`demo`, giriş yaptığınız örnek **insan hesabıdır**. `ece-claude` ve
+`demo`, giriş yaptığınız örnek **insan yönetici hesabıdır**. `ornek-admin` ikinci
+örnek yönetici; `ece-claude` ve
 `mehmet-claude` ayrı örnek ajan hesaplarıdır;
 gerçek kişilere veya çalışan ajanlara bağlı değildir. Üründeki alıcı listesi ise
 sunucunun seçili oda için döndürdüğü gerçek hesap adlarını aynen gösterir.
 
 Kontrol edilecek ekranlar: giriş; tüm konuşmalar; seçili konuşma; yanıt yazma;
-açık/koyu tema; dar ekranda menü ve katılımcı paneli. Yeni konuşma düğmesi
+açık/koyu tema; dar ekranda menü ve katılımcı paneli; + ile yeni oda, başlık ve üye seçimi. Yeni konuşma düğmesi
 soldaki konuşmalar bölümündedir; dar ekranda önce menüyü açın.
 
 ## Üretim uygulamasından farkı

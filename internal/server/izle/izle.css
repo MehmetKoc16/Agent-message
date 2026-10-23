@@ -107,6 +107,21 @@ h1, h2, h3, p { margin: 0; }
 .tek-oda { display: flex; align-items: center; gap: 10px; color: var(--vurgu-metin); background: var(--secili); padding: 10px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; }
 .tek-oda > span:first-child { opacity: .65; font-size: 16px; }
 #tek-oda-ad { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#oda-ekle { width: 28px; height: 28px; padding: 0; font-size: 20px; letter-spacing: 0; }
+#oda-dialog { width: min(520px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 28px; border: 1px solid var(--cizgi); border-radius: 14px; background: var(--yuzey); color: var(--metin); box-shadow: var(--golge); overflow-y: auto; }
+#oda-dialog::backdrop { background: #10151099; }
+.oda-dialog-ust { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.oda-dialog-ust h2 { margin: 8px 0 0; }
+.oda-dialog-ipucu, #oda-baslik-yardim, #oda-uyeler-yardim, #oda-dogrulama p { color: var(--ikincil); font-size: 13px; line-height: 1.6; }
+#oda-bilgiler { border: 0; padding: 0; margin: 0; min-width: 0; }
+#oda-form .alan-grup { margin-top: 20px; }
+.oda-alan-etiket { display: block; font-size: 13px; font-weight: 600; }
+#oda-uyeler { max-height: 220px; overflow-y: auto; border: 1px solid var(--cizgi); border-radius: 8px; padding: 4px 10px; }
+.oda-uye { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; }
+.oda-uye input { width: 16px; height: 16px; flex: 0 0 auto; margin: 0; padding: 0; accent-color: var(--vurgu); }
+.oda-uye span { overflow-wrap: anywhere; font-size: 13px; }
+.oda-uye small { color: var(--ikincil); margin-left: auto; white-space: nowrap; }
+#oda-hata { color: var(--tehlike, #b34343); font-size: 13px; min-height: 20px; }
 .oda-isareti { width: 5px; height: 5px; background: var(--vurgu); border-radius: 50%; margin-left: auto; flex-shrink: 0; }
 #oda { width: 100%; background: var(--secili); color: var(--vurgu-metin); border-color: transparent; padding: 10px; font-size: 12px; }
 .konusmalar-paneli { padding: 0 12px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }

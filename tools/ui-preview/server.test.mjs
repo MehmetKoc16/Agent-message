@@ -16,6 +16,20 @@ async function preview(t) {
 }
 const post = (data) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
+test("new room requires preview verification and includes only selected accounts", async (t) => {
+  const request=await preview(t);
+  const body={baslik:"Admin Sohbeti",uyeler:["ornek-admin"]};
+  assert.equal((await request("/v1/yonetim/odalar",post(body))).status,401);
+  assert.equal((await request("/v1/yonetim/oturum",post({kod:"000000"}))).status,401);
+  const login=await(await request("/v1/yonetim/oturum",post({kod:"123456"}))).json();
+  const created=await request("/v1/yonetim/odalar",{...post(body),headers:{"Content-Type":"application/json","X-Yonetim-Oturum":login.oturum}});
+  assert.equal(created.status,201);
+  const room=await created.json();assert.equal(room.title,"Admin Sohbeti");
+  const listed=await(await request("/v1/rooms")).json();assert.ok(listed.rooms.some((r)=>r.name===room.name && r.title===room.title));
+  const agents=await(await request("/v1/rooms/"+room.name+"/agents")).json();
+  assert.deepEqual(agents.agents.map((a)=>a.name),["demo","ornek-admin"]);
+});
+
 test("history opens at the tail and earlier pages exclude the boundary", async (t) => {
   const request = await preview(t);
   for (let i=0; i<105; i++) {
@@ -50,7 +64,7 @@ test("demo login rejects other credentials and exposes only the project room", a
   const request = await preview(t);
   assert.equal((await request("/v1/me", { headers: { Authorization: "Bearer wrong" } })).status, 401);
   const me = await (await request("/v1/me")).json();
-  assert.equal(me.name, "demo"); assert.equal(me.yonetici, false);
+  assert.equal(me.name, "demo"); assert.equal(me.yonetici, true);
   assert.deepEqual(me.rooms, ["agent-message"]);
   assert.equal((await request("/v1/rooms/private/log")).status, 403);
   const log = await (await request("/v1/rooms/agent-message/log")).json();

@@ -69,6 +69,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.yonetimRoutes(mux)
 	mux.HandleFunc("GET /v1/me", s.authed(s.handleMe))
+	mux.HandleFunc("GET /v1/rooms", s.authed(s.handleRooms))
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})

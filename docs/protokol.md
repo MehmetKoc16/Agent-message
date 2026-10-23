@@ -73,6 +73,7 @@ Sağlık kontrolü ve izleme sayfasının statik dosyaları dışında hepsi `Au
 | Metot | Yol | İş | Yanıt |
 |---|---|---|---|
 | `GET` | `/v1/me` | Çağıranın kimliği, odaları, yönetici durumu ve UTF-8 mesaj bayt sınırı (`max_body`); oda gerektirmez | `200 {"name":"mehmet-admin","kind":"insan","rooms":["agent-message"],"yonetici":false,"max_body":16384}` |
+| `GET` | `/v1/rooms` | Yalnız çağıranın üye olduğu odaların sabit kimliği ve görünen başlığı; token gerekir | `200 {"rooms":[{"name":"agent-message","title":"agent-message"}]}` |
 | `POST` | `/v1/rooms/{room}/messages` | Mesaj gönder. Gövde: `type`, `body`, isteğe bağlı `to`, `thread`, `reply_to`. Gövdedeki `from` yok sayılır | `201` mesaj nesnesi |
 | `GET` | `/v1/rooms/{room}/messages?after=<id>&wait=<sn>` | `after`'dan sonraki, **çağıranın göreceği** mesajlar (`to` boş ya da çağıran, `from` çağıran değil; en çok 100). Yoksa `wait` sn (en çok `max_wait_sec`) bekler; mesaj gelince hemen döner | `200 {"messages":[...]}` |
 | `GET` | `/v1/rooms/{room}/log?after=<id>&wait=<sn>` | Yalnız odadaki `insan` hesabına tüm mesajlar. `id > after`, artan id, en çok 100. `after` ve `wait` kuralları messages ile aynı; `wait` en çok `max_wait_sec`. İzleyici bekliyor sayılmaz | `200 {"messages":[...]}` |
@@ -136,6 +137,7 @@ sınırlamaz; yönetici tüm hesapları yönetir. Yetki yalnız SSH'den verilir/
 | POST | `/v1/yonetim/oturum` | `{"kod":"123456"}` → `200 {"oturum":"…","bitis":"<RFC3339>"}` |
 | GET | `/v1/yonetim/hesaplar` | `200 [{"name":"…","kind":"insan","rooms":["…"],"last_seen":"…","revoked":false,"yonetici":false}]` |
 | POST | `/v1/yonetim/hesaplar` | `{"ad":"…","tur":"ajan|insan","odalar":["…"]}` → `201 {"ad":"…","token":"…"}` |
+| POST | `/v1/yonetim/odalar` | `{"baslik":"Admin Sohbeti","uyeler":["ornek-hesap"]}` → `201 {"name":"oda-<rastgele-kimlik>","title":"Admin Sohbeti"}` |
 | POST | `/v1/yonetim/hesaplar/{ad}/odalar` | `{"oda":"…"}` → `200 {"ok":true}` |
 | DELETE | `/v1/yonetim/hesaplar/{ad}/odalar/{oda}` | `200 {"ok":true}` |
 | POST | `/v1/yonetim/hesaplar/{ad}/iptal` | `200 {"ok":true}` |
@@ -156,13 +158,25 @@ mevcut hesap başına `s.rate` sınırını paylaşır.
 Yeni hesap adları ve odalar `config.NameRe` desenine uyar; en az bir oda gerekir.
 `yonetici` dahil tanımlanmamış JSON alanları yok sayılır; web'den yönetici oluşturulmaz.
 Token yalnız oluşturma cevabında bir kez gösterilir; listeler token/özet/sır içermez.
-Yönetici hesabına (çağıranın kendisi dahil) oda ekleme/çıkarma ve iptal yasaktır.
+Mevcut hesap üyeliği değiştirme uçlarında yönetici hesabına (çağıranın kendisi dahil) oda ekleme/çıkarma ve iptal yasaktır.
 Üyelik ekleme/çıkarma idempotenttir; iptal hesaba oda eklenemez.
 POST JSON gövdeleri 16 KiB ile sınırlıdır, çözümleme öncesi UTF-8 denetlenir.
+
+**Yeni oda:** ODALAR başlığındaki + yalnız insan yöneticide görünür. Mevcut TOTP
+oturumu yoksa önce kod istenir. Başlık, baştaki/sondaki boşluklar temizlendikten sonra
+1–80 Unicode karakter olmalı; kontrol karakterleri reddedilir. Görünen başlık sabit
+oda kimliğinden ayrıdır; eski odaların başlığı ilk geçişte mevcut kimliği olur.
+Oluşturan yönetici otomatik üyedir. En fazla 100 hesap açıkça seçilebilir; tekrarlar
+tekilleştirilir, bilinmeyen/iptal hesapta işlem bütünüyle geri alınır. Yönetici sohbeti
+için diğer aktif insan yöneticiler de seçilebilir; bu seçim yönetici rolünü değiştirmez.
+Seçilmeyen yöneticiler dahil diğer hesaplar odayı listeleyemez/okuyamaz. Oda, üyelikler
+ve `oda_olusturuldu` / `odaya_eklendi` kayıtları aynı transaction'da yazılır; rol
+transaction içinde yeniden denetlenir. Açılan oda arayüzde otomatik seçilir.
 
 | Durum / kod | Anlamı |
 |---|---|
 | `400 gecersiz_ad`, `gecersiz_oda`, `gecersiz_tur` | Alan doğrulaması başarısız |
+| `400 gecersiz_baslik`, `gecersiz_uye` | Oda başlığı veya üye listesi geçersiz |
 | `400 gecersiz_son` | Kayıt sınırı 1–1000 dışında (varsayılan 100) |
 | `400 gecersiz_json`, `gecersiz_govde` | Bozuk JSON veya UTF-8 |
 | `401 kod_gecersiz` | Kod hatalı, pencere dışında veya tekrar kullanılmış |

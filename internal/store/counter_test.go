@@ -22,7 +22,7 @@ func TestGocV2SayaciVeMesajlariKorur(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{`DROP INDEX messages_request`, `ALTER TABLE messages DROP COLUMN request_id`, `DROP TABLE room_counters`, `PRAGMA user_version=2`} {
+	for _, q := range []string{`DROP INDEX messages_request`, `ALTER TABLE messages DROP COLUMN request_id`, `DROP TABLE room_counters`, `DROP TABLE rooms`, `PRAGMA user_version=2`} {
 		if _, err = s.db.Exec(q); err != nil {
 			t.Fatal(err)
 		}

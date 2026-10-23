@@ -29,6 +29,7 @@ func (s *Server) yonetimRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/yonetim/oturum", s.yonetim(s.handleYonetimLogin, true))
 	m.HandleFunc("GET /v1/yonetim/hesaplar", s.yonetim(s.handleYonetimList, false))
 	m.HandleFunc("POST /v1/yonetim/hesaplar", s.yonetim(s.handleYonetimCreate, false))
+	m.HandleFunc("POST /v1/yonetim/odalar", s.yonetim(s.handleCreateRoom, false))
 	m.HandleFunc("POST /v1/yonetim/hesaplar/{ad}/odalar", s.yonetim(s.handleYonetimChange, false))
 	m.HandleFunc("DELETE /v1/yonetim/hesaplar/{ad}/odalar/{oda}", s.yonetim(s.handleYonetimChange, false))
 	m.HandleFunc("POST /v1/yonetim/hesaplar/{ad}/iptal", s.yonetim(s.handleYonetimChange, false))

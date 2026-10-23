@@ -19,7 +19,7 @@ import (
 	_ "modernc.org/sqlite" // sürücü adı: "sqlite"
 )
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 // Hata değerleri; server paketi bunları HTTP koduna çevirir.
 var (
@@ -32,6 +32,8 @@ var (
 	ErrNotFound        = errors.New("bulunamadı")
 	ErrExists          = errors.New("zaten var")
 	ErrRequestConflict = errors.New("istek kimliği farklı bir mesaj için kullanılmış")
+	ErrBadRoomTitle    = errors.New("geçersiz oda başlığı")
+	ErrBadMember       = errors.New("geçersiz oda üyesi")
 )
 
 // Store veritabanı erişim katmanıdır.
@@ -139,6 +141,12 @@ func (s *Store) migrate() error {
 			`CREATE UNIQUE INDEX messages_request ON messages(room, from_agent, request_id) WHERE request_id <> ''`,
 			`CREATE TABLE room_counters (room TEXT PRIMARY KEY, last_thread INTEGER NOT NULL)`,
 			`INSERT INTO room_counters(room,last_thread) SELECT room,MAX(CAST(substr(id,3) AS INTEGER)) FROM threads GROUP BY room`,
+		)
+	}
+	if v < 4 {
+		stmts = append(stmts,
+			`CREATE TABLE rooms (name TEXT PRIMARY KEY, title TEXT NOT NULL, created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '')`,
+			`INSERT INTO rooms(name,title,created_at) SELECT room,room,'' FROM (SELECT room FROM agent_rooms UNION SELECT room FROM threads UNION SELECT room FROM room_counters UNION SELECT room FROM messages)`,
 		)
 	}
 	for _, q := range stmts {

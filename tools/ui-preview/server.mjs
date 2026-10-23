@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 
 const assets = new URL("../../internal/server/izle/", import.meta.url);
 const rooms = ["agent-message"];
@@ -33,6 +34,17 @@ function seed() {
 }
 
 export function createPreviewServer() {
+  const rooms = ["agent-message"];
+  const titles = new Map([["agent-message", "agent-message"]]);
+  const members = new Map([["agent-message", ["demo", ...previewAgents]]]);
+  const accounts = [{name:"demo",kind:"insan",yonetici:true}, ...previewAgents.map((name)=>({name,kind:"ajan",yonetici:false})), {name:"ornek-admin",kind:"insan",yonetici:true}];
+  const records = [];
+  let managementKey = "", managementUntil = 0;
+  const readJSON = async (req) => {
+    const chunks=[]; let size=0;
+    for await (const chunk of req) {size+=chunk.length;if(size>16384) throw new Error("preview body too large");chunks.push(chunk);}
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  };
   const messages = seed();
   const closed = new Set();
   const changes = new EventEmitter();
@@ -60,7 +72,7 @@ export function createPreviewServer() {
       if (file && ["GET", "HEAD"].includes(req.method)) {
         let body = await readFile(new URL(file[0], assets), "utf8");
         if (file[0] === "index.html") {
-          body = body.replace("<body>", '<body><div class="onizleme-bandi">YEREL ÖNİZLEME <span>Sen: demo (örnek insan) · Tüm ajanlar örnek</span><span>Giriş: <b>demo</b> / <b>relay-demo</b></span></div>');
+          body = body.replace("<body>", '<body><div class="onizleme-bandi">YEREL ÖNİZLEME <span>Sen: demo (örnek yönetici) · Tüm hesaplar örnek</span><span>Giriş: <b>demo</b> / <b>relay-demo</b> · Kod: <b>123456</b></span></div>');
           if (url.searchParams.get("demo") === "1") body = body.replace('<script src="/v1/izle/izle.js"', '<script src="/__preview/boot.js"></script><script src="/v1/izle/izle.js"');
         }
         res.writeHead(200, { "Content-Type": file[1] });
@@ -73,15 +85,42 @@ export function createPreviewServer() {
       if (!url.pathname.startsWith("/v1/")) { send(404, { error: "bulunamadi" }); return; }
       if (req.headers.authorization !== "Bearer " + demoToken) { send(401, { error: "yetkisiz" }); return; }
       if (url.pathname === "/v1/me" && req.method === "GET") {
-        send(200, { name: "demo", kind: "insan", rooms, yonetici: false, max_body: 16384 }); return;
+        send(200, { name: "demo", kind: "insan", rooms, yonetici: true, max_body: 16384 }); return;
+      }
+      if (url.pathname === "/v1/rooms" && req.method === "GET") {
+        send(200,{rooms:rooms.map((name)=>({name,title:titles.get(name)}))});return;
+      }
+      if (url.pathname.startsWith("/v1/yonetim/")) {
+        if (url.pathname === "/v1/yonetim/oturum" && req.method === "POST") {
+          let data;try{data=await readJSON(req);}catch{send(400,{error:"gecersiz_json"});return;}
+          if(data?.kod!=="123456"){send(401,{error:"kod_gecersiz"});return;}
+          managementKey=randomUUID();managementUntil=Date.now()+600000;
+          send(200,{oturum:managementKey,bitis:new Date(managementUntil).toISOString()});return;
+        }
+        if(!managementKey || Date.now()>=managementUntil || req.headers["x-yonetim-oturum"]!==managementKey){send(401,{error:"yonetim_oturumu_gerekli"});return;}
+        if(url.pathname === "/v1/yonetim/hesaplar" && req.method === "GET") {
+          send(200,accounts.map((a)=>({...a,revoked:false,rooms:rooms.filter((room)=>members.get(room).includes(a.name)),last_seen:new Date().toISOString()})));return;
+        }
+        if(url.pathname === "/v1/yonetim/kayit" && req.method === "GET"){send(200,records);return;}
+        if(url.pathname === "/v1/yonetim/odalar" && req.method === "POST") {
+          let data;try{data=await readJSON(req);}catch{send(400,{error:"gecersiz_json"});return;}
+          const title=typeof data?.baslik==="string" ? data.baslik.trim() : "";
+          if(!title || [...title].length>80 || /[\u0000-\u001f\u007f-\u009f]/u.test(title)){send(400,{error:"gecersiz_baslik"});return;}
+          const selected=data.uyeler ?? [];
+          if(!Array.isArray(selected) || selected.length>100 || selected.some((name)=>!accounts.some((a)=>a.name===name))){send(400,{error:"gecersiz_uye"});return;}
+          const name="oda-"+randomUUID().replaceAll("-","");rooms.push(name);titles.set(name,title);members.set(name,[...new Set(["demo",...selected])]);
+          records.unshift({id:records.length+1,zaman:new Date().toISOString(),yapan:"demo",islem:"oda_olusturuldu",hedef:name,ayrinti:title});
+          send(201,{name,title});return;
+        }
+        send(404,{error:"bulunamadi"});return;
       }
       const route = /^\/v1\/rooms\/([^/]+)\/(log|agents|messages|threads\/T-\d+\/close)$/.exec(url.pathname);
       if (!route) { send(404, { error: "bulunamadi" }); return; }
       const [, room, action] = route;
       if (!rooms.includes(room)) { send(403, { error: "yasak" }); return; }
       if (action === "agents" && req.method === "GET") {
-        send(200, { agents: ["demo", ...previewAgents].map((name) => ({
-          name, kind: name === "demo" ? "insan" : "ajan", waiting: previewAgents.includes(name),
+        send(200, { agents: members.get(room).map((name) => ({
+          name, kind: accounts.find((a)=>a.name===name).kind, waiting: previewAgents.includes(name),
           last_seen: new Date().toISOString(),
         })) }); return;
       }
@@ -132,7 +171,7 @@ export function createPreviewServer() {
         const history = messages.filter((m) => m.room === room && m.thread === data.thread);
         if (data.thread && !history.length) { send(404, { error: "konusma_yok" }); return; }
         if (closed.has(room + "/" + data.thread) || history.length >= 20) { send(409, { error: "konusma_kilitli" }); return; }
-        if (data.to && !previewAgents.includes(data.to)) { send(400, { error: "gecersiz_alici" }); return; }
+        if (data.to && (!members.get(room).includes(data.to) || data.to === "demo")) { send(400, { error: "gecersiz_alici" }); return; }
         if (data.reply_to != null && !history.some((m) => m.id === data.reply_to)) { send(400, { error: "gecersiz_reply_to" }); return; }
         const m = append(data); send(201, m); changes.emit(room); return;
       }
