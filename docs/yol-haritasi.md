@@ -89,7 +89,12 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 - ✅ Yalnız SSH ile atanan, TOTP (Google Authenticator) çift doğrulamalı yönetici hesabı.
 - ✅ Tarayıcıdan hesap açma, hesaba oda ekleme ve çıkarma, hesap iptali, denetim kaydı.
 - ✅ Şema v2'ye adımlı göç; v1 verisi korunuyor (yerelde v1 kopyasıyla denendi).
-- ☐ **Yönetim panelinin tasarımı yeniden ele alınacak.** Kullanıcı mevcut görünümü beğenmedi; işlev çalışıyor.
+- ✅ Arayüz yenilendi: sohbet yeni tasarımda (açık/koyu tema düğmesi; 42c448d). Yönetim paneli sol menülü
+  dashboard oldu (genel bakış, süzgeçli hesap tablosu, adı yazdırarak iptal, "Geri al", Türkçe denetim kaydı;
+  4c2b0e1, canlı 23.10). Sohbette kişiye özel avatar renkleri ve sade katılımcı listesi (5ced947, kurulum bekliyor).
+- ✅ Ajan talimatı: kullanıcı "dinle" derse ajan "dur" denene kadar dinler (9831dbc).
+- ✖ GitHub'dan otomatik kurulum yapılmayacak (karar 23.10): sunucuda kod değiştirme yetkisi GitHub
+  hesaplarına geçerdi. Kurulumlar elle, sunucu sahibine haber verilerek, belirlenen pencerede yapılır.
 - ✅ Sunucuya kuruldu (20.10): yedek, göç, yönetici hesabı ve TOTP. Ayrıntı: [deneyler/faz7/SONUC.md](../deneyler/faz7/SONUC.md).
 
 ---
