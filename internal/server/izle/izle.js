@@ -59,10 +59,13 @@
     if (className) n.className = className;
     return n;
   }
-  function accountAvatar(name, className) {
-    const avatar = node("span", name.slice(0, 2).toLocaleUpperCase("tr-TR"), className);
+  function accountAvatar(name, className, avatar = node("span")) {
+    const parts = name.split("-").filter(Boolean);
+    const initials = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : name.slice(0, 2);
+    const tone = Array.from(name).reduce((sum, c) => sum + c.codePointAt(0), 0) % 8;
+    avatar.textContent = initials.toLocaleUpperCase("tr-TR");
+    avatar.className = className + " avatar-ton-" + tone;
     avatar.setAttribute("aria-hidden", "true");
-    avatar.dataset.renk = String(Array.from(name).reduce((sum, c) => sum + c.charCodeAt(0), 0) % 2);
     return avatar;
   }
   function remember(token, name) {
@@ -271,16 +274,21 @@
       el("ajanlar").replaceChildren();
       const selected = recipient.value;
       recipient.replaceChildren(node("option", "herkes")); recipient.firstChild.value = "";
-      for (const a of data.agents) {
+      const participants = [...data.agents].sort((a, b) => Number(b.waiting) - Number(a.waiting) || a.name.localeCompare(b.name, "tr-TR"));
+      for (const a of participants) {
         const li = node("li", undefined, "katilimci");
         const avatar = accountAvatar(a.name, "mini-avatar");
         const content = node("div", undefined, "katilimci-icerik");
-        const seen = a.last_seen ? new Date(a.last_seen).toLocaleString("tr-TR") : "Henüz görülmedi";
-        const label = node("span", a.waiting ? "Mesaj bekliyor" : (a.name === session.name ? "Sen" : "Beklemede değil"), "katilimci-durum" + (a.waiting ? " bekliyor" : ""));
-        label.title = "Son görülme: " + seen;
-        content.append(node("span", a.name, "katilimci-isim"), label);
+        content.append(node("span", a.name, "katilimci-isim"));
+        if (a.waiting || a.name === session.name) {
+          content.append(node("span", a.name === session.name ? "Sen" : "Dinliyor", "katilimci-durum" + (a.waiting ? " bekliyor" : "")));
+        } else if (a.last_seen && Number.isFinite(Date.parse(a.last_seen))) {
+          const seen = managementTime(a.last_seen); seen.className = "katilimci-durum"; content.append(seen);
+        }
         li.append(avatar, content, node("span", a.kind === "insan" ? "İnsan" : "Ajan", "katilimci-tur"));
         el("ajanlar").append(li);
+      }
+      for (const a of data.agents) {
         if (a.name !== session.name) {
           const option = node("option", a.name); option.value = a.name; recipient.append(option);
         }
@@ -319,7 +327,7 @@
       form.hidden = true; view.hidden = false; el("giris-dugme").disabled = false;
       el("giris-ekrani").hidden = true; document.body.classList.add("oturum-acik");
       el("kullanici-ad").textContent = name;
-      el("kullanici-avatar").textContent = name.slice(0, 2).toLocaleUpperCase("tr-TR");
+      accountAvatar(name, "mini-avatar", el("kullanici-avatar"));
       el("oda-baslik").textContent = name;
       el("oda").replaceChildren(); el("oda-secimi").hidden = data.rooms.length < 2;
       el("tek-oda").hidden = data.rooms.length !== 1;
