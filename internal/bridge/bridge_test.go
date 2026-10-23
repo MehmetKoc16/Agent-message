@@ -141,6 +141,14 @@ func (f *fixture) add(id int64, thread, typ, body string) {
 	f.messages = append(f.messages, proto.Message{ID: id, Room: "oda", From: "diger", To: "kopru", Type: typ, Thread: thread, Body: body, Turn: 1, MaxTurns: 20})
 }
 
+// İstemcinin iptal edilmesi HTTP işleyicisinin bittiği anlamına gelmez.
+// Sayaç ve dizi aynı kilit altında kopyalanır; dönen dizi sonradan değişmez.
+func (f *fixture) fetchHistory() (int, []int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gets, append([]int(nil), f.waits...)
+}
+
 func (f *fixture) run(ctx context.Context, runner string, extra ...string) (int, string) {
 	return f.execute(ctx, runner, true, extra...)
 }
@@ -732,10 +740,11 @@ func Test_gecici_http_hatalari_yeniden_denenir(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("long-poll iptal edilemedi")
 	}
-	if f.after() != 1 || f.gets < 4 {
+	gets, waits := f.fetchHistory()
+	if f.after() != 1 || gets < 4 {
 		t.Fatal("geçici HTTP hataları denenmedi")
 	}
-	for _, wait := range f.waits {
+	for _, wait := range waits {
 		if wait != 50 {
 			t.Fatal("mevcut long-poll süresi kullanılmadı")
 		}
@@ -743,7 +752,8 @@ func Test_gecici_http_hatalari_yeniden_denenir(t *testing.T) {
 	g := newFixture(t)
 	g.getStatuses = []int{503}
 	code, _ := g.run(context.Background(), "codex")
-	if code != 3 || g.gets != 1 || g.waits[0] != 0 {
+	gets, waits = g.fetchHistory()
+	if code != 3 || gets != 1 || len(waits) != 1 || waits[0] != 0 {
 		t.Fatal("once beklememeli/yeniden denememeli")
 	}
 }
