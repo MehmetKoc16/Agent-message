@@ -183,9 +183,13 @@ yetki vermez:
 Yine de log dosyası en az relay verisi kadar korunmalıdır. Caddy'ye dokunulan bir sonraki
 bakımda filtreye `request>headers>X-Yonetim-Oturum delete` satırı eklenebilir.
 
-Yönetici hedef hesaba web'den oda ekleme/çıkarma ve iptal yapılamaz; kendisi de
+Mevcut üyelik değiştirme uçlarında yönetici hedef hesaba web'den oda ekleme/çıkarma ve iptal yapılamaz; kendisi de
 buna dahildir. Hedef denetimi değişiklik transaction'ında tekrar yapılır; eşzamanlı
 SSH atamasıyla koruma atlanamaz. Yönetici yetkisi geri alma ve sır yenileme SSH işidir.
+Yeni oda oluşturma ayrı bir TOTP korumalı işlemdir: oluşturan yönetici otomatik üye,
+diğer hesaplar yalnız açık seçimle üyedir. Diğer aktif yöneticilerin yeni odaya seçilmesi
+rol/kimlik doğrulama ayarlarını değiştirmez. Yönetici rolü tek başına oda okuma yetkisi
+vermez. Rol, aktif üyeler, oda ve denetim kayıtları aynı transaction'da doğrulanıp yazılır.
 Hesap açma ve üyelik/iptal değişikliği ile denetim kaydı aynı transaction'dadır;
 kayıt yazılamazsa değişiklik geri alınır. Oturum açma ve reddetme, hesap/kayıt
 listeleme de kaydedilir. SSH işlemlerinde yapan `ssh`, web'de hesap adıdır.

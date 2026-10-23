@@ -267,10 +267,12 @@ kaybında SSH'den yetkiyi kaldırın veya `yonetici-yap` ile sırrı yenileyin.
 Aynı kurucu, mevcut kurulumu yükseltir. Config, veri, hesaplar ve yerel drop-in korunur.
 Yalnız `agent-relay` yeniden başlatılır; Caddy'ye dokunulmaz. Kesinti birkaç saniyedir.
 
-Şema v3 sürümü ilk açılışta v1/v2 verisini transaction içinde yükseltir: mesajlara
-tekrar önleme kimliği, odalara konuşma sayacı ekler; mevcut mesajlar korunur.
+Şema v4 sürümü ilk açılışta v1/v2/v3 verisini transaction içinde yükseltir: v3
+mesaj tekrar önleme kimliği ve konuşma sayacına ek olarak oda başlıklarını saklayan
+tablo eklenir. Mevcut mesajlar, oda kimlikleri ve üyelikler korunur; eski odaların
+ilk başlığı mevcut kimliğidir. Başlıklar bundan sonra kalıcı olarak saklanır.
 Bu sürüme geçmeden önce tutarlı SQLite yedeği alın (çalışırken yalnız `.db` dosyasını
-kopyalamayın; WAL da vardır). Eski ikili v3 veritabanını açamaz. Eski sürüme dönüşte
+kopyalamayın; WAL da vardır). Eski ikili v4 veritabanını açamaz. Eski sürüme dönüşte
 ikiliyle birlikte yükseltme öncesi yedeğin de geri yüklenmesi gerekir; yedek sonrası
 mesajlar bu dönüşte kaybolur. Kurucunun yalnız ikiliyi geri koyması bu göçü geri almaz.
 

@@ -81,6 +81,7 @@
   function stop() {
     status.classList.remove("canli");
     clearYonetim(); el("yonetim").hidden = true; el("yonetim-ac").hidden = true;
+    el("oda-dialog").close(); el("oda-ekle").hidden = true;
     if (active) {
       active.controller.abort();
       if (active.roomController) active.roomController.abort();
@@ -343,14 +344,29 @@
     resetRoom(); session.room = room; session.roomController = new AbortController();
     session.history = {oldest: 0, hasMore: false, browsing: false};
     el("yeni").textContent = "↓ Yeni mesajlar";
-    el("oda-baslik").textContent = room; el("tek-oda-ad").textContent = room;
-    el("ozet-oda").textContent = room; el("odasiz-durum").hidden = true;
+    const title = session.rooms?.find((r) => r.name === room)?.title || room;
+    el("oda-baslik").textContent = title; el("tek-oda-ad").textContent = title;
+    el("ozet-oda").textContent = title; el("odasiz-durum").hidden = true;
     menu(false); panel(!narrow.matches);
     el("oda-icerik").hidden = false;
     const signal = session.roomController.signal;
     logLoop(session, signal).catch(() => {}); agentsLoop(session, signal).catch(() => {});
   }
   el("oda").addEventListener("change", () => { if (active) openRoom(active, el("oda").value); });
+  async function reloadRooms(session, selected = "") {
+    const {response, data} = await api(session, "/v1/rooms", session.controller.signal);
+    if (!response.ok || !Array.isArray(data.rooms)) throw new Error("Odalar yüklenemedi.");
+    if (active !== session) throw new Error("Oturum değişti.");
+    session.rooms = data.rooms;
+    el("oda").replaceChildren(); el("oda-secimi").hidden = data.rooms.length < 2;
+    el("tek-oda").hidden = data.rooms.length !== 1;
+    for (const room of data.rooms) { const option = node("option", room.title); option.value = room.name; el("oda").append(option); }
+    el("odasiz-durum").hidden = data.rooms.length > 0;
+    if (!data.rooms.length) { status.textContent = "Bu hesabın odası yok."; return; }
+    const room = data.rooms.some((r) => r.name === selected) ? selected : data.rooms[0].name;
+    el("oda").value = room;
+    openRoom(session, room);
+  }
   async function login(name, token) {
     stop(); remember("", "");
     const session = {name, token, controller: new AbortController()}; active = session;
@@ -364,22 +380,18 @@
       if (!response.ok) { logout("Giriş yapılamadı; biraz sonra tekrar dene."); return; }
       if (data.kind !== "insan") { logout("Bu sayfa yalnız insan hesapları içindir."); return; }
       session.maxBody = Number.isInteger(data.max_body) && data.max_body > 0 && data.max_body <= 1048576 ? data.max_body : 16384;
+      session.yonetici = data.yonetici === true;
       text.maxLength = session.maxBody; count();
       remember(token, name); el("token").value = "";
       el("yonetim-ac").hidden = !data.yonetici;
+      el("oda-ekle").hidden = !data.yonetici;
       form.hidden = true; view.hidden = false; el("giris-dugme").disabled = false;
       el("giris-ekrani").hidden = true; document.body.classList.add("oturum-acik");
       el("kullanici-ad").textContent = name;
       accountAvatar(name, "mini-avatar", el("kullanici-avatar"));
       el("oda-baslik").textContent = name;
-      el("oda").replaceChildren(); el("oda-secimi").hidden = data.rooms.length < 2;
-      el("tek-oda").hidden = data.rooms.length !== 1;
       el("oda-icerik").hidden = true;
-      for (const room of data.rooms) { const option = node("option", room); option.value = room; el("oda").append(option); }
-      el("odasiz-durum").hidden = data.rooms.length > 0;
-      if (!data.rooms.length) { status.textContent = "Bu hesabın odası yok."; return; }
-      el("oda").value = data.rooms.includes(preferredRoom) ? preferredRoom : data.rooms[0];
-      openRoom(session, el("oda").value);
+      await reloadRooms(session, preferredRoom);
     } catch (_) { if (!signal.aborted) logout("Giriş yapılamadı; bağlantını denetle."); }
   }
   form.addEventListener("submit", (event) => {
@@ -403,6 +415,8 @@
     zaten_var: "Bu adla bir hesap zaten var.", hesap_yok: "Hesap yok veya iptal edilmiş.",
     gecersiz_ad: "Geçersiz hesap adı.", gecersiz_oda: "Geçersiz oda adı; en az bir oda gerekli.",
     gecersiz_tur: "Tür ajan veya insan olmalı.", gecersiz_son: "Kayıt sayısı 1–1000 olmalı.",
+    gecersiz_baslik: "Oda başlığı 1–80 karakter olmalı; satır sonu içeremez.",
+    gecersiz_uye: "Üye seçimi geçersiz; yalnız aktif hesapları seçebilirsin.",
     gecersiz_json: "İstek biçimi geçersiz.", gecersiz_govde: "İstek metni geçersiz.",
     govde_cok_buyuk: "İstek çok büyük.", hiz_siniri: "İstek sınırına ulaşıldı; biraz bekle.",
     cok_fazla_baglanti: "Çok fazla eşzamanlı bağlantı; yeniden dene.",
@@ -431,6 +445,81 @@
     }
     return data;
   }
+  function acceptManagementSession(data) {
+    clearTimeout(managementTimer);
+    managementSession = data.oturum; managementExpiry = Date.parse(data.bitis);
+    managementTimer = setTimeout(() => {
+      clearYonetim();
+      if (el("oda-dialog").open) showRoomVerification();
+      el("yonetim-durum").textContent = managementErrors.yonetim_oturumu_gerekli;
+    }, Math.max(0, managementExpiry - Date.now()));
+  }
+  let roomCreateReady = false, roomCreateBusy = false;
+  function showRoomVerification() {
+    roomCreateReady = false;
+    el("oda-dogrulama").hidden = false; el("oda-kod").disabled = false;
+    el("oda-bilgiler").hidden = true; el("oda-bilgiler").disabled = true;
+    el("oda-kaydet").textContent = "Doğrula ve devam et";
+  }
+  async function prepareRoomCreation(session) {
+    const accounts = await managementAPI("/hesaplar");
+    if (active !== session || !el("oda-dialog").open) return;
+    el("oda-uyeler").replaceChildren();
+    for (const a of accounts.filter((a) => !a.revoked)) {
+      const label = node("label", undefined, "oda-uye"), input = node("input");
+      input.type = "checkbox"; input.value = a.name; input.checked = a.name === session.name;
+      input.disabled = a.name === session.name;
+      label.append(input, accountAvatar(a.name, "mini-avatar"), node("span", a.name),
+        node("small", a.name === session.name ? "Sen" : a.yonetici ? "Yönetici" : a.kind === "insan" ? "İnsan" : "Ajan"));
+      el("oda-uyeler").append(label);
+    }
+    roomCreateReady = true;
+    el("oda-kod").value = ""; el("oda-kod").disabled = true; el("oda-dogrulama").hidden = true;
+    el("oda-bilgiler").disabled = false; el("oda-bilgiler").hidden = false;
+    el("oda-kaydet").textContent = "Odayı oluştur"; el("oda-baslik-girdi").focus();
+  }
+  el("oda-ekle").addEventListener("click", async () => {
+    const session = active;
+    if (!session?.yonetici || roomCreateBusy) return;
+    menu(false); showRoomVerification(); el("oda-hata").textContent = "";
+    el("oda-dialog").showModal();
+    if (managementSession && Date.now() < managementExpiry) {
+      roomCreateBusy = true; el("oda-kaydet").disabled = true;
+      try { await prepareRoomCreation(session); } catch (error) { el("oda-hata").textContent = error.message; }
+      finally { roomCreateBusy = false; el("oda-kaydet").disabled = false; }
+    } else el("oda-kod").focus();
+  });
+  el("oda-vazgec").addEventListener("click", () => { if (!roomCreateBusy) el("oda-dialog").close(); });
+  el("oda-dialog").addEventListener("cancel", (event) => { if (roomCreateBusy) event.preventDefault(); });
+  el("oda-dialog").addEventListener("close", () => {
+    el("oda-kod").value = ""; el("oda-baslik-girdi").value = ""; el("oda-uyeler").replaceChildren();
+    el("oda-hata").textContent = ""; showRoomVerification();
+    if (active?.yonetici) (matchMedia("(max-width: 760px)").matches ? el("menu-ac") : el("oda-ekle")).focus();
+  });
+  el("oda-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const session = active;
+    if (!session?.yonetici || roomCreateBusy) return;
+    roomCreateBusy = true; el("oda-kaydet").disabled = true; el("oda-vazgec").disabled = true;
+    el("oda-hata").textContent = "";
+    try {
+      if (!roomCreateReady) {
+        const kod = el("oda-kod").value; el("oda-kod").value = "";
+        const data = await managementAPI("/oturum", "POST", {kod});
+        acceptManagementSession(data); await prepareRoomCreation(session); return;
+      }
+      const baslik = el("oda-baslik-girdi").value.trim();
+      const uyeler = [...el("oda-uyeler").querySelectorAll("input:checked")].map((input) => input.value);
+      const room = await managementAPI("/odalar", "POST", {baslik, uyeler});
+      await reloadRooms(session, room.name); el("oda-dialog").close();
+      status.textContent = baslik + " odası oluşturuldu.";
+    } catch (error) {
+      if (active === session && el("oda-dialog").open) {
+        el("oda-hata").textContent = error.message;
+        if (!managementSession || Date.now() >= managementExpiry) showRoomVerification();
+      }
+    } finally { roomCreateBusy = false; el("oda-kaydet").disabled = false; el("oda-vazgec").disabled = false; }
+  });
   function managementAction(fn) {
     return async () => { try { await fn(); } catch (error) { clearTimeout(managementToastTimer); el("yonetim-durum").textContent = error.message; } };
   }
@@ -601,6 +690,7 @@
       oturum_acildi: "Yönetim oturumu açıldı", oturum_reddedildi: "Yönetim oturumu reddedildi",
       hesap_acildi: "Hesap açıldı", hesap_iptal: "Hesap iptal edildi", iptal: "Hesap iptal edildi", revoke: "Hesap iptal edildi",
       odaya_eklendi: "Odaya eklendi", "odaya-ekle": "Odaya eklendi",
+      oda_olusturuldu: "Oda oluşturuldu",
       odadan_cikarildi: "Odadan çıkarıldı", "odadan-cikar": "Odadan çıkarıldı",
       "yonetici-yap": "Yönetici yetkisi verildi", "yonetici-al": "Yönetici yetkisi kaldırıldı"
     };
@@ -714,10 +804,7 @@
       try {
       const kod = el("yonetim-kod").value; el("yonetim-kod").value = "";
       const data = await managementAPI("/oturum", "POST", {kod});
-      managementSession = data.oturum; managementExpiry = Date.parse(data.bitis);
-      managementTimer = setTimeout(() => {
-        clearYonetim(); el("yonetim-durum").textContent = managementErrors.yonetim_oturumu_gerekli;
-      }, Math.max(0, managementExpiry - Date.now()));
+      acceptManagementSession(data);
       // Önceki hatalı kodun bildirimi oturum açılınca kalmasın.
       clearTimeout(managementToastTimer); el("yonetim-durum").replaceChildren();
       el("yonetim-kod-form").hidden = true; el("yonetim-icerik").hidden = false; await refreshManagement();

@@ -55,6 +55,9 @@ func (s *Store) ChangeAccount(ctx context.Context, yapan, islem, ad, oda, secret
 		if revoked.Valid {
 			return ErrNotFound
 		}
+		if err := ensureRoomTx(ctx, tx, oda, s.stamp()); err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO agent_rooms(agent,room) VALUES (?,?)`, ad, oda)
 	case "odadan-cikar", "odadan_cikarildi":
 		_, err = tx.ExecContext(ctx, `DELETE FROM agent_rooms WHERE agent=? AND room=?`, ad, oda)
@@ -82,6 +85,9 @@ func (s *Store) AddRoom(ctx context.Context, ad, oda string) error {
 	if err = tx.QueryRowContext(ctx, `SELECT 1 FROM agents WHERE name=? AND revoked_at IS NULL`, ad).Scan(&one); errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	} else if err != nil {
+		return err
+	}
+	if err := ensureRoomTx(ctx, tx, oda, s.stamp()); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO agent_rooms(agent,room) VALUES (?,?)`, ad, oda); err != nil {

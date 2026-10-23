@@ -6,7 +6,8 @@ import {readFile} from "node:fs/promises";
 // Ürün betiğini küçük bir DOM taklidiyle çalıştırır; ağ yalnız testin sahte fetch'idir.
 // Bu kontroller görsel tarayıcı testinin yerine geçmez.
 class Element {
-  constructor() {
+  constructor(tag = "div") {
+    this.tagName = tag.toUpperCase(); this.open = false;
     this.children = []; this.listeners = new Map(); this.value = ""; this.disabled = false;
     this.hidden = false; this.dataset = {}; this.textContent = ""; this.scrollTop = 0;
     this.scrollHeight = 0; this.clientHeight = 0; this.parentElement = {setAttribute() {}};
@@ -22,10 +23,16 @@ class Element {
   get firstChild() { return this.children[0]; }
   get options() { return this.children; }
   setAttribute() {}
-  querySelectorAll() { return []; }
+  querySelectorAll(selector) {
+    const all = this.children.flatMap((child) => [child, ...child.querySelectorAll("*")]);
+    if (selector === "*") return all;
+    if (selector === "input:checked") return all.filter((child) => child.tagName === "INPUT" && child.checked);
+    return [];
+  }
   getClientRects() { return [{}]; }
   focus() {}
-  close() {}
+  showModal() { this.open = true; }
+  close() { if (this.open) { this.open = false; this.listeners.get("close")?.({}); } }
   setCustomValidity(message) { this.validation = message; }
   checkValidity() { return !this.validation; }
   reportValidity() {}
@@ -39,16 +46,16 @@ async function harness(fetch) {
     fetch, TextEncoder, URLSearchParams, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
     location: {search: ""}, matchMedia: media, window: {matchMedia: media},
     sessionStorage: {getItem() { return null; }, setItem() {}, removeItem() {}},
-    document: {getElementById: el, createElement: () => new Element(), addEventListener() {},
+    document: {getElementById: el, createElement: (tag) => new Element(tag), addEventListener() {},
       documentElement: new Element(), body: new Element()},
   });
   const source = await readFile(new URL("../../internal/server/izle/izle.js", import.meta.url), "utf8");
   vm.runInContext(source.replace(/\}\)\(\);\s*$/, `
-    globalThis.inspect = {setSession(s) { active = s; }, addMessages,
+    globalThis.inspect = {setSession(s) { active = s; }, addMessages, stop,
       sizes() { return {rows: rows.length, ids: ids.size, threads: threads.size}; }};
   })();`), context);
   const session = {name: "demo", token: "test-only", room: "r1", maxBody: 16384,
-    roomController: new AbortController(), history: {oldest: 0, hasMore: false, browsing: false}};
+    controller: new AbortController(), roomController: new AbortController(), history: {oldest: 0, hasMore: false, browsing: false}};
   context.inspect.setSession(session);
   el("tip").value = "soru";
   return {el, session, inspect: context.inspect};
@@ -92,4 +99,48 @@ test("canlı mesaj akışında DOM, kimlikler ve konuşmalar sınırlı tutulur"
   assert.equal(sizes.rows, 500); assert.equal(sizes.ids, 500); assert.equal(sizes.threads, 500);
   assert.equal(h.el("mesajlar").children.length, 500);
   assert.equal(h.session.history.oldest, 201); assert.equal(h.session.history.hasMore, true);
+});
+
+test("yeni oda doğrulama, açık üye seçimi ve başlıkla otomatik açılma akışını tamamlar", async (t) => {
+  const calls = [];
+  const result = (data, status = 200) => ({ok:status < 300,status,json:async()=>data});
+  const h = await harness(async (path, options) => {
+    calls.push({path,body:options.body && JSON.parse(options.body)});
+    if (path === "/v1/yonetim/oturum") return result({oturum:"test-management",bitis:new Date(Date.now()+600000).toISOString()});
+    if (path === "/v1/yonetim/hesaplar") return result([{name:"demo",kind:"insan",yonetici:true},{name:"davetli",kind:"insan"},{name:"iptal",revoked:true}]);
+    if (path === "/v1/yonetim/odalar") return result({name:"oda-test",title:"Admin Sohbeti"},201);
+    if (path === "/v1/rooms") return result({rooms:[{name:"r1",title:"Eski oda"},{name:"oda-test",title:"Admin Sohbeti"}]});
+    if (path.endsWith("/log?tail=1")) return result({messages:[],has_more:false});
+    if (path.endsWith("/agents")) return result({agents:[]});
+    return new Promise(()=>{});
+  });
+  t.after(()=>h.inspect.stop());
+  h.session.yonetici = true;
+  await h.el("oda-ekle").listeners.get("click")();
+  assert.equal(h.el("oda-dialog").open,true);
+  assert.equal(h.el("oda-bilgiler").disabled,true);
+  assert.equal(calls.length,0);
+  h.el("oda-kod").value = "123456";
+  await h.el("oda-form").listeners.get("submit")({preventDefault(){}});
+  assert.equal(h.el("oda-kod").value,"");
+  assert.equal(h.el("oda-bilgiler").disabled,false);
+  assert.equal(h.el("oda-uyeler").children.length,2);
+  const selected = h.el("oda-uyeler").children[1].children[0]; selected.checked=true;
+  h.el("oda-baslik-girdi").value = "Admin Sohbeti";
+  await h.el("oda-form").listeners.get("submit")({preventDefault(){}});
+  const creation = calls.find((c)=>c.path === "/v1/yonetim/odalar");
+  assert.equal(creation.body.baslik,"Admin Sohbeti");
+  assert.deepEqual([...creation.body.uyeler],["demo","davetli"]);
+  assert.equal(h.el("oda-baslik").textContent,"Admin Sohbeti");
+  assert.equal(h.el("oda").value,"oda-test");
+  assert.equal(h.el("oda-dialog").open,false);
+});
+
+test("yönetici olmayan oturum yeni oda akışını başlatamaz", async () => {
+  let calls=0;
+  const h=await harness(async()=>{calls++;throw new Error("ağ kullanılmamalı");});
+  h.session.yonetici=false;
+  await h.el("oda-ekle").listeners.get("click")();
+  await h.el("oda-form").listeners.get("submit")({preventDefault(){}});
+  assert.equal(calls,0);assert.equal(h.el("oda-dialog").open,false);
 });

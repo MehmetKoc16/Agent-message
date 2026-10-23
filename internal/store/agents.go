@@ -65,6 +65,9 @@ func (s *Store) addAgent(ctx context.Context, name, kind, tokenHash string, room
 		return err
 	}
 	for _, r := range rooms {
+		if err := ensureRoomTx(ctx, tx, r, s.stamp()); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO agent_rooms (agent, room) VALUES (?,?)`, name, r); err != nil {
 			return err

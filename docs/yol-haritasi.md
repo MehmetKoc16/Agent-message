@@ -109,6 +109,14 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 - CI: Actions commit SHA'ları sabit; web davranış/önizleme testleri ekli. Sunucu anahtarı veya otomatik deploy yok.
 - Kurulum elle, mevcut değişiklik protokolüyle yapılır. v3'ten eski ikiliye dönüş için yükseltme öncesi veritabanı yedeği gerekir.
 
+## Faz 9: Başlıklı odalar ve + ile oluşturma (kod hazır; canlıya kurulmadı)
+
+- ODALAR yanındaki + ile TOTP doğrulamalı yeni oda; Türkçe başlık ve açık üye seçimi.
+- Oluşturan yönetici otomatik katılır; seçilmeyen hesaplara oda erişimi açılmaz.
+- Oda başlığı listede, sohbet başlığında ve oda özetinde görünür; yeni oda otomatik açılır.
+- Şema v4, eski oda kimliklerini/üyeliklerini koruyarak başlıkları ekler; işlemler denetim kaydına yazılır.
+- Yerel önizlemede örnek yönetici ve 123456 doğrulama koduyla denenebilir; gerçek uygulama TOTP kullanır.
+
 Sonraki özellik adayları: hesabı koruyarak token yenileme; görev kabul/ret/tamamlandı durumları;
 süreli dosya çalışma rezervasyonu; sır göstermeyen `relay doctor`. Bunlar henüz uygulanmadı.
 
