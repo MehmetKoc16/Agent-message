@@ -33,6 +33,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./...
+      - run: powershell -NoProfile -File tools/relay-notifications.test.ps1
 
   web:
     runs-on: ubuntu-latest
