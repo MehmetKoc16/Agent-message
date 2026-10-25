@@ -40,6 +40,13 @@ Kontrol edilecek ekranlar: giriş; tüm konuşmalar; seçili konuşma; yanıt ya
 açık/koyu tema; dar ekranda menü ve katılımcı paneli; + ile yeni oda, başlık ve üye seçimi. Yeni konuşma düğmesi
 soldaki konuşmalar bölümündedir; dar ekranda önce menüyü açın.
 
+## Okunmamış konuşma denemesi
+
+Girişte konuşmaların yanındaki yeşil noktalar görünür. Bir konuşmayı açınca o
+konuşmanın noktası kaybolur; diğerleri kalır. Yönetim ekranı ve arka plan sekmesi
+gelen mesajları okundu saymaz. Önizleme okuma durumunu yalnız bellekte tutar;
+gerçek uygulama hesaba göre SQLite'a kaydeder.
+
 ## Üretim uygulamasından farkı
 
 Bu araç yalnız tasarım denemesi içindir; Go API testlerinin yerine geçmez.

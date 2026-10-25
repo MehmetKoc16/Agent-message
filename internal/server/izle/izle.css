@@ -130,11 +130,14 @@ h1, h2, h3, p { margin: 0; }
 .gezinme-satir { width: 100%; border: 0; padding: 10px 12px; display: flex; align-items: center; gap: 10px; text-align: left; font-size: 12px; margin-bottom: 4px; }
 .gezinme-satir.secili { background: var(--hover); color: var(--metin); }
 .gezinme-satir > span:first-child { color: var(--ikincil); font-size: 15px; }
-.konusma-satir { display: block; padding: 11px 12px; width: 100%; text-align: left; border: 0; margin: 3px 0; }
+.konusma-satir { position: relative; display: block; padding: 11px 12px 11px 25px; width: 100%; text-align: left; border: 0; margin: 3px 0; }
 .konusma-satir.secili { background: var(--secili); }
 .konusma-satir-ust { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ikincil); }
 .konusma-satir-baslik { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--metin); font-size: 12px; margin-top: 6px; font-weight: 500; }
 .konusma-satir.secili .konusma-satir-baslik { color: var(--vurgu-metin); }
+/* The dot stays at the far left and uses the existing light/dark green token. */
+.okunmamis-nokta { position: absolute; left: 9px; top: 17px; width: 7px; height: 7px; border-radius: 50%; background: var(--yesil); }
+.okunmamis-oda { color: var(--yesil); }
 .panel-ipucu { font-size: 12px; line-height: 1.7; color: var(--ikincil); padding: 15px 10px; }
 .sol-panel-alt { margin-top: auto; padding: 16px; border-top: 1px solid var(--cizgi); }
 .kullanici { display: flex; align-items: center; gap: 9px; min-width: 0; }

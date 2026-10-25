@@ -19,7 +19,7 @@ import (
 	_ "modernc.org/sqlite" // sürücü adı: "sqlite"
 )
 
-const schemaVersion = 4
+const schemaVersion = 5
 
 // Hata değerleri; server paketi bunları HTTP koduna çevirir.
 var (
@@ -149,6 +149,9 @@ func (s *Store) migrate() error {
 			`CREATE TABLE rooms (name TEXT PRIMARY KEY, title TEXT NOT NULL, created_at TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '')`,
 			`INSERT INTO rooms(name,title,created_at) SELECT room,room,'' FROM (SELECT room FROM agent_rooms UNION SELECT room FROM threads UNION SELECT room FROM room_counters UNION SELECT room FROM messages)`,
 		)
+	}
+	if v < 5 {
+		stmts = append(stmts, `CREATE TABLE IF NOT EXISTS thread_reads (agent TEXT NOT NULL REFERENCES agents(name), room TEXT NOT NULL, thread TEXT NOT NULL, last_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(agent,room,thread))`)
 	}
 	for _, q := range stmts {
 		if _, err := tx.Exec(q); err != nil {

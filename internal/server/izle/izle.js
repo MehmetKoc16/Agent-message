@@ -148,6 +148,7 @@
     if (view.classList.contains("menu-acik")) { menu(false); el("menu-ac").focus(); }
     updateBaglam();
     scrollDown();
+    if (thread) markSelectedRead();
   }
   function refreshContext() {
     const visible = rows.filter((row) => !filter || row.thread === filter);
@@ -172,8 +173,10 @@
       const count = node("span"); top.append(node("span", m.thread), count);
       const title = m.body.split("\n").find((s) => s.trim()) || "Yeni konuşma";
       button.append(top, node("span", title, "konusma-satir-baslik"));
-      button.title = title; button.addEventListener("click", () => showFilter(m.thread));
-      thread = {button, count, title, total: 0}; threads.set(m.thread, thread);
+      button.title = title; button.addEventListener("click", () => openUnreadThread(m.thread));
+      const dot = node("span", undefined, "okunmamis-nokta"); dot.hidden = true;
+      dot.setAttribute("aria-hidden", "true"); button.prepend(dot);
+      thread = {button, count, title, dot, total: 0}; threads.set(m.thread, thread);
       el("konusma-listesi").prepend(button);
     }
     thread.total++;
@@ -229,6 +232,16 @@
     }
     threads.clear(); el("konusma-listesi").replaceChildren();
     for (const row of rows) updateThread(row.message);
+    if (session.unreadSummaries) {
+      for (const m of list) {
+        const key = m.room + "/" + m.thread, summary = session.unreadSummaries.get(key);
+        if (summary) {
+          summary.last_id = Math.max(summary.last_id, m.id);
+          if (m.from !== session.name) summary.last_incoming_id = Math.max(summary.last_incoming_id, m.id);
+        }
+      }
+      renderUnread(session); markSelectedRead();
+    }
     if (session.history && rows.length) {
       session.history.oldest = rows[0].message.id;
       el("gecmis").hidden = !session.history.hasMore;
@@ -304,7 +317,7 @@
     // Canlı döngü yükleme sırasında sayfa imlecini değiştirmesin.
     history.browsing = true; el("guncel").hidden = false;
     try {
-      const data = await request(session, "/log?before=" + history.oldest, signal);
+      const data = await request(session, (filter ? "/threads/" + encodeURIComponent(filter) : "") + "/log?before=" + history.oldest, signal);
       if (signal.aborted) return;
       history.hasMore = data.has_more;
       if (data.messages.length) {
@@ -317,6 +330,88 @@
     } catch (_) { /* Oda değişimi ve çıkış bekleyen sayfayı iptal eder. */ }
     finally { if (!signal.aborted) el("gecmis").disabled = false; }
   });
+  function readKey(session, thread) { return session.room + "/" + thread; }
+  function renderUnread(session) {
+    if (active !== session || !session.unreadSummaries) return;
+    for (const summary of session.unreadSummaries.values()) {
+      if (summary.room !== session.room) continue;
+      if (!threads.has(summary.thread)) updateThread({thread: summary.thread, body: summary.title, type: "bilgi"});
+      const thread = threads.get(summary.thread);
+      const read = Math.max(summary.read_id, session.localReads?.get(summary.room + "/" + summary.thread) || 0);
+      const unread = summary.last_incoming_id > read;
+      thread.dot.hidden = !unread;
+      thread.button.setAttribute("aria-label", summary.thread + " · " + thread.title + (unread ? " · Okunmamış mesajlar" : ""));
+      thread.count.textContent = summary.total + " mesaj";
+    }
+    const ordered = [...threads].sort(([a], [b]) => (session.unreadSummaries.get(session.room + "/" + b)?.last_id || 0) - (session.unreadSummaries.get(session.room + "/" + a)?.last_id || 0));
+    el("konusma-listesi").replaceChildren(...ordered.map(([, thread]) => thread.button));
+    for (const option of el("oda").options) {
+      const unread = [...session.unreadSummaries.values()].some((s) => s.room === option.value && s.last_incoming_id > Math.max(s.read_id, session.localReads?.get(s.room + "/" + s.thread) || 0));
+      const title = session.rooms?.find((r) => r.name === option.value)?.title || option.value;
+      option.textContent = (unread ? "● " : "") + title; option.classList.toggle("okunmamis-oda", unread);
+    }
+  }
+  async function refreshUnread(session) {
+    const {response, data} = await api(session, "/v1/unread", session.controller.signal);
+    if (!response.ok || !Array.isArray(data.threads) || active !== session) return;
+    session.localReads ||= new Map();
+    session.unreadSummaries = new Map(data.threads.map((s) => [s.room + "/" + s.thread, s]));
+    for (const row of rows) {
+      const m = row.message, s = session.unreadSummaries.get(session.room + "/" + m.thread);
+      if (s) { s.last_id = Math.max(s.last_id, m.id); if (m.from !== session.name) s.last_incoming_id = Math.max(s.last_incoming_id, m.id); }
+    }
+    renderUnread(session); markSelectedRead();
+  }
+  async function unreadLoop(session) {
+    while (!session.controller.signal.aborted) {
+      try { await refreshUnread(session); } catch (_) { /* Failed reads never clear a dot. */ }
+      await pause(10000, session.controller.signal);
+    }
+  }
+  async function markSelectedRead() {
+    const session = active, thread = filter;
+    if (!session?.unreadSummaries || !thread || view.hidden || document.visibilityState === "hidden") return;
+    const key = readKey(session, thread);
+    const id = Math.max(0, ...rows.filter((row) => row.thread === thread && !row.element.hidden).map((row) => row.message.id));
+    const summary = session.unreadSummaries.get(key);
+    const read = Math.max(summary?.read_id || 0, session.localReads?.get(key) || 0);
+    if (!id || id <= read || session.readPending) return;
+    const room = session.room, signal = session.roomController.signal;
+    session.readPending = true;
+    try {
+      const {response} = await api(session, "/v1/rooms/" + encodeURIComponent(room) + "/threads/" + encodeURIComponent(thread) + "/read", signal, {
+        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({last_id: id})
+      });
+      if (response.ok && active === session) {
+        session.localReads ||= new Map(); session.localReads.set(key, Math.max(session.localReads.get(key) || 0, id));
+        renderUnread(session);
+      }
+    } catch (_) { /* Preserve unread status if the server did not acknowledge. */ }
+    finally {
+      session.readPending = false;
+      if (signal.aborted && active === session) markSelectedRead();
+      // If a newer visible message arrived during the write, acknowledge only that new snapshot.
+      if (!signal.aborted && active === session && filter === thread && session.localReads?.get(key) >= id &&
+          rows.some((row) => row.thread === thread && row.message.id > id)) markSelectedRead();
+    }
+  }
+  async function openUnreadThread(thread) {
+    showFilter(thread);
+    const session = active, summary = session?.unreadSummaries?.get(readKey(session, thread));
+    if (!summary || rows.some((row) => row.thread === thread && row.message.id === summary.last_id)) return;
+    const room = session.room, signal = session.roomController.signal;
+    try {
+      const data = await request(session, "/threads/" + encodeURIComponent(thread) + "/log", signal);
+      if (signal.aborted || active !== session || session.room !== room || filter !== thread) return;
+      rows = []; ids = new Set(); messages.replaceChildren();
+      session.history.hasMore = data.has_more;
+      addMessages(data.messages, session); showFilter(thread);
+    } catch (_) { /* Keep the dot if the requested conversation could not be displayed. */ }
+  }
+  document.addEventListener("visibilitychange", () => markSelectedRead());
+  // Document bubbling runs after the return button has made the chat visible.
+  document.addEventListener("click", (event) => { if (event.target === el("sohbete-don")) markSelectedRead(); });
+
   function validateRecipient() {
     const unavailable = Array.from(recipient.options).some((o) => o.value === recipient.value && o.disabled);
     recipient.setCustomValidity(unavailable ? "Seçtiğin alıcı artık bu odada yok. Yeni bir alıcı seç." : "");
@@ -435,6 +530,7 @@
       el("oda-baslik").textContent = name;
       el("oda-icerik").hidden = true;
       await reloadRooms(session, preferredRoom);
+      unreadLoop(session).catch(() => {});
     } catch (_) { if (!signal.aborted) logout("Giriş yapılamadı; bağlantını denetle."); }
   }
   form.addEventListener("submit", (event) => {
