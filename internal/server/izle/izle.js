@@ -409,6 +409,8 @@
     } catch (_) { /* Keep the dot if the requested conversation could not be displayed. */ }
   }
   document.addEventListener("visibilitychange", () => markSelectedRead());
+  // Document bubbling runs after the return button has made the chat visible.
+  document.addEventListener("click", (event) => { if (event.target === el("sohbete-don")) markSelectedRead(); });
 
   function validateRecipient() {
     const unavailable = Array.from(recipient.options).some((o) => o.value === recipient.value && o.disabled);
@@ -930,7 +932,7 @@
     else { clearYonetim(); el("yonetim-kod").focus(); }
   }));
   el("sohbete-don").addEventListener("click", () => {
-    el("yonetim").hidden = true; view.hidden = false; markSelectedRead(); el("yonetim-parola").replaceChildren();
+    el("yonetim").hidden = true; view.hidden = false; el("yonetim-parola").replaceChildren();
   });
   el("yonetim-yenile").addEventListener("click", managementAction(refreshManagement));
   el("yonetim-kod-form").addEventListener("submit", (event) => {

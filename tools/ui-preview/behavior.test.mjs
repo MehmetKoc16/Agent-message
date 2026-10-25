@@ -79,56 +79,6 @@ async function harness(fetch, width = 1440) {
   }};
 }
 
-test("okunmamış işareti yalnız açılan konuşmada kalkar; arka plan ve eski özet okumayı geri almaz", async () => {
-  const writes = [];
-  const snapshots = [{room:"r1",thread:"T-1",title:"first",total:1,last_id:1,last_incoming_id:1,read_id:0},
-    {room:"r1",thread:"T-2",title:"second",total:1,last_id:2,last_incoming_id:2,read_id:0}];
-  const h = await harness(async (path, options) => {
-    if (path === "/v1/unread") return {ok:true, json:async () => ({threads: snapshots.map((s)=>({...s}))})};
-    writes.push({path, body:JSON.parse(options.body)});
-    return {ok:true,json:async()=>({ok:true})};
-  });
-  const msg = (id, thread, from="other") => ({id,thread,room:"r1",from,type:"bilgi",body:thread,created_at:"2026-10-25T00:00:00Z"});
-  h.el("izleme").hidden = false;
-  h.inspect.addMessages([msg(1,"T-1"),msg(2,"T-2")],h.session);
-  await h.inspect.refreshUnread(h.session);
-  const dot = (name) => h.el("konusma-listesi").children.find((button)=>button.title===name).children[0];
-  assert.equal(dot("T-1").hidden,false);
-  assert.equal(dot("T-2").hidden,false);
-  assert.equal(writes.length,0, "loading all conversations must not mark them read");
-  h.inspect.showFilter("T-1");await new Promise(setImmediate);
-  assert.deepEqual(writes.map((r)=>r.body.last_id),[1]);
-  assert.equal(dot("T-1").hidden,true);
-  assert.equal(dot("T-2").hidden,false);
-  await h.inspect.refreshUnread(h.session);
-  assert.equal(dot("T-1").hidden,true,"stale server snapshot resurrected a cleared dot");
-  h.setVisibility("hidden");
-  h.inspect.addMessages([msg(3,"T-1")],h.session);await new Promise(setImmediate);
-  assert.equal(writes.length,1);
-  assert.equal(dot("T-1").hidden,false);
-  h.setVisibility("visible");h.documentListeners.get("visibilitychange")();await new Promise(setImmediate);
-  assert.equal(writes.at(-1).body.last_id,3);
-  assert.equal(dot("T-1").hidden,true);
-  h.el("izleme").hidden = true;
-  h.inspect.addMessages([msg(4,"T-1")],h.session);await new Promise(setImmediate);
-  assert.equal(writes.length,2,"management view marked hidden messages read");
-  assert.equal(dot("T-1").hidden,false);
-});
-
-test("başarısız okuma kaydı işareti silmez ve görünmeyen yeni mesajı okundu saymaz", async () => {
-  const writes = [];
-  const h = await harness(async (path, options) => {
-    if (path==="/v1/unread") return {ok:true,json:async()=>({threads:[{room:"r1",thread:"T-1",title:"old",total:2,last_id:200,last_incoming_id:200,read_id:0}]})};
-    writes.push(JSON.parse(options.body));return {ok:false,json:async()=>({error:"test"})};
-  });
-  h.el("izleme").hidden = false;
-  h.inspect.addMessages([{id:1,thread:"T-1",room:"r1",from:"other",type:"bilgi",body:"old",created_at:"2026-10-25T00:00:00Z"}],h.session);
-  await h.inspect.refreshUnread(h.session);
-  h.inspect.showFilter("T-1");await new Promise(setImmediate);
-  assert.deepEqual(writes,[{last_id:1}]);
-  assert.equal(h.el("konusma-listesi").children[0].children[0].hidden,false);
-});
-
 test("dar ekranda menü ve katılımcılar perdeyi paylaşır; perde doğru paneli kapatır", async () => {
   const h = await harness(async () => { throw new Error("ağ kullanılmamalı"); }, 390);
   h.el("katilimci-panel").hidden = true;
@@ -372,4 +322,54 @@ test("yönetici olmayan oturum yeni oda akışını başlatamaz", async () => {
   await h.el("oda-ekle").listeners.get("click")();
   await h.el("oda-form").listeners.get("submit")({preventDefault(){}});
   assert.equal(calls,0);assert.equal(h.el("oda-dialog").open,false);
+});
+
+test("okunmamış işareti yalnız açılan konuşmada kalkar; arka plan ve eski özet okumayı geri almaz", async () => {
+  const writes = [];
+  const snapshots = [{room:"r1",thread:"T-1",title:"first",total:1,last_id:1,last_incoming_id:1,read_id:0},
+    {room:"r1",thread:"T-2",title:"second",total:1,last_id:2,last_incoming_id:2,read_id:0}];
+  const h = await harness(async (path, options) => {
+    if (path === "/v1/unread") return {ok:true, json:async () => ({threads: snapshots.map((s)=>({...s}))})};
+    writes.push({path, body:JSON.parse(options.body)});
+    return {ok:true,json:async()=>({ok:true})};
+  });
+  const msg = (id, thread, from="other") => ({id,thread,room:"r1",from,type:"bilgi",body:thread,created_at:"2026-10-25T00:00:00Z"});
+  h.el("izleme").hidden = false;
+  h.inspect.addMessages([msg(1,"T-1"),msg(2,"T-2")],h.session);
+  await h.inspect.refreshUnread(h.session);
+  const dot = (name) => h.el("konusma-listesi").children.find((button)=>button.title===name).children[0];
+  assert.equal(dot("T-1").hidden,false);
+  assert.equal(dot("T-2").hidden,false);
+  assert.equal(writes.length,0, "loading all conversations must not mark them read");
+  h.inspect.showFilter("T-1");await new Promise(setImmediate);
+  assert.deepEqual(writes.map((r)=>r.body.last_id),[1]);
+  assert.equal(dot("T-1").hidden,true);
+  assert.equal(dot("T-2").hidden,false);
+  await h.inspect.refreshUnread(h.session);
+  assert.equal(dot("T-1").hidden,true,"stale server snapshot resurrected a cleared dot");
+  h.setVisibility("hidden");
+  h.inspect.addMessages([msg(3,"T-1")],h.session);await new Promise(setImmediate);
+  assert.equal(writes.length,1);
+  assert.equal(dot("T-1").hidden,false);
+  h.setVisibility("visible");h.documentListeners.get("visibilitychange")();await new Promise(setImmediate);
+  assert.equal(writes.at(-1).body.last_id,3);
+  assert.equal(dot("T-1").hidden,true);
+  h.el("izleme").hidden = true;
+  h.inspect.addMessages([msg(4,"T-1")],h.session);await new Promise(setImmediate);
+  assert.equal(writes.length,2,"management view marked hidden messages read");
+  assert.equal(dot("T-1").hidden,false);
+});
+
+test("başarısız okuma kaydı işareti silmez ve görünmeyen yeni mesajı okundu saymaz", async () => {
+  const writes = [];
+  const h = await harness(async (path, options) => {
+    if (path==="/v1/unread") return {ok:true,json:async()=>({threads:[{room:"r1",thread:"T-1",title:"old",total:2,last_id:200,last_incoming_id:200,read_id:0}]})};
+    writes.push(JSON.parse(options.body));return {ok:false,json:async()=>({error:"test"})};
+  });
+  h.el("izleme").hidden = false;
+  h.inspect.addMessages([{id:1,thread:"T-1",room:"r1",from:"other",type:"bilgi",body:"old",created_at:"2026-10-25T00:00:00Z"}],h.session);
+  await h.inspect.refreshUnread(h.session);
+  h.inspect.showFilter("T-1");await new Promise(setImmediate);
+  assert.deepEqual(writes,[{last_id:1}]);
+  assert.equal(h.el("konusma-listesi").children[0].children[0].hidden,false);
 });
