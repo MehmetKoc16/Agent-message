@@ -142,7 +142,7 @@
   function showFilter(thread) {
     filter = thread; targetExplicit = false; clearReply();
     el("filtre").textContent = thread ? "Konuşma: " + thread : "Tüm konuşmalar";
-    el("kapat").hidden = !thread;
+    el("kapat").hidden = !thread || thread === "T-0";
     for (const row of rows) row.element.hidden = !!thread && row.thread !== thread;
     refreshContext();
     if (view.classList.contains("menu-acik")) { menu(false); el("menu-ac").focus(); }
@@ -203,7 +203,7 @@
       const stamp = new Date(m.created_at);
       const time = node("time", stamp.toLocaleString("tr-TR", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}), "zaman");
       time.dateTime = m.created_at; time.title = stamp.toLocaleString("tr-TR"); meta.append(time);
-      const thread = node("button", m.thread + " · " + m.turn + "/" + m.max_turns, "konusma");
+      const thread = node("button", m.thread + " · " + m.turn + "/" + (m.max_turns || "∞"), "konusma");
       thread.type = "button"; thread.addEventListener("click", () => showFilter(m.thread));
       const answer = node("button", "Yanıtla", "yanitla"); answer.type = "button";
       answer.addEventListener("click", () => {
