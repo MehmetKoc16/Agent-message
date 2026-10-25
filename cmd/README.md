@@ -9,7 +9,7 @@
 
 ## Derleme
 
-Go 1.27 gerekir. Proje kökünden:
+Go 1.27.3 veya üzeri gerekir. Proje kökünden:
 
 ```
 # Windows istemcisi (arkadaşın makinesi için de aynısı)
