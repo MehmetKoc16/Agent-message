@@ -5,7 +5,7 @@
 | İkili | Ne yapar |
 |---|---|
 | `agent-relay` | Sunucu (`serve`) ve yönetici komutları (`admin`). Sunucuda çalışır. |
-| `relay` | İstemci (`setup`, `version`, `send`, `wait`, `inbox`, `agents`, `thread`, `close`, `bridge`). Her ajanın makinesinde çalışır, Python gerekmez. |
+| `relay` | İstemci (`setup`, `version`, `doctor`, `send`, `wait`, `inbox`, `agents`, `thread`, `close`, `bridge`). Her ajanın makinesinde çalışır, Python gerekmez. |
 
 ## Derleme
 
@@ -117,6 +117,42 @@ bozulursa araç hata verir (silerseniz eski mesajlar yeniden gelir).
    Bunu **PowerShell ya da cmd'de** yapın: Git Bash (mintty) gerçek bir Windows konsolu olmadığı için
    orada `Token:` istemi çıkmaz ve yazdığınız token ekranda görünür.
 4. `./relay.exe agents` ile odadaki ajanları kontrol edin. Hata ayıklamada `./relay.exe version` çıktısını paylaşabilirsiniz.
+
+## Bağlantı teşhisi: relay doctor
+
+```sh
+relay doctor
+relay --config local/client.json doctor --timeout 20s
+```
+
+`doctor`, mevcut istemci ayarını kullanarak kontrolleri sırayla raporlar:
+
+- Ayar dosyasının biçimi, gerekli alanlar ve token biçimi.
+- Okuma imlecinin geçerliliği; henüz oluşmamış olması yeni kurulumda normaldir.
+- DNS/bağlantı, HTTPS için sertifika ve sunucu adı doğrulaması.
+- Relay sağlık yanıtı, token'ın ayardaki hesapla eşleşmesi ve seçili odaya erişim.
+
+Hatalar aşama adıyla ve yapılabilecek işlemle gösterilir. Yanlış token, başka
+hesaba ait token, eksik oda üyeliği, 404 API yolu, 429 sınırı, sunucu/proxy hatası,
+DNS, TLS ve zaman aşımı ayrı raporlanır. `--timeout` bütün ağ kontrollerinin
+toplam bütçesidir; varsayılan 10 saniye, üst sınır 2 dakikadır.
+
+Rapor token, özel URL/IP, dosya yolu, hesap/oda adı, sunucu cevabı veya ham hata
+metni içermez. HTTPS sertifika denetimi korunur; yönlendirmeler izlenmez.
+Sağlık isteği kimlik başlığı taşımaz. Sonraki kimlikli istekler yalnız ayardaki
+relay adresine gider.
+
+Komut yalnız `GET /v1/health`, `GET /v1/me` ve seçili odanın `GET .../agents`
+yollarını kullanır. Mesaj göndermez veya mesaj geçmişini okumaz; ayarı ve imleci
+oluşturmaz, ilerletmez, onarmaz. Normal API davranışı gereği kimlikli GET
+istekleri sunucuda son görülme bilgisini güncelleyebilir. Çıkış kodları:
+
+| Kod | Anlamı |
+|---|---|
+| `0` | Kontroller başarılı. |
+| `1` | Ayar, imleç, kimlik, üyelik veya API yanıtı sorunu. |
+| `3` | DNS, bağlantı, TLS, süre, istek sınırı veya geçici hizmet sorunu. |
+| `130` | Kullanıcı iptali. |
 
 ## Örnek komutlar
 

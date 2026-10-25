@@ -42,6 +42,7 @@ type Env struct {
 const usage = `kullanım: relay [--config <json>] <komut>
   setup --url <URL> --room <oda> --agent <ad> [--config <yol>] [--force] [--no-check]
   version                   sürüm, commit ve Go sürümü
+  doctor [--timeout 10s]     sır göstermeden bağlantı ve ayar teşhisi
   send --type <tip> [--to <ajan>] [--thread <T-n>] [--reply-to <id>] <metin|->
   wait [--timeout 600]      yeni mesaj gelene kadar bekler
   inbox                     okunmamış mesajları basar
@@ -76,6 +77,8 @@ func Run(ctx context.Context, args []string, env Env) int {
 		return runSetup(ctx, rest, env, *cfgPath)
 	case "version":
 		return runVersion(rest, env)
+	case "doctor":
+		return runDoctor(ctx, rest, env, *cfgPath)
 	case "send", "wait", "inbox", "agents", "thread", "close", "bridge":
 	default:
 		fmt.Fprintf(env.Stderr, "bilinmeyen komut: %s\n%s\n", cmd, usage)
