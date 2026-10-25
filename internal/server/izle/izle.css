@@ -191,6 +191,7 @@ h1, h2, h3, p { margin: 0; }
 #yeni-konusma > span { font-size: 18px; line-height: 1; }
 #gonderme { border: 1px solid var(--cizgi); border-radius: 9px; background: var(--yuzey); box-shadow: 0 2px 5px #00000003; }
 #gonderme:focus-within { border-color: var(--vurgu); }
+#alici-uyari { padding: 8px 12px; color: var(--vurgu-metin); background: var(--secili); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 #metin { display: block; width: 100%; resize: vertical; min-height: 66px; max-height: 25dvh; border: 0; background: transparent; border-radius: 9px 9px 0 0; font-size: 13px; padding: 14px 16px 4px; line-height: 1.6; }
 #metin:focus { outline: none; }
 .gonderme-alt { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 9px 11px; gap: 8px; }
