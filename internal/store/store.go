@@ -24,6 +24,7 @@ const schemaVersion = 4
 // Hata değerleri; server paketi bunları HTTP koduna çevirir.
 var (
 	ErrUnauthorized    = errors.New("yetkisiz")
+	ErrRoomForbidden   = errors.New("oda üyeliği yok")
 	ErrThreadNotFound  = errors.New("konuşma yok")
 	ErrThreadClosed    = errors.New("konuşma kilitli ya da kapalı")
 	ErrBadRecipient    = errors.New("alıcı geçersiz")

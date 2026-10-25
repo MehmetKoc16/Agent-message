@@ -54,6 +54,10 @@ func TestAdminAjanYasamDongusu(t *testing.T) {
 	if a, err := st.Authenticate(ctx, token); err != nil || a.Kind != "insan" {
 		t.Fatalf("token geçerli olmalı: %v %v", a, err)
 	}
+	m, err := st.Post(ctx, store.PostInput{Room: "r1", From: "ali", Type: "bilgi", Body: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if code, _, _ := runAdmin(t, cfg, "revoke", "ali"); code != 0 {
 		t.Fatal("revoke başarısız")
 	}
@@ -67,9 +71,8 @@ func TestAdminAjanYasamDongusu(t *testing.T) {
 		t.Fatalf("list iptali göstermeli: %q", out)
 	}
 
-	m, err := st.Post(ctx, store.PostInput{Room: "r1", From: "ali", Type: "bilgi", Body: "x"})
-	if err != nil {
-		t.Fatal(err)
+	if _, err := st.Post(ctx, store.PostInput{Room: "r1", From: "ali", Type: "bilgi", Body: "iptal sonrası"}); err != store.ErrUnauthorized {
+		t.Fatalf("iptal edilmiş hesap yazamamalı: %v", err)
 	}
 	if code, _, _ := runAdmin(t, cfg, "reopen", "r1", m.Thread); code != 0 {
 		t.Fatal("reopen başarısız")

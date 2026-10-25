@@ -173,15 +173,11 @@ belleğinde tutar; `sessionStorage` dahil hiçbir depoya yazmaz. Bearer token i�
 mevcut sekme oturumu davranışı sürer. Oturum süresi dolunca veya sayfa yenilenince
 yeniden kod girilir. İstekler HTTPS üzerinden, anahtarlar yalnız başlıklarda taşınır.
 
-**Caddy logu:** Örnek Caddyfile'daki log filtresi yalnız `Authorization` başlığını siler.
-`X-Yonetim-Oturum` başlığı bu yüzden Caddy erişim loguna yazılabilir. Bu anahtar tek başına
-yetki vermez:
-- Her yönetim isteği ayrıca loglanmayan Bearer parolasını ister.
-- Anahtar 10 dakikada geçersiz olur.
-- Anahtar, TOTP sırrına bağlıdır.
-
-Yine de log dosyası en az relay verisi kadar korunmalıdır. Caddy'ye dokunulan bir sonraki
-bakımda filtreye `request>headers>X-Yonetim-Oturum delete` satırı eklenebilir.
+**Caddy logu:** Örnek Caddyfile'daki log filtresi `Authorization`,
+`X-Yonetim-Oturum` başlığı ve istek URI'sini siler.
+Canlı Caddy yapılandırmasının bu örnekle aynı olması ayrıca doğrulanmalıdır;
+depo incelemesi sunucudaki yapılandırmayı kanıtlamaz. Log dosyası en az relay
+verisi kadar korunmalıdır.
 
 Mevcut üyelik değiştirme uçlarında yönetici hedef hesaba web'den oda ekleme/çıkarma ve iptal yapılamaz; kendisi de
 buna dahildir. Hedef denetimi değişiklik transaction'ında tekrar yapılır; eşzamanlı

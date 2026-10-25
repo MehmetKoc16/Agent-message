@@ -36,6 +36,11 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		return Message{}, err
 	}
 	defer tx.Rollback()
+	kind, err := requireRoomMemberTx(ctx, tx, in.From, in.Room)
+	if err != nil {
+		return Message{}, err
+	}
+	in.FromKind = kind
 	if in.RequestID != "" {
 		rows, err := tx.QueryContext(ctx, msgSelect+`WHERE m.room=? AND m.from_agent=? AND m.request_id=? AND m.request_id <> ''`, in.Room, in.From, in.RequestID)
 		if err != nil {
@@ -280,7 +285,42 @@ func (s *Store) IsThreadParty(ctx context.Context, room, id, agent string) (bool
 	return err == nil, err
 }
 
-// CloseThread konuşmayı kapatır (zaten kapalıysa değişmez).
+// CloseThreadFor kimlik, üyelik, taraf ve kapatmayı aynı transaction'da yapar.
+func (s *Store) CloseThreadFor(ctx context.Context, room, id, agent string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	kind, err := requireRoomMemberTx(ctx, tx, agent, room)
+	if err != nil {
+		return err
+	}
+	var creator string
+	err = tx.QueryRowContext(ctx, `SELECT created_by FROM threads WHERE room=? AND id=?`, room, id).Scan(&creator)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrThreadNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if kind != "insan" && creator != agent {
+		var one int
+		err = tx.QueryRowContext(ctx, `SELECT 1 FROM thread_parties WHERE room=? AND thread=? AND agent IN (?,?)`, room, id, agent, anyAgent).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotParty
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE threads SET status='kapali' WHERE room=? AND id=?`, room, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// CloseThread güvenilir yerel işlemler içindir; HTTP CloseThreadFor kullanır.
 func (s *Store) CloseThread(ctx context.Context, room, id string) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE threads SET status = 'kapali' WHERE room = ? AND id = ?`, room, id)
 	if err != nil {
