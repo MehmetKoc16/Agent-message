@@ -108,8 +108,8 @@ h1, h2, h3, p { margin: 0; }
 .tek-oda > span:first-child { opacity: .65; font-size: 16px; }
 #tek-oda-ad { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #oda-ekle { width: 28px; height: 28px; padding: 0; font-size: 20px; letter-spacing: 0; }
-#oda-dialog { width: min(520px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 28px; border: 1px solid var(--cizgi); border-radius: 14px; background: var(--yuzey); color: var(--metin); box-shadow: var(--golge); overflow-y: auto; }
-#oda-dialog::backdrop { background: #10151099; }
+#oda-dialog, #uyelik-dialog { width: min(520px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 28px; border: 1px solid var(--cizgi); border-radius: 14px; background: var(--yuzey); color: var(--metin); box-shadow: var(--golge); overflow-y: auto; }
+#oda-dialog::backdrop, #uyelik-dialog::backdrop { background: #10151099; }
 .oda-dialog-ust { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .oda-dialog-ust h2 { margin: 8px 0 0; }
 .oda-dialog-ipucu, #oda-baslik-yardim, #oda-uyeler-yardim, #oda-dogrulama p { color: var(--ikincil); font-size: 13px; line-height: 1.6; }
@@ -446,3 +446,9 @@ h1, h2, h3, p { margin: 0; }
   .yonetim-kenar { overflow-y: auto; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+
+#uyelik-dialog > p { color: var(--ikincil); line-height: 1.6; }
+#uyelik-hesaplar { max-height: 50dvh; overflow-y: auto; }
+.uyelik-satir { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--cizgi); }
+.uyelik-satir span:nth-child(2) { flex: 1; overflow-wrap: anywhere; }
+#uyelik-durum { min-height: 24px; }

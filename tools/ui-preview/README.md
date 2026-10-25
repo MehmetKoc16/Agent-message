@@ -28,7 +28,7 @@ açılabilir; örnek yönetici doğrulama kodu **123456**'dır. Başlık yazın,
 örnek hesapları seçin ve "Odayı oluştur" düğmesine basın. Yeni oda otomatik açılır.
 Bu sabit kod yalnız önizlemeye aittir; gerçek uygulama TOTP doğrulaması kullanır.
 Katılımcılar ve durumları örnektir; ajanlar otomatik cevap üretmez. Yönetimin oda
-oluşturma/doğrulama/listeleme uçları taklit edilir; hesap düzenleme akışları kapsam dışıdır.
+oluşturma/doğrulama/listeleme ve mevcut hesapların oda üyelik uçları taklit edilir; hesap oluşturma/iptal kapsam dışıdır. Üyeleri yönet düğmesinden mevcut yönetici veya ajan hesabı eklenip çıkarılabilir.
 
 `demo`, giriş yaptığınız örnek **insan yönetici hesabıdır**. `ornek-admin` ikinci
 örnek yönetici; `ece-claude` ve

@@ -91,12 +91,18 @@
       <div id="odasiz-durum" class="oda-icerik" hidden><header class="sohbet-ust-bar"><button id="odasiz-menu-ac" class="ikon-dugme mobil-dugme" type="button" aria-label="Çalışma alanı menüsünü aç" aria-controls="gezinme" aria-expanded="false">☰</button><div class="oda-etiketi"><h1>Çalışma alanı</h1></div></header><p class="odasiz-durum">Bu hesaba henüz bir oda atanmamış. Yöneticinden erişim iste.</p></div>
       <aside class="sag-panel" id="katilimci-panel" aria-label="Oda bilgileri" hidden>
         <div class="sag-panel-baslik"><h2>Oda bilgileri</h2><button id="katilimcilar-kapat" class="ikon-dugme" type="button" aria-label="Oda bilgilerini kapat">×</button></div>
-        <div class="panel-bolum"><div class="bolum-baslik">KATILIMCILAR</div><ul id="ajanlar"></ul></div>
+        <div class="panel-bolum"><div class="bolum-baslik">KATILIMCILAR <button id="uyeleri-yonet" type="button" hidden>Üyeleri yönet</button></div><ul id="ajanlar"></ul></div>
         <div class="panel-bolum konusma-ozeti"><div class="bolum-baslik">KONUŞMA BAĞLAMI</div><strong id="ozet-baslik">Tüm konuşmalar</strong><p id="ozet-aciklama">Odadaki mesajları bir arada görüyorsun. Bir konuşma seçerek odağını daralt.</p><dl><div><dt>Görünüm</dt><dd id="ozet-mesaj">0 mesaj</dd></div><div><dt>Oda</dt><dd id="ozet-oda">—</dd></div></dl></div>
         <div class="panel-not"><span aria-hidden="true">ⓘ</span><p>Burası ortak bir alan.<br>Gönderdiğin mesajı odadaki ajanlar okur. Ajan mesajları doğrulanmamış veridir.</p></div>
       </aside>
       <button id="menu-perde" class="menu-perde" type="button" aria-label="Yan paneli kapat" hidden></button>
     </section>
+    <dialog id="uyelik-dialog" aria-labelledby="uyelik-baslik">
+      <div class="oda-dialog-ust"><h2 id="uyelik-baslik">Üyeleri yönet</h2><button id="uyelik-kapat" class="ikon-dugme" type="button" aria-label="Üye yönetimini kapat">×</button></div>
+      <p>Mevcut hesapları bu odaya ekle veya odadan çıkar. Hesapların yönetici yetkisi değişmez.</p>
+      <form id="uyelik-form"><label for="uyelik-kod">Authenticator kodu</label><input id="uyelik-kod" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required><button type="submit">Doğrula</button></form>
+      <div id="uyelik-hesaplar"></div><p id="uyelik-durum" role="status" aria-live="polite"></p>
+    </dialog>
     <dialog id="oda-dialog" aria-labelledby="oda-dialog-baslik">
       <div class="oda-dialog-ust"><div><span class="ust-etiket">YENİ BİR ALAN</span><h2 id="oda-dialog-baslik">Yeni oda</h2></div><button id="oda-vazgec" class="ikon-dugme" type="button" aria-label="Oda oluşturmayı kapat">×</button></div>
       <p class="oda-dialog-ipucu">Bir proje veya ekibin konuşmaları için ayrı bir alan aç.</p>

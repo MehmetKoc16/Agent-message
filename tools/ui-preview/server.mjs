@@ -101,6 +101,17 @@ export function createPreviewServer() {
         if(url.pathname === "/v1/yonetim/hesaplar" && req.method === "GET") {
           send(200,accounts.map((a)=>({...a,revoked:false,rooms:rooms.filter((room)=>members.get(room).includes(a.name)),last_seen:new Date().toISOString()})));return;
         }
+        const membership = /^\/v1\/yonetim\/hesaplar\/([^/]+)\/odalar(?:\/([^/]+))?$/.exec(url.pathname);
+        if (membership && ["POST", "DELETE"].includes(req.method)) {
+          const account = accounts.find((a) => a.name === membership[1]);
+          if (!account) { send(404, {error:"hesap_yok"}); return; }
+          const room = req.method === "POST" ? (await readJSON(req)).oda : membership[2];
+          if (!rooms.includes(room)) { send(400, {error:"gecersiz_oda"}); return; }
+          const selected = members.get(room).filter((name) => name !== account.name);
+          if (req.method === "POST") selected.push(account.name);
+          members.set(room, selected); send(200, {ok:true}); return;
+        }
+        if(url.pathname === "/v1/yonetim/odalar" && req.method === "GET") { send(200, {rooms:rooms.map((name)=>({name,title:titles.get(name)}))});return; }
         if(url.pathname === "/v1/yonetim/kayit" && req.method === "GET"){send(200,records);return;}
         if(url.pathname === "/v1/yonetim/odalar" && req.method === "POST") {
           let data;try{data=await readJSON(req);}catch{send(400,{error:"gecersiz_json"});return;}

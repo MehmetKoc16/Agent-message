@@ -93,7 +93,7 @@
   function stop() {
     status.classList.remove("canli");
     clearYonetim(); el("yonetim").hidden = true; el("yonetim-ac").hidden = true;
-    el("oda-dialog").close(); el("oda-ekle").hidden = true;
+    el("oda-dialog").close(); el("uyelik-dialog").close(); el("uyeleri-yonet").hidden = true; el("oda-ekle").hidden = true;
     if (active) {
       active.controller.abort();
       if (active.roomController) active.roomController.abort();
@@ -393,7 +393,7 @@
     logLoop(session, signal).catch(() => {}); agentsLoop(session, signal).catch(() => {});
   }
   el("oda").addEventListener("change", () => { if (active) openRoom(active, el("oda").value); });
-  async function reloadRooms(session, selected = "") {
+  async function reloadRooms(session, selected = "", preserveDraft = false) {
     const {response, data} = await api(session, "/v1/rooms", session.controller.signal);
     if (!response.ok || !Array.isArray(data.rooms)) throw new Error("Odalar yüklenemedi.");
     if (active !== session) throw new Error("Oturum değişti.");
@@ -402,10 +402,13 @@
     el("tek-oda").hidden = data.rooms.length !== 1;
     for (const room of data.rooms) { const option = node("option", room.title); option.value = room.name; el("oda").append(option); }
     el("odasiz-durum").hidden = data.rooms.length > 0;
-    if (!data.rooms.length) { status.textContent = "Bu hesabın odası yok."; return; }
+    if (!data.rooms.length) {
+      session.roomController?.abort(); session.room = ""; resetRoom();
+      el("oda-icerik").hidden = true; status.textContent = "Bu hesabın odası yok."; return;
+    }
     const room = data.rooms.some((r) => r.name === selected) ? selected : data.rooms[0].name;
     el("oda").value = room;
-    openRoom(session, room);
+    openRoom(session, room, preserveDraft);
   }
   async function login(name, token) {
     stop(); remember("", "");
@@ -424,7 +427,7 @@
       text.maxLength = session.maxBody; count();
       remember(token, name); el("token").value = "";
       el("yonetim-ac").hidden = !data.yonetici;
-      el("oda-ekle").hidden = !data.yonetici;
+      el("oda-ekle").hidden = !data.yonetici; el("uyeleri-yonet").hidden = !data.yonetici;
       form.hidden = true; view.hidden = false; el("giris-dugme").disabled = false;
       el("giris-ekrani").hidden = true; document.body.classList.add("oturum-acik");
       el("kullanici-ad").textContent = name;
@@ -491,6 +494,7 @@
     managementTimer = setTimeout(() => {
       clearYonetim();
       if (el("oda-dialog").open) showRoomVerification();
+      if (el("uyelik-dialog").open) showMembershipVerification();
       el("yonetim-durum").textContent = managementErrors.yonetim_oturumu_gerekli;
     }, Math.max(0, managementExpiry - Date.now()));
   }
@@ -560,6 +564,68 @@
       }
     } finally { roomCreateBusy = false; el("oda-kaydet").disabled = false; el("oda-vazgec").disabled = false; }
   });
+  let membershipRoom = "", membershipBusy = false;
+  function showMembershipVerification() {
+    el("uyelik-form").hidden = false; el("uyelik-hesaplar").replaceChildren();
+    el("uyelik-kod").value = "";
+  }
+  async function renderMembership() {
+    const session = active, room = membershipRoom;
+    const accounts = await managementAPI("/hesaplar");
+    if (active !== session || !el("uyelik-dialog").open || room !== membershipRoom) return;
+    el("uyelik-form").hidden = true; el("uyelik-kod").value = "";
+    el("uyelik-hesaplar").replaceChildren();
+    for (const a of accounts.filter((a) => !a.revoked)) {
+      const member = a.rooms.includes(room), row = node("div", undefined, "uyelik-satir");
+      const label = node("span", a.name + (a.yonetici ? " · Yönetici" : a.kind === "ajan" ? " · Ajan" : " · İnsan"));
+      const button = node("button", member ? "Çıkar" : "Ekle"); button.type = "button";
+      button.setAttribute("aria-label", a.name + (member ? " hesabını odadan çıkar" : " hesabını odaya ekle"));
+      button.addEventListener("click", async () => {
+        if (membershipBusy) return;
+        membershipBusy = true; button.disabled = true; el("uyelik-durum").textContent = "";
+        try {
+          const base = "/hesaplar/" + encodeURIComponent(a.name) + "/odalar";
+          await managementAPI(member ? base + "/" + encodeURIComponent(room) : base, member ? "DELETE" : "POST", member ? undefined : {oda: room});
+          if (active !== session) return;
+          if (a.name === session.name && member) {
+            el("uyelik-dialog").close(); await reloadRooms(session); return;
+          }
+          await renderMembership();
+          el("uyelik-durum").textContent = a.name + (member ? " odadan çıkarıldı." : " odaya eklendi.");
+        } catch (error) {
+          if (active === session) {
+            el("uyelik-durum").textContent = error.message;
+            if (!managementSession) showMembershipVerification();
+          }
+        } finally { membershipBusy = false; button.disabled = false; }
+      });
+      row.append(accountAvatar(a.name, "mini-avatar"), label, node("small", member ? "Üye" : "Üye değil"), button);
+      el("uyelik-hesaplar").append(row);
+    }
+  }
+  el("uyeleri-yonet").addEventListener("click", async () => {
+    if (!active?.yonetici || !active.room) return;
+    membershipRoom = active.room; showMembershipVerification(); el("uyelik-durum").textContent = "";
+    el("uyelik-baslik").textContent = el("oda-baslik").textContent + " · Üyeleri yönet";
+    el("uyelik-dialog").showModal();
+    if (managementSession && Date.now() < managementExpiry) {
+      try { await renderMembership(); } catch (error) { el("uyelik-durum").textContent = error.message; }
+    } else el("uyelik-kod").focus();
+  });
+  el("uyelik-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!active?.yonetici || membershipBusy) return;
+    membershipBusy = true; el("uyelik-durum").textContent = "";
+    try {
+      const kod = el("uyelik-kod").value; el("uyelik-kod").value = "";
+      acceptManagementSession(await managementAPI("/oturum", "POST", {kod}));
+      await renderMembership();
+    } catch (error) { el("uyelik-durum").textContent = error.message; }
+    finally { membershipBusy = false; }
+  });
+  el("uyelik-kapat").addEventListener("click", () => { if (!membershipBusy) el("uyelik-dialog").close(); });
+  el("uyelik-dialog").addEventListener("cancel", (event) => { if (membershipBusy) event.preventDefault(); });
+  el("uyelik-dialog").addEventListener("close", () => { membershipRoom = ""; showMembershipVerification(); });
   function managementAction(fn) {
     return async () => { try { await fn(); } catch (error) { clearTimeout(managementToastTimer); el("yonetim-durum").textContent = error.message; } };
   }
@@ -568,7 +634,7 @@
       b.disabled = true; try { await fn(); } finally { b.disabled = false; }
     })); return b;
   }
-  let managementAccounts = [], managementRecords = [], managementEditor = "";
+  let managementAccounts = [], managementRecords = [], managementRooms = [], managementEditor = "";
   let managementClock = null, managementToastTimer = null, managementRevoke = null;
   let managementRoomInput = null;
   const managementTabs = ["ozet", "hesaplar", "yeni", "kayit"];
@@ -599,7 +665,7 @@
   }
   function resetManagementView() {
     clearInterval(managementClock); clearTimeout(managementToastTimer);
-    managementAccounts = []; managementRecords = []; managementEditor = ""; managementRevoke = null; managementRoomInput = null;
+    managementAccounts = []; managementRecords = []; managementRooms = []; managementEditor = ""; managementRevoke = null; managementRoomInput = null;
     for (const id of ["yonetim-metrikler", "yonetim-son-etkinlik", "yonetim-odalar", "yonetim-uyarilar", "yonetim-durum"]) el(id).replaceChildren();
     el("yonetim-iptal-dialog").close(); el("yonetim-iptal-ad").value = "";
     el("yonetim-iptal-hata").textContent = "";
@@ -666,15 +732,19 @@
       remove.setAttribute("aria-label", a.name + " hesabını " + room + " odasından çıkar"); chip.append(remove); chips.append(chip);
     }
     if (!a.rooms.length) chips.append(node("span", "Oda yok"));
-    const controls = node("div", undefined, "yonetim-oda-kontroller"), input = node("input");
-    input.id = "yonetim-oda-girdi"; input.placeholder = "Oda adı";
+    const controls = node("div", undefined, "yonetim-oda-kontroller"), input = node("select");
+    input.id = "yonetim-oda-girdi";
+    const placeholder = node("option", "Oda seç"); placeholder.value = ""; input.append(placeholder);
+    for (const room of managementRooms.filter((room) => !a.rooms.includes(room.name))) {
+      const option = node("option", room.title); option.value = room.name; input.append(option);
+    }
     managementRoomInput = input;
     const label = node("label", "Oda adı"); label.htmlFor = input.id;
     const add = managementButton("Ekle", async () => {
       await managementAPI(base + "/odalar", "POST", {oda: input.value.trim()}); await refreshManagement();
       managementRoomInput?.focus();
     }); add.disabled = true;
-    input.addEventListener("input", () => { add.disabled = !input.value.trim(); });
+    input.addEventListener("change", () => { add.disabled = !input.value.trim(); });
     input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !add.disabled) { event.preventDefault(); add.click(); } });
     controls.append(label, input, add, managementButton("Kapat", async () => {
       managementEditor = ""; renderManagementAccounts(); el("yonetim-hesaplar").querySelectorAll("button[data-account]").forEach((button) => {
@@ -693,8 +763,7 @@
       managementCell(row, "Odalar", managementChips(a.rooms)); managementCell(row, "Son görülme", managementTime(a.last_seen));
       managementCell(row, "Durum", node("span", a.revoked ? "İptal edilmiş" : "Aktif", "yonetim-durum-etiket" + (a.revoked ? " iptal" : "")));
       const actions = node("div", undefined, "yonetim-satir-islemler");
-      if (a.yonetici) actions.append(node("span", "Yalnız SSH"));
-      else if (!a.revoked) {
+      if (!a.revoked) {
         const edit = managementButton("Odalar", async () => {
           managementEditor = managementEditor === a.name ? "" : a.name; renderManagementAccounts();
           if (managementEditor) managementRoomInput?.focus();
@@ -704,10 +773,10 @@
         const menu = node("details", undefined, "yonetim-islem-menu"), summary = node("summary", "⋯");
         summary.setAttribute("aria-label", a.name + " hesabı işlemleri");
         const revoke = managementButton("Hesabı iptal et", async () => { menu.open = false; openManagementRevoke(a, summary); });
-        revoke.className = "yonetim-tehlike"; menu.append(summary, revoke); actions.append(edit, menu);
+        revoke.className = "yonetim-tehlike"; menu.append(summary, revoke); actions.append(edit); if (!a.yonetici) actions.append(menu);
       } else actions.append(node("span", "—"));
       managementCell(row, "İşlemler", actions); body.append(row);
-      if (!a.revoked && !a.yonetici && managementEditor === a.name) renderManagementEditor(a, body);
+      if (!a.revoked && managementEditor === a.name) renderManagementEditor(a, body);
     }
     if (!accounts.length) { const row = node("tr"), cell = node("td", "Eşleşen hesap yok", "yonetim-bos"); cell.colSpan = 5; row.append(cell); body.append(row); }
     return table;
@@ -823,6 +892,7 @@
   async function refreshManagement() {
     const accounts = await managementAPI("/hesaplar");
     const records = await managementAPI("/kayit?son=100");
+    managementRooms = (await managementAPI("/odalar")).rooms;
     managementAccounts = accounts; managementRecords = [...records].sort((a, b) => Date.parse(b.zaman) - Date.parse(a.zaman));
     renderManagementOperationFilter(el("yonetim-islem").value);
     renderManagementAccounts(); renderManagementRecords(); renderManagementOverview();
@@ -837,6 +907,7 @@
   }));
   el("sohbete-don").addEventListener("click", () => {
     el("yonetim").hidden = true; view.hidden = false; el("yonetim-parola").replaceChildren();
+    if (active) reloadRooms(active, active.room, true).catch(() => { status.textContent = "Oda listesi yenilenemedi."; });
   });
   el("yonetim-yenile").addEventListener("click", managementAction(refreshManagement));
   el("yonetim-kod-form").addEventListener("submit", (event) => {

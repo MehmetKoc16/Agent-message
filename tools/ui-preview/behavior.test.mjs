@@ -79,6 +79,36 @@ async function harness(fetch, width = 1440) {
   }};
 }
 
+test("oda içinden mevcut yönetici hesabı eklenir ve çıkarılır; her değişiklik TOTP oturumu taşır", async (t) => {
+  let joined = false;
+  const calls = [];
+  const h = await harness(async (path, options) => {
+    calls.push({path, options});
+    const data = path.endsWith("/oturum") ? {oturum:"test-session", bitis:new Date(Date.now()+600000).toISOString()} :
+      path.endsWith("/hesaplar") ? [{name:"other-admin",kind:"insan",yonetici:true,rooms:joined?["r1"]:[]}] : {ok:true};
+    if (options.method === "POST" && path.endsWith("/odalar")) joined = true;
+    if (options.method === "DELETE") joined = false;
+    return {ok:true, status:200, json:async () => data};
+  });
+  t.after(() => h.inspect.stop());
+  h.session.yonetici = true;
+  await h.el("uyeleri-yonet").listeners.get("click")();
+  assert.equal(h.el("uyelik-hesaplar").children.length, 0);
+  h.el("uyelik-kod").value = "123456";
+  await h.el("uyelik-form").listeners.get("submit")({preventDefault(){}});
+  let button = h.el("uyelik-hesaplar").children[0].children[3];
+  assert.equal(button.textContent, "Ekle");
+  await button.listeners.get("click")();
+  button = h.el("uyelik-hesaplar").children[0].children[3];
+  assert.equal(button.textContent, "Çıkar");
+  await button.listeners.get("click")();
+  assert.equal(joined, false);
+  const changes = calls.filter(({options, path}) => ["POST","DELETE"].includes(options.method) && !path.endsWith("/oturum"));
+  assert.equal(changes.length, 2);
+  assert.equal(changes[0].options.headers["X-Yonetim-Oturum"], "test-session");
+  assert.equal(changes[1].options.headers["X-Yonetim-Oturum"], "test-session");
+});
+
 test("dar ekranda menü ve katılımcılar perdeyi paylaşır; perde doğru paneli kapatır", async () => {
   const h = await harness(async () => { throw new Error("ağ kullanılmamalı"); }, 390);
   h.el("katilimci-panel").hidden = true;

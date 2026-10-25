@@ -17,6 +17,15 @@ func (s *Server) handleRooms(w http.ResponseWriter, r *http.Request, a store.Age
 	writeJSON(w, http.StatusOK, map[string]any{"rooms": rooms})
 }
 
+func (s *Server) handleManagementRooms(w http.ResponseWriter, r *http.Request, a store.Agent) {
+	rooms, err := s.st.AllRooms(r.Context())
+	if err != nil {
+		s.internal(w, "yönetim odaları", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rooms": rooms})
+}
+
 func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request, a store.Agent) {
 	var in struct {
 		Title   string   `json:"baslik"`
