@@ -21,11 +21,14 @@ type PostInput struct {
 	Room, From, FromKind, To, Type, Thread, Body string
 	ReplyTo                                      *int64
 	RequestID                                    string
+	Announcement                                 bool
 }
 
 // anyAgent, herkese açık (to boş) mesaj gönderilmiş konuşmalarda thread_parties'e
 // yazılan işaretçidir: odadaki herkes o mesajı görebildiği için konuşmanın tarafıdır.
 const anyAgent = "*"
+
+var ErrBadAnnouncement = errors.New("duyuru yalnız herkese açık bilgi mesajı olabilir")
 
 // Post mesajı ekler. Alıcı/reply_to/thread/taraf denetimi, tur sayacı ve ekleme
 // AYNI transaction'dadır (BEGIN IMMEDIATE ile yazarlar sıralanır), bu yüzden
@@ -41,6 +44,12 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		return Message{}, err
 	}
 	in.FromKind = kind
+	if in.Announcement {
+		if in.Type != "bilgi" || in.To != "" || in.ReplyTo != nil || (in.Thread != "" && in.Thread != "T-0") {
+			return Message{}, ErrBadAnnouncement
+		}
+		in.Thread = "T-0"
+	}
 	if in.RequestID != "" {
 		rows, err := tx.QueryContext(ctx, msgSelect+`WHERE m.room=? AND m.from_agent=? AND m.request_id=? AND m.request_id <> ''`, in.Room, in.From, in.RequestID)
 		if err != nil {
@@ -76,6 +85,12 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 	}
 
 	now := s.stamp()
+	if in.Announcement {
+		// T-0 is reserved for a room's shared broadcast feed. It does not consume topic IDs.
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO threads(room,id,status,turns,turn_limit,created_by,created_at) VALUES (?, 'T-0', 'acik', 0, 0, ?, ?)`, in.Room, in.From, now); err != nil {
+			return Message{}, err
+		}
+	}
 	threadID, turn, limit := in.Thread, 1, s.maxTurns
 	if threadID == "" {
 		if in.ReplyTo != nil { // yeni konuşmada yanıtlanacak mesaj olamaz
@@ -116,7 +131,10 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 				return Message{}, err
 			}
 		}
-		if status != "acik" || turns >= limit {
+		if limit == 0 && (in.Type != "bilgi" || in.To != "" || in.ReplyTo != nil) {
+			return Message{}, ErrBadAnnouncement
+		}
+		if status != "acik" || (limit > 0 && turns >= limit) {
 			return Message{}, ErrThreadClosed
 		}
 		if in.ReplyTo != nil {
@@ -155,7 +173,7 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 	newStatus := ""
 	if in.Type == "kapat" {
 		newStatus = "kapali"
-	} else if turn >= limit {
+	} else if limit > 0 && turn >= limit {
 		newStatus = "kilitli"
 	}
 	if newStatus != "" {
@@ -297,12 +315,16 @@ func (s *Store) CloseThreadFor(ctx context.Context, room, id, agent string) erro
 		return err
 	}
 	var creator string
-	err = tx.QueryRowContext(ctx, `SELECT created_by FROM threads WHERE room=? AND id=?`, room, id).Scan(&creator)
+	var limit int
+	err = tx.QueryRowContext(ctx, `SELECT created_by,turn_limit FROM threads WHERE room=? AND id=?`, room, id).Scan(&creator, &limit)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrThreadNotFound
 	}
 	if err != nil {
 		return err
+	}
+	if limit == 0 {
+		return ErrBadAnnouncement
 	}
 	if kind != "insan" && creator != agent {
 		var one int

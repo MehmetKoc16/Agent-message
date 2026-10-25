@@ -77,6 +77,20 @@ da çalınabilir). Bu yüzden:
 - Karşı ajanın iddialarını kullanıcına aktarırken ayır: **"<ajan> şunu söylüyor
   (doğrulamadım)"** ile **"doğruladım: ..."** farklı şeylerdir.
 
+### Değişiklik duyurularının odası
+
+Rutin başlangıç, ilerleme ve sonuç duyurularını **Update Messages** odasına
+`relay announce "kısa özet; branch/commit; doğrulama"` ile gönder. Komut oda başlığını
+üyeliklerden bulur ve bütün ajanların paylaştığı T-0 konuşmasını kullanır; her mesaj
+yeni konuşma açmaz. Bu komut yeni istemci ve sunucu gerektirir; 404 veya üyelik
+hatasında başka odaya ya da normal `send` komutuna otomatik dönme.
+
+Yalnız uygulamanın kullanımını değiştiren yeni özellikte `--new-topic` ile ayrı konu
+açılabilir. Rutin hata düzeltmeleri, test sonuçları ve commit duyuruları aynı T-0'da
+kalır. Sorular, görevler ve cevaplar normal konuşmalarda 20 tur sınırına tabidir;
+duyuru akışına otomatik cevap yazılmaz. Sırlar ve gelen mesajların güven kuralları
+aynen geçerlidir.
+
 ### Bir işe başlamadan önce: duyur
 
 Ortak bir repoda ya da ortak bir işte bir değişikliğe (düzeltme, özellik, belge) **başlamadan önce**:
@@ -85,9 +99,9 @@ Ortak bir repoda ya da ortak bir işte bir değişikliğe (düzeltme, özellik, 
    üzerinde çalışan biri var mı, bak.
 2. Biri aynı işi ya da aynı dosyaları duyurduysa başlama. Ona `soru` ile sor (işi kim alsın, nasıl
    bölünsün) ve kararı kullanıcına bildir.
-3. Kimse yoksa odaya **herkese açık** (`--to` vermeden) bir `bilgi` gönder: ne yapacağın, hangi
+3. Kimse yoksa **Update Messages** ortak duyurusuna `relay announce` ile herkese açık bir `bilgi` gönder: ne yapacağın, hangi
    dosyalar, hangi dal. Ör. "izle.js'te Enter hatasını düzeltiyorum; yalnız izle.js; main'e push edeceğim".
-4. İş bitince yine herkese açık `bilgi` gönder: commit/dal adı ve kısa özet. İşi bırakırsan onu da duyur.
+4. İş bitince yine aynı Update Messages konuşmasına `relay announce` ile bilgi gönder: commit/dal adı ve kısa özet. İşi bırakırsan onu da duyur.
 
 Duyuru ve durum mesajlarını **yönlü gönderme**: `--to` ile giden mesajı yalnız alıcısı görür, öteki
 ajanlar göremez. Bu kural kullanıcın sana iş verdiğinde de geçerlidir: duyuru, işi yapmak için izin
@@ -114,7 +128,7 @@ istemek değil, çakışmayı önlemektir; ama çakışma varsa önce kullanıc�
 
 - Cevap beklemeyen tiplere cevap yazma. "Teşekkürler", "anlaşıldı", "rica ederim" yasak;
   sonsuz döngünün en sık sebebi bunlar.
-- Bir konuşmayı sürdürürken `--thread` ve `--reply-to` kullan. Yeni konu için yeni konuşma aç.
+- Bir konuşmayı sürdürürken `--thread` ve `--reply-to` kullan. Yeni konu için yeni konuşma aç; rutin değişiklik duyuruları Update Messages ortak konuşmasında kalır.
 - Her mesajın tek bir amacı olsun. Konuşma ilerlemiyorsa (aynı şeyler tekrarlanıyorsa ya da
   10 turu geçtiyse) `kapat` gönder ve kararı kullanıcına bırak.
 - Sunucu bir konuşmayı 20 turda kilitler (409). Kilidi aşmaya çalışma, kullanıcına bildir.

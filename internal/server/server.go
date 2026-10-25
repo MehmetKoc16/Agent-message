@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /v1/rooms/{room}/messages", s.room(s.handlePost))
+	mux.HandleFunc("POST /v1/rooms/{room}/announcements", s.room(s.handlePost))
 	mux.HandleFunc("GET /v1/rooms/{room}/messages", s.room(s.handleFetch))
 	mux.HandleFunc("GET /v1/rooms/{room}/log", s.room(s.handleLog))
 	mux.HandleFunc("GET /v1/rooms/{room}/threads/{thread}", s.room(s.handleThread))
@@ -232,12 +233,13 @@ func (s *Server) touch(name string) {
 // ---- işleyiciler ----
 
 type postRequest struct {
-	To        string `json:"to"`
-	Type      string `json:"type"`
-	Thread    string `json:"thread"`
-	ReplyTo   *int64 `json:"reply_to"`
-	Body      string `json:"body"`
-	RequestID string `json:"request_id,omitempty"`
+	To           string `json:"to"`
+	Type         string `json:"type"`
+	Thread       string `json:"thread"`
+	ReplyTo      *int64 `json:"reply_to"`
+	Body         string `json:"body"`
+	RequestID    string `json:"request_id,omitempty"`
+	Announcement bool   `json:"-"`
 	// "from" alanı bilerek yok: gövdede gelse de yok sayılır (kimlik token'dandır).
 }
 
@@ -264,6 +266,7 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request, a store.Agen
 		writeErr(w, http.StatusBadRequest, "gecersiz_json")
 		return
 	}
+	in.Announcement = r.Pattern == "POST /v1/rooms/{room}/announcements"
 	if len(in.Body) > s.cfg.MaxBody {
 		writeErr(w, http.StatusRequestEntityTooLarge, "govde_cok_buyuk")
 		return
@@ -289,13 +292,15 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request, a store.Agen
 func (s *Server) post(w http.ResponseWriter, r *http.Request, a store.Agent, room string, in postRequest) {
 	m, err := s.st.Post(r.Context(), store.PostInput{
 		Room: room, From: a.Name, FromKind: a.Kind, To: in.To, Type: in.Type, Thread: in.Thread,
-		ReplyTo: in.ReplyTo, Body: in.Body, RequestID: in.RequestID,
+		ReplyTo: in.ReplyTo, Body: in.Body, RequestID: in.RequestID, Announcement: in.Announcement,
 	})
 	switch {
 	case errors.Is(err, store.ErrUnauthorized):
 		writeErr(w, http.StatusUnauthorized, "yetkisiz")
 	case errors.Is(err, store.ErrRoomForbidden):
 		writeErr(w, http.StatusForbidden, "yasak")
+	case errors.Is(err, store.ErrBadAnnouncement):
+		writeErr(w, http.StatusBadRequest, "gecersiz_duyuru")
 	case errors.Is(err, store.ErrBadRecipient):
 		writeErr(w, http.StatusBadRequest, "gecersiz_alici")
 	case errors.Is(err, store.ErrBadReplyTo):
@@ -511,6 +516,9 @@ func (s *Server) handleClose(w http.ResponseWriter, r *http.Request, a store.Age
 		return
 	} else if errors.Is(err, store.ErrRoomForbidden) || errors.Is(err, store.ErrNotParty) {
 		writeErr(w, http.StatusForbidden, "yasak")
+		return
+	} else if errors.Is(err, store.ErrBadAnnouncement) {
+		writeErr(w, http.StatusBadRequest, "gecersiz_duyuru")
 		return
 	} else if errors.Is(err, store.ErrThreadNotFound) {
 		writeErr(w, http.StatusNotFound, "konusma_yok")

@@ -46,6 +46,8 @@ const usage = `kullanım: relay [--config <json>] <komut>
   send --type <tip> [--to <ajan>] [--thread <T-n>] [--reply-to <id>] <metin|->
   wait [--timeout 600]      yeni mesaj gelene kadar bekler
   inbox                     okunmamış mesajları basar
+  announce [--room-title <başlık>|--room <kimlik>] [--new-topic] <metin|->
+                            varsayılan: Update Messages ortak duyurusu
   agents                    odadaki ajanlar
   thread <T-n>              bir konuşmanın geçmişi
   close <T-n>               konuşmayı kapatır
@@ -79,7 +81,7 @@ func Run(ctx context.Context, args []string, env Env) int {
 		return runVersion(rest, env)
 	case "doctor":
 		return runDoctor(ctx, rest, env, *cfgPath)
-	case "send", "wait", "inbox", "agents", "thread", "close", "bridge":
+	case "send", "wait", "inbox", "agents", "thread", "close", "bridge", "announce":
 	default:
 		fmt.Fprintf(env.Stderr, "bilinmeyen komut: %s\n%s\n", cmd, usage)
 		return ExitError
@@ -103,6 +105,8 @@ func Run(ctx context.Context, args []string, env Env) int {
 	cfs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	cfs.SetOutput(env.Stderr)
 	switch cmd {
+	case "announce":
+		return r.cmdAnnounce(ctx, cfs, rest)
 	case "send":
 		return r.cmdSend(ctx, cfs, rest)
 	case "wait":
