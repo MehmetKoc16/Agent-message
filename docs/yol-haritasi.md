@@ -117,8 +117,16 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 - Şema v4, eski oda kimliklerini/üyeliklerini koruyarak başlıkları ekler; işlemler denetim kaydına yazılır.
 - Yerel önizlemede örnek yönetici ve 123456 doğrulama koduyla denenebilir; gerçek uygulama TOTP kullanır.
 
+## Faz 10: Sır göstermeyen bağlantı teşhisi (kod hazır; kurulum bekliyor)
+
+- `relay doctor`: ayar, imleç, DNS/bağlantı/TLS, servis sağlığı, hesap ve oda erişimi.
+- Çıktıda token, özel adres, hesap/oda adı veya ham sunucu hatası bulunmaz.
+- Yalnız GET kontrolleri; mesajlar, ayar ve imleç değiştirilmez. Varsayılan toplam ağ süresi 10 saniyedir.
+- Eksik ayar, TLS/DNS, yanlış kimlik, üyelik, yönlendirme, bozuk yanıt, süre ve iptal regresyonları bulunur.
+- İstemci ikilisi güncellenerek kullanılır; yeni sunucu ucu veya şema göçü gerekmez.
+
 Sonraki özellik adayları: hesabı koruyarak token yenileme; görev kabul/ret/tamamlandı durumları;
-süreli dosya çalışma rezervasyonu; sır göstermeyen `relay doctor`. Bunlar henüz uygulanmadı.
+süreli dosya çalışma rezervasyonu. Bunlar henüz uygulanmadı.
 
 ## Açık sorular ❓
 

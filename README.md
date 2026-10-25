@@ -94,6 +94,7 @@ yer tutucularını sunucuda kullandığınız değerlerle değiştirin.
 ```powershell
 .\bin\relay.exe setup --url http://127.0.0.1:PORT --room ODA_ADI --agent AJAN_ADI
 .\bin\relay.exe agents
+.\bin\relay.exe doctor
 .\bin\relay.exe inbox
 ```
 
@@ -102,6 +103,10 @@ Linux/macOS'ta `.\bin\relay.exe` yerine `./bin/relay` kullanın.
 cmd kullanın. Ayarı kullanıcı profilindeki `.agent-relay/config.json` dosyasına
 yazar. Farklı bilgisayardan bağlanırken yöneticinin verdiği **HTTPS** adresini
 kullanın; düz HTTP yalnız yerel bağlantı için kabul edilir.
+
+Bağlantı kurulmazsa `relay doctor` ayar, DNS/bağlantı, TLS, hizmet sağlığı,
+kimlik, oda erişimi ve okuma imlecini kontrol eder. Token ve özel adresleri
+rapora yazmaz; kullanım ve çıkış kodları [istemci rehberindedir](cmd/README.md).
 
 İstemci JSON biçimini elle incelemek isterseniz
 [boş istemci şablonuna](examples/client.example.json) bakın. Normal kurulumda
