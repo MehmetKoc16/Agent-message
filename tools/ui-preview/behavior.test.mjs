@@ -38,10 +38,18 @@ class Element {
   reportValidity() {}
 }
 
-async function harness(fetch) {
+async function harness(fetch, width = 1440) {
   const nodes = new Map();
   const el = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
-  const media = () => ({matches: false, addEventListener() {}});
+  const queries = new Map();
+  const matches = (query) => /max-width: (\d+)px/.test(query) && width <= Number(query.match(/max-width: (\d+)px/)[1]);
+  const media = (query) => {
+    if (!queries.has(query)) {
+      const listeners = [];
+      queries.set(query, {matches: matches(query), addEventListener(_type, fn) { listeners.push(fn); }, listeners});
+    }
+    return queries.get(query);
+  };
   const context = vm.createContext({
     fetch, TextEncoder, URLSearchParams, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
     location: {search: ""}, matchMedia: media, window: {matchMedia: media},
@@ -58,8 +66,51 @@ async function harness(fetch) {
     controller: new AbortController(), roomController: new AbortController(), history: {oldest: 0, hasMore: false, browsing: false}};
   context.inspect.setSession(session);
   el("tip").value = "soru";
-  return {el, session, inspect: context.inspect};
+  return {el, session, inspect: context.inspect, resize(nextWidth) {
+    width = nextWidth;
+    for (const [query, value] of queries) {
+      const next = matches(query);
+      if (next === value.matches) continue;
+      value.matches = next;
+      for (const listener of value.listeners) listener(value);
+    }
+  }};
 }
+
+test("dar ekranda menü ve katılımcılar perdeyi paylaşır; perde doğru paneli kapatır", async () => {
+  const h = await harness(async () => { throw new Error("ağ kullanılmamalı"); }, 390);
+  h.el("katilimci-panel").hidden = true;
+  h.el("menu-ac").listeners.get("click")();
+  assert.equal(h.el("izleme").classList.contains("menu-acik"), true);
+  assert.equal(h.el("menu-perde").hidden, false);
+  h.el("katilimcilar-ac").listeners.get("click")();
+  assert.equal(h.el("izleme").classList.contains("menu-acik"), false);
+  assert.equal(h.el("katilimci-panel").hidden, false);
+  assert.equal(h.el("menu-perde").hidden, false);
+  h.el("menu-perde").listeners.get("click")();
+  assert.equal(h.el("katilimci-panel").hidden, true);
+  assert.equal(h.el("menu-perde").hidden, true);
+  h.el("menu-ac").listeners.get("click")();
+  h.el("menu-perde").listeners.get("click")();
+  assert.equal(h.el("izleme").classList.contains("menu-acik"), false);
+  assert.equal(h.el("menu-perde").hidden, true);
+});
+
+test("ekran büyüyüp küçülünce panel ve perde masaüstü/mobil yerleşime uyum sağlar", async () => {
+  const h = await harness(async () => { throw new Error("ağ kullanılmamalı"); });
+  h.resize(820);
+  assert.equal(h.el("katilimci-panel").hidden, true);
+  h.el("katilimcilar-ac").listeners.get("click")();
+  assert.equal(h.el("menu-perde").hidden, false);
+  h.resize(1440);
+  assert.equal(h.el("katilimci-panel").hidden, false);
+  assert.equal(h.el("menu-perde").hidden, true);
+  h.resize(390);
+  h.el("menu-ac").listeners.get("click")();
+  h.resize(820);
+  assert.equal(h.el("izleme").classList.contains("menu-acik"), false);
+  assert.equal(h.el("menu-perde").hidden, true);
+});
 
 test("409 yeniden denemesi alıcıyı, türü ve ilk metni korur; yeni taslağı silmez", async () => {
   let finishFirst;

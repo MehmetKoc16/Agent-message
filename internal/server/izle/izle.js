@@ -9,21 +9,29 @@
   const threads = new Map();
   const maxRows = 500, encoder = new TextEncoder();
   const narrow = matchMedia("(max-width: 1150px)");
+  function drawerBackdrop() {
+    el("menu-perde").hidden = !view.classList.contains("menu-acik") &&
+      !(narrow.matches && !el("katilimci-panel").hidden);
+  }
   function panel(open, focus = false) {
     el("katilimci-panel").hidden = !open;
     view.classList.toggle("bilgi-kapali", !open);
     el("katilimcilar-ac").setAttribute("aria-expanded", String(open));
+    drawerBackdrop();
     if (focus) (open ? el("katilimcilar-kapat") : el("katilimcilar-ac")).focus();
   }
   function menu(open, focus = false) {
     view.classList.toggle("menu-acik", open);
-    el("menu-perde").hidden = !open;
+    drawerBackdrop();
     el("menu-ac").setAttribute("aria-expanded", String(open));
     if (focus) (open ? el("menu-kapat") : el("menu-ac")).focus();
   }
   el("menu-ac").addEventListener("click", () => { panel(false); menu(true, true); });
   el("menu-kapat").addEventListener("click", () => menu(false, true));
-  el("menu-perde").addEventListener("click", () => menu(false, true));
+  el("menu-perde").addEventListener("click", () => {
+    if (view.classList.contains("menu-acik")) menu(false, true);
+    else panel(false, true);
+  });
   el("katilimcilar-ac").addEventListener("click", () => { menu(false); panel(el("katilimci-panel").hidden, true); });
   el("katilimcilar-kapat").addEventListener("click", () => panel(false, true));
   narrow.addEventListener("change", () => { if (active && active.room) panel(!narrow.matches); });
