@@ -39,6 +39,19 @@ Aynı koruma gövde ve çerçeve niteliklerine uygulanır.
 Test: `TestCerceveTerminalKomutlariniMetinOlarakGosterir` düzeltmeden önce ham
 ESC tespit ederek başarısız oldu, düzeltmeden sonra geçti.
 
+### Go derleme sürümündeki bilinen açıklar
+
+CI, `go.mod` içindeki `1.27.0` değerini tam sürüm olarak kuruyordu. Yeni güvenlik
+taraması bu sürüm için çağrı yollarında 10 standart kütüphane uyarısı verdi.
+HTTP/TLS ve sertifika doğrulama kodları da bu kapsamdaydı. Yerelde kullanılan
+1.27.3 taramasının temiz olması, eski CI derlemelerinin güvenli olduğunu kanıtlamıyordu.
+
+Alt sınır `go.mod` ve kurulum rehberinde 1.27.3'e yükseltildi; CI sürümü buradan
+seçiyor. Örneğin [GO-2026-6617](https://pkg.go.dev/vuln/GO-2026-6617) HTTP/2
+yarışı 1.27.2'de, [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) sertifika
+güven sorunu 1.27.3'te giderildi. Yeniden dağıtılacak ikililer güncel araç zinciriyle
+derlenmelidir; sunucudaki eski ikilinin durumu bu incelemede değiştirilmedi.
+
 ## Diğer kontroller
 
 | Alan | Sonuç ve kanıt |
@@ -48,7 +61,7 @@ ESC tespit ederek başarısız oldu, düzeltmeden sonra geçti.
 | Oda/konuşma izolasyonu | Üyelik, insan/ajan farkı, taraf denetimi, görünmeyen mesaja yanıt, yönetici/TOTP ve bekleyen okumada iptal testleri incelendi. |
 | Token ve günlük | Token özetleniyor; API/listeler token döndürmüyor. Statik sayfa CSP, no-store ve iframe engeli kullanıyor. Caddy örneği iki kimlik başlığını ve URI'yi siliyor; eski belge açıklaması düzeltildi. |
 | Komut çalıştırma | Köprü `exec.CommandContext` ve ayrı argümanlar kullanıyor; mesaj gövdesini kabuk komutu olarak yorumlamıyor. |
-| Bağımlılıklar | Go 1.27.3 ile `govulncheck v1.9.0 ./...` çalıştırıldı: bilinen açık raporlanmadı. Aynı tarama Linux CI işine eklendi. Bu sonuç bilinmeyen açıkların yokluğu anlamına gelmez. |
+| Bağımlılıklar | Go 1.27.3 ile `govulncheck v1.9.0 ./...` çalıştırıldı: bilinen açık raporlanmadı. Aynı tarama Linux CI işine eklendi; 1.27.0 ile gelen uyarılar derleme alt sınırı yükseltilerek giderildi. Bu sonuç bilinmeyen açıkların yokluğu anlamına gelmez. |
 
 SQL injection veya XSS açığı saptanmadığı için bu alanlarda gereksiz sorgu veya
 DOM değişikliği yapılmadı. İnceleme kapsamındaki regresyonlar, `go test ./...`,
