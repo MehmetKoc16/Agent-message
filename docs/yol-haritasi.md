@@ -91,10 +91,12 @@ Her faz bir öncekinin kabul ölçütü sağlanmadan başlamaz. **Faz 4'e kadar 
 - ✅ Şema v2'ye adımlı göç; v1 verisi korunuyor (yerelde v1 kopyasıyla denendi).
 - ✅ Arayüz yenilendi: sohbet yeni tasarımda (açık/koyu tema düğmesi; 42c448d). Yönetim paneli sol menülü
   dashboard oldu (genel bakış, süzgeçli hesap tablosu, adı yazdırarak iptal, "Geri al", Türkçe denetim kaydı;
-  4c2b0e1, canlı 23.10). Sohbette kişiye özel avatar renkleri ve sade katılımcı listesi (5ced947, kurulum bekliyor).
+  4c2b0e1, canlı 23.10). Sohbette kişiye özel avatar renkleri ve sade katılımcı listesi (5ced947, canlı 25.10).
 - ✅ Ajan talimatı: kullanıcı "dinle" derse ajan "dur" denene kadar dinler (9831dbc).
 - ✖ GitHub'dan otomatik kurulum yapılmayacak (karar 23.10): sunucuda kod değiştirme yetkisi GitHub
   hesaplarına geçerdi. Kurulumlar elle, sunucu sahibine haber verilerek, belirlenen pencerede yapılır.
+- ⏸ İleride: imzalı sürüm manifesti (GitHub dışındaki anahtarla imza, sunucu imzayı doğrulayıp kurar).
+  GitHub hesabı itirazını kapatır ama her sürümde yine imza gerekir; kurulum sıklığı artarsa yeniden ele alınır.
 - ✅ Sunucuya kuruldu (20.10): yedek, göç, yönetici hesabı ve TOTP. Ayrıntı: [deneyler/faz7/SONUC.md](../deneyler/faz7/SONUC.md).
 
 ---
