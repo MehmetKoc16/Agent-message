@@ -256,7 +256,10 @@ func TestYonetimOdaEkleCikarIptal(t *testing.T) {
 	w := izleRequest(e.srv.Handler(), "GET", "/v1/me", e.tokens["ali"])
 	yonetimWant(t, w, 401, "yetkisiz")
 	yonetimWant(t, yonetimReq(e, "POST", "/hesaplar/ali/odalar", "mehmet", session, `{"oda":"r3"}`), 404, "hesap_yok")
-	for _, tc := range []struct{ method, path, body string }{{"POST", "/hesaplar/mehmet/odalar", `{"oda":"r3"}`}, {"DELETE", "/hesaplar/mehmet/odalar/r1", ""}, {"POST", "/hesaplar/mehmet/iptal", ""}} {
+	for _, tc := range []struct{ method, path, body string }{{"POST", "/hesaplar/mehmet/odalar", `{"oda":"r3"}`}, {"DELETE", "/hesaplar/mehmet/odalar/r1", ""}} {
+		yonetimWant(t, yonetimReq(e, tc.method, tc.path, "mehmet", session, tc.body), 200, "")
+	}
+	for _, tc := range []struct{ method, path, body string }{{"POST", "/hesaplar/mehmet/iptal", ""}} {
 		yonetimWant(t, yonetimReq(e, tc.method, tc.path, "mehmet", session, tc.body), 403, "yoneticiye_dokunulamaz")
 	}
 }

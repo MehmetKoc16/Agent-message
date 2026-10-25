@@ -40,7 +40,8 @@ func (s *Store) ChangeAccount(ctx context.Context, yapan, islem, ad, oda, secret
 	if err != nil {
 		return err
 	}
-	if protect && yes {
+	membership := islem == "odaya_eklendi" || islem == "odadan_cikarildi" || islem == "odaya-ekle" || islem == "odadan-cikar"
+	if protect && yes && !membership {
 		return ErrYoneticiProtected
 	}
 	switch islem {

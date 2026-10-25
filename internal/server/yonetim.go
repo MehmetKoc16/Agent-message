@@ -30,6 +30,7 @@ func (s *Server) yonetimRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/yonetim/hesaplar", s.yonetim(s.handleYonetimList, false))
 	m.HandleFunc("POST /v1/yonetim/hesaplar", s.yonetim(s.handleYonetimCreate, false))
 	m.HandleFunc("POST /v1/yonetim/odalar", s.yonetim(s.handleCreateRoom, false))
+	m.HandleFunc("GET /v1/yonetim/odalar", s.yonetim(s.handleManagementRooms, false))
 	m.HandleFunc("POST /v1/yonetim/hesaplar/{ad}/odalar", s.yonetim(s.handleYonetimChange, false))
 	m.HandleFunc("DELETE /v1/yonetim/hesaplar/{ad}/odalar/{oda}", s.yonetim(s.handleYonetimChange, false))
 	m.HandleFunc("POST /v1/yonetim/hesaplar/{ad}/iptal", s.yonetim(s.handleYonetimChange, false))
@@ -250,7 +251,7 @@ func (s *Server) handleYonetimChange(w http.ResponseWriter, r *http.Request, a s
 		s.internal(w, "hedef denetimi", err)
 		return
 	}
-	if yes {
+	if yes && r.Pattern == "POST /v1/yonetim/hesaplar/{ad}/iptal" {
 		writeErr(w, 403, "yoneticiye_dokunulamaz")
 		return
 	}

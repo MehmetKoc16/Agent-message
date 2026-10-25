@@ -16,6 +16,24 @@ type Room struct {
 	Title string `json:"title"`
 }
 
+// AllRooms yönetim ekranındaki başlık seçimi içindir; API yönetici + TOTP ister.
+func (s *Store) AllRooms(ctx context.Context) ([]Room, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT name,title FROM rooms ORDER BY title,name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Room{}
+	for rows.Next() {
+		var room Room
+		if err := rows.Scan(&room.Name, &room.Title); err != nil {
+			return nil, err
+		}
+		out = append(out, room)
+	}
+	return out, rows.Err()
+}
+
 func ensureRoomTx(ctx context.Context, tx *sql.Tx, room, stamp string) error {
 	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO rooms(name,title,created_at) VALUES (?,?,?)`, room, room, stamp)
 	return err
