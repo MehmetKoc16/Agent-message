@@ -45,7 +45,7 @@ Paket: [servis](../deploy/agent-relay.service), [soket](../deploy/agent-relay.so
 
 ## 1. Yerelde derle ve aktar
 
-Proje kökünde Git Bash ile, Go 1.27.0 ve vendored bağımlılıklarla:
+Proje kökünde Git Bash ile, Go 1.27.3 veya üzeri ve vendored bağımlılıklarla:
 
 ```bash
 GOFLAGS=-mod=vendor GOPROXY=off GOCACHE="$(cygpath -w "$(pwd)/.gocache")" bash tools/derle/derle.sh

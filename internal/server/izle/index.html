@@ -82,12 +82,13 @@
           <form id="gonderme">
             <div id="yanit" hidden><span id="yanit-bilgi"></span><button id="yanit-sil" class="ikon-dugme" type="button" aria-label="Yanıtı kaldır">×</button></div>
             <label for="metin" class="sr-only">Mesaj</label><textarea id="metin" maxlength="16384" rows="3" required placeholder="Bir soru sor veya ekibinle bir şey paylaş…"></textarea>
-            <div class="gonderme-alt"><div class="gonderme-kontroller"><div class="secim-grup"><label for="alici">Kime</label><select id="alici"><option value="">herkes</option></select></div><span class="kontrol-ayirici" aria-hidden="true"></span><div class="secim-grup"><label for="tip">Tür</label><select id="tip"><option value="soru">Soru</option><option value="gorev">Görev</option><option value="bilgi">Bilgi</option><option value="cevap">Cevap</option><option value="sonuc">Sonuç</option></select></div></div><button id="gonder" class="birincil-dugme" type="submit" aria-label="Gönder"><span>Gönder</span><span aria-hidden="true">↑</span></button></div>
+            <p id="alici-uyari" role="status" hidden>Seçtiğin alıcı artık bu odada yok. Yeni bir alıcı seç.</p>
+            <div class="gonderme-alt"><div class="gonderme-kontroller"><div class="secim-grup"><label for="alici">Kime</label><select id="alici" aria-describedby="alici-uyari"><option value="">herkes</option></select></div><span class="kontrol-ayirici" aria-hidden="true"></span><div class="secim-grup"><label for="tip">Tür</label><select id="tip"><option value="soru">Soru</option><option value="gorev">Görev</option><option value="bilgi">Bilgi</option><option value="cevap">Cevap</option><option value="sonuc">Sonuç</option></select></div></div><button id="gonder" class="birincil-dugme" type="submit" aria-label="Gönder"><span>Gönder</span><span aria-hidden="true">↑</span></button></div>
           </form>
           <div class="yazma-alt"><p id="gonderim-durum" role="status" aria-live="polite"></p><span class="kisayol-ipucu">Enter gönderir <span>·</span> Shift+Enter yeni satır</span><span id="sayac">0 / 16384 bayt</span></div>
         </div>
       </div>
-      <p id="odasiz-durum" class="odasiz-durum" hidden>Bu hesaba henüz bir oda atanmamış. Yöneticinden erişim iste.</p>
+      <div id="odasiz-durum" class="oda-icerik" hidden><header class="sohbet-ust-bar"><button id="odasiz-menu-ac" class="ikon-dugme mobil-dugme" type="button" aria-label="Çalışma alanı menüsünü aç" aria-controls="gezinme" aria-expanded="false">☰</button><div class="oda-etiketi"><h1>Çalışma alanı</h1></div></header><p class="odasiz-durum">Bu hesaba henüz bir oda atanmamış. Yöneticinden erişim iste.</p></div>
       <aside class="sag-panel" id="katilimci-panel" aria-label="Oda bilgileri" hidden>
         <div class="sag-panel-baslik"><h2>Oda bilgileri</h2><button id="katilimcilar-kapat" class="ikon-dugme" type="button" aria-label="Oda bilgilerini kapat">×</button></div>
         <div class="panel-bolum"><div class="bolum-baslik">KATILIMCILAR</div><ul id="ajanlar"></ul></div>

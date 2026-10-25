@@ -292,6 +292,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, a store.Agent, roo
 		ReplyTo: in.ReplyTo, Body: in.Body, RequestID: in.RequestID,
 	})
 	switch {
+	case errors.Is(err, store.ErrUnauthorized):
+		writeErr(w, http.StatusUnauthorized, "yetkisiz")
+	case errors.Is(err, store.ErrRoomForbidden):
+		writeErr(w, http.StatusForbidden, "yasak")
 	case errors.Is(err, store.ErrBadRecipient):
 		writeErr(w, http.StatusBadRequest, "gecersiz_alici")
 	case errors.Is(err, store.ErrBadReplyTo):
@@ -501,25 +505,17 @@ func (s *Server) handleClose(w http.ResponseWriter, r *http.Request, a store.Age
 		writeErr(w, http.StatusBadRequest, "gecersiz_thread")
 		return
 	}
-	if _, err := s.st.GetThread(r.Context(), room, id); errors.Is(err, store.ErrThreadNotFound) {
+	err := s.st.CloseThreadFor(r.Context(), room, id, a.Name)
+	if errors.Is(err, store.ErrUnauthorized) {
+		writeErr(w, http.StatusUnauthorized, "yetkisiz")
+		return
+	} else if errors.Is(err, store.ErrRoomForbidden) || errors.Is(err, store.ErrNotParty) {
+		writeErr(w, http.StatusForbidden, "yasak")
+		return
+	} else if errors.Is(err, store.ErrThreadNotFound) {
 		writeErr(w, http.StatusNotFound, "konusma_yok")
 		return
 	} else if err != nil {
-		s.internal(w, "konuşma okuma", err)
-		return
-	}
-	if a.Kind != "insan" {
-		party, err := s.st.IsThreadParty(r.Context(), room, id, a.Name)
-		if err != nil {
-			s.internal(w, "taraf denetimi", err)
-			return
-		}
-		if !party {
-			writeErr(w, http.StatusForbidden, "yasak")
-			return
-		}
-	}
-	if err := s.st.CloseThread(r.Context(), room, id); err != nil {
 		s.internal(w, "konuşma kapatma", err)
 		return
 	}

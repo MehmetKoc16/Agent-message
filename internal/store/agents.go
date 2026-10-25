@@ -127,6 +127,26 @@ func (s *Store) HasRoom(ctx context.Context, agent, room string) (bool, error) {
 	return err == nil, err
 }
 
+// requireRoomMemberTx yazma yetkisini değişikliğin transaction'ında denetler.
+// İlk HTTP denetiminden sonra gelen iptal/üyelik değişimi eski yetkiyle yazamaz.
+func requireRoomMemberTx(ctx context.Context, tx *sql.Tx, agent, room string) (string, error) {
+	var kind string
+	var revoked sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT kind,revoked_at FROM agents WHERE name=?`, agent).Scan(&kind, &revoked)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && revoked.Valid {
+		return "", ErrUnauthorized
+	}
+	if err != nil {
+		return "", err
+	}
+	var one int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM agent_rooms WHERE agent=? AND room=?`, agent, room).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrRoomForbidden
+	}
+	return kind, err
+}
+
 // AgentRooms ajanın odalarını ada göre sıralı döndürür; odası yoksa boş listedir.
 func (s *Store) AgentRooms(ctx context.Context, name string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT room FROM agent_rooms WHERE agent = ? ORDER BY room`, name)

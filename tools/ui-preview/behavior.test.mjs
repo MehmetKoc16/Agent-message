@@ -42,6 +42,7 @@ async function harness(fetch, width = 1440) {
   const nodes = new Map();
   const el = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   const queries = new Map();
+  const documentListeners = new Map();
   const matches = (query) => /max-width: (\d+)px/.test(query) && width <= Number(query.match(/max-width: (\d+)px/)[1]);
   const media = (query) => {
     if (!queries.has(query)) {
@@ -54,19 +55,20 @@ async function harness(fetch, width = 1440) {
     fetch, TextEncoder, URLSearchParams, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
     location: {search: ""}, matchMedia: media, window: {matchMedia: media},
     sessionStorage: {getItem() { return null; }, setItem() {}, removeItem() {}},
-    document: {getElementById: el, createElement: (tag) => new Element(tag), addEventListener() {},
+    document: {getElementById: el, createElement: (tag) => new Element(tag),
+      addEventListener(type, fn) { documentListeners.set(type, fn); },
       documentElement: new Element(), body: new Element()},
   });
   const source = await readFile(new URL("../../internal/server/izle/izle.js", import.meta.url), "utf8");
   vm.runInContext(source.replace(/\}\)\(\);\s*$/, `
-    globalThis.inspect = {setSession(s) { active = s; }, addMessages, stop,
+    globalThis.inspect = {setSession(s) { active = s; }, addMessages, stop, refreshRecipients,
       sizes() { return {rows: rows.length, ids: ids.size, threads: threads.size}; }};
   })();`), context);
   const session = {name: "demo", token: "test-only", room: "r1", maxBody: 16384,
     controller: new AbortController(), roomController: new AbortController(), history: {oldest: 0, hasMore: false, browsing: false}};
   context.inspect.setSession(session);
   el("tip").value = "soru";
-  return {el, session, inspect: context.inspect, resize(nextWidth) {
+  return {el, session, inspect: context.inspect, documentListeners, resize(nextWidth) {
     width = nextWidth;
     for (const [query, value] of queries) {
       const next = matches(query);
@@ -94,6 +96,132 @@ test("dar ekranda menü ve katılımcılar perdeyi paylaşır; perde doğru pane
   h.el("menu-perde").listeners.get("click")();
   assert.equal(h.el("izleme").classList.contains("menu-acik"), false);
   assert.equal(h.el("menu-perde").hidden, true);
+});
+
+test("listeden çıkan alıcı herkese dönüşmez; gönderim engellenir ve açık seçimle devam eder", async () => {
+  const sent = [];
+  const h = await harness(async (_path, options) => {
+    sent.push(JSON.parse(options.body));
+    return {status: 201, json: async () => ({thread: "T-1"})};
+  });
+  h.inspect.refreshRecipients([{name: "demo"}, {name: "davetli"}]);
+  h.el("alici").value = "davetli"; h.el("metin").value = "belirli kişiye taslak";
+  h.inspect.refreshRecipients([{name: "demo"}]);
+  assert.equal(h.el("alici").value, "davetli");
+  assert.equal(h.el("alici").options.find((o) => o.value === "davetli").disabled, true);
+  assert.equal(h.el("alici-uyari").hidden, false);
+  assert.equal(h.el("alici").checkValidity(), false);
+  await h.el("gonderme").listeners.get("submit")({preventDefault() {}});
+  assert.equal(sent.length, 0);
+  assert.equal(h.el("metin").value, "belirli kişiye taslak");
+  h.inspect.refreshRecipients([{name: "demo"}]);
+  assert.equal(h.el("alici").value, "davetli");
+  h.el("alici").value = ""; h.el("alici").listeners.get("change")();
+  assert.equal(h.el("alici-uyari").hidden, true);
+  await h.el("gonderme").listeners.get("submit")({preventDefault() {}});
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, "");
+});
+
+test("alıcı yeniden katıldığında aynı seçim ve taslak korunur, gönderim yeniden açılır", async () => {
+  const h = await harness(async () => { throw new Error("ağ kullanılmamalı"); });
+  h.inspect.refreshRecipients([{name: "davetli"}]); h.el("alici").value = "davetli";
+  h.el("metin").value = "taslak";
+  h.inspect.refreshRecipients([]);
+  h.inspect.refreshRecipients([{name: "davetli"}]);
+  assert.equal(h.el("alici").value, "davetli");
+  assert.equal(h.el("alici").options.find((o) => o.value === "davetli").disabled, false);
+  assert.equal(h.el("alici").checkValidity(), true);
+  assert.equal(h.el("alici-uyari").hidden, true);
+  assert.equal(h.el("metin").value, "taslak");
+});
+
+test("iki güncele dönüş düğmesi de taslağı, alıcıyı, türü ve yanıt bağlamını korur", async (t) => {
+  for (const button of ["guncel", "yeni"]) {
+    const sent = [], message = (id, thread) => ({id, thread, from: "davetli", type: "soru", body: "önceki", created_at: "2026-10-23T00:00:00Z"});
+    const result = (data, status = 200) => ({ok: true, status, json: async () => data});
+    const h = await harness(async (path, options) => {
+      if (options.method === "POST") { sent.push(JSON.parse(options.body)); return result({thread: "T-1"}, 201); }
+      if (path.endsWith("/log?tail=1")) return result({messages: [message(2, "T-2")], has_more: false});
+      if (path.endsWith("/agents")) return result({agents: [{name: "davetli", kind: "ajan"}]});
+      return new Promise(() => {});
+    });
+    t.after(() => h.inspect.stop());
+    h.inspect.refreshRecipients([{name: "davetli"}]);
+    h.inspect.addMessages([message(1, "T-1")], h.session);
+    h.el("mesajlar").children[0].children[3].children[1].listeners.get("click")();
+    h.el("metin").value = "yanıt taslağı";
+    h.session.history.browsing = true;
+    h.el(button).listeners.get("click")();
+    await new Promise(setImmediate);
+    assert.equal(h.el("metin").value, "yanıt taslağı", button);
+    assert.equal(h.el("alici").value, "davetli", button);
+    assert.equal(h.el("tip").value, "cevap", button);
+    assert.equal(h.el("yanit").hidden, false, button);
+    await h.el("gonderme").listeners.get("submit")({preventDefault() {}});
+    assert.deepEqual(sent, [{to: "davetli", type: "cevap", body: "yanıt taslağı", thread: "T-1", reply_to: 1}], button);
+  }
+});
+
+test("yönetime geçiş menü ve paneli kapatır; gizli sohbet Tab tuşunu engellemez", async () => {
+  const h = await harness(async () => { throw new Error("ağ kullanılmamalı"); }, 390);
+  h.el("katilimcilar-ac").listeners.get("click")();
+  await h.el("yonetim-ac").listeners.get("click")();
+  assert.equal(h.el("izleme").hidden, true);
+  assert.equal(h.el("katilimci-panel").hidden, true);
+  assert.equal(h.el("menu-perde").hidden, true);
+  let prevented = false;
+  h.documentListeners.get("keydown")({key: "Tab", preventDefault() { prevented = true; }});
+  assert.equal(prevented, false);
+  h.el("sohbete-don").listeners.get("click")();
+  h.el("menu-ac").listeners.get("click")();
+  await h.el("yonetim-ac").listeners.get("click")();
+  assert.equal(h.el("izleme").classList.contains("menu-acik"), false);
+});
+
+test("yazılan taslağın konuşması canlı mesaj ve güncele dönüşle değişmez; başka odaya taşınmaz", async (t) => {
+  const sent = [], message = (id, thread) => ({id, thread, from: "davetli", type: "bilgi", body: "mesaj", created_at: "2026-10-23T00:00:00Z"});
+  const result = (data, status = 200) => ({ok: true, status, json: async () => data});
+  const h = await harness(async (path, options) => {
+    if (options.method === "POST") { sent.push(JSON.parse(options.body)); return result({thread: "T-1"}, 201); }
+    if (path.endsWith("/log?tail=1")) return result({messages: [message(3, "T-3")], has_more: false});
+    return new Promise(() => {});
+  });
+  t.after(() => h.inspect.stop());
+  h.inspect.addMessages([message(1, "T-1")], h.session);
+  h.el("metin").value = "sabit konuşma taslağı";
+  h.inspect.addMessages([message(2, "T-2")], h.session);
+  h.el("guncel").listeners.get("click")();
+  await new Promise(setImmediate);
+  await h.el("gonderme").listeners.get("submit")({preventDefault() {}});
+  assert.equal(sent[0].thread, "T-1");
+  h.el("metin").value = "yalnız bu odanın taslağı";
+  h.el("oda").value = "r2"; h.el("oda").listeners.get("change")();
+  await new Promise(setImmediate);
+  assert.equal(h.el("metin").value, "");
+  assert.equal(h.el("alici").value, "");
+  assert.equal(h.el("yanit").hidden, true);
+});
+
+test("odasız hesabın mobil menüsü açılır ve çıkış işlemi giriş ekranına döner", async (t) => {
+  const result = (data) => ({ok: true, status: 200, json: async () => data});
+  const h = await harness(async (path) => {
+    if (path === "/v1/me") return result({name: "demo", kind: "insan", yonetici: false});
+    if (path === "/v1/rooms") return result({rooms: []});
+    throw new Error("beklenmeyen istek");
+  }, 390);
+  t.after(() => h.inspect.stop());
+  h.el("ad").value = "demo"; h.el("token").value = "test-only";
+  h.el("giris").listeners.get("submit")({preventDefault() {}});
+  await new Promise(setImmediate);
+  assert.equal(h.el("odasiz-durum").hidden, false);
+  assert.equal(h.el("oda-icerik").hidden, true);
+  h.el("odasiz-menu-ac").listeners.get("click")();
+  assert.equal(h.el("izleme").classList.contains("menu-acik"), true);
+  assert.equal(h.el("menu-perde").hidden, false);
+  h.el("cikis").listeners.get("click")();
+  assert.equal(h.el("giris-ekrani").hidden, false);
+  assert.equal(h.el("izleme").hidden, true);
 });
 
 test("ekran büyüyüp küçülünce panel ve perde masaüstü/mobil yerleşime uyum sağlar", async () => {

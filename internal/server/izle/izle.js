@@ -9,6 +9,7 @@
   const threads = new Map();
   const maxRows = 500, encoder = new TextEncoder();
   const narrow = matchMedia("(max-width: 1150px)");
+  function navigationButton() { return el("oda-icerik").hidden ? el("odasiz-menu-ac") : el("menu-ac"); }
   function drawerBackdrop() {
     el("menu-perde").hidden = !view.classList.contains("menu-acik") &&
       !(narrow.matches && !el("katilimci-panel").hidden);
@@ -24,9 +25,11 @@
     view.classList.toggle("menu-acik", open);
     drawerBackdrop();
     el("menu-ac").setAttribute("aria-expanded", String(open));
-    if (focus) (open ? el("menu-kapat") : el("menu-ac")).focus();
+    el("odasiz-menu-ac").setAttribute("aria-expanded", String(open));
+    if (focus) (open ? el("menu-kapat") : navigationButton()).focus();
   }
   el("menu-ac").addEventListener("click", () => { panel(false); menu(true, true); });
+  el("odasiz-menu-ac").addEventListener("click", () => { panel(false); menu(true, true); });
   el("menu-kapat").addEventListener("click", () => menu(false, true));
   el("menu-perde").addEventListener("click", () => {
     if (view.classList.contains("menu-acik")) menu(false, true);
@@ -37,13 +40,14 @@
   narrow.addEventListener("change", () => { if (active && active.room) panel(!narrow.matches); });
   matchMedia("(max-width: 760px)").addEventListener("change", () => menu(false));
   document.addEventListener("keydown", (event) => {
+    if (view.hidden) return;
     const drawer = view.classList.contains("menu-acik") ? el("gezinme") :
       narrow.matches && !el("katilimci-panel").hidden ? el("katilimci-panel") : null;
     if (event.key === "Tab" && drawer) {
       const controls = [...drawer.querySelectorAll("button:not(:disabled), select, a[href], [tabindex='0']")]
         .filter((n) => n.getClientRects().length > 0);
       const first = controls[0], last = controls[controls.length - 1];
-      if (!controls.includes(document.activeElement) || (!event.shiftKey && document.activeElement === last)) {
+      if (controls.length && (!controls.includes(document.activeElement) || (!event.shiftKey && document.activeElement === last))) {
         event.preventDefault(); first?.focus();
       } else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
     }
@@ -104,6 +108,7 @@
     el("konusma-sayisi").textContent = "0"; el("konusma-bos").hidden = false;
     el("katilimci-sayisi").textContent = "0";
     recipient.replaceChildren(node("option", "herkes")); recipient.firstChild.value = "";
+    selectRecipient("");
     text.value = ""; count(); showFilter(""); el("yeni").hidden = true;
     el("gonderim-durum").textContent = ""; el("gonder").disabled = false; el("kapat").disabled = false;
     el("gecmis").hidden = true; el("guncel").hidden = true; el("gecmis").disabled = false;
@@ -118,7 +123,7 @@
   function bottom() { return messages.scrollHeight - messages.scrollTop - messages.clientHeight < 48; }
   function scrollDown() { messages.scrollTop = messages.scrollHeight; el("yeni").hidden = true; }
   el("yeni").addEventListener("click", () => {
-    if (active?.history?.browsing) openRoom(active, active.room); else scrollDown();
+    if (active?.history?.browsing) openRoom(active, active.room, true); else scrollDown();
   });
   messages.addEventListener("scroll", () => { if (bottom()) el("yeni").hidden = true; });
   function clearReply() { reply = null; el("yanit").hidden = true; }
@@ -205,10 +210,7 @@
         target = m.thread; targetExplicit = false;
         showFilter(m.thread); reply = m.id;
         if (m.from !== session.name) {
-          if (!Array.from(recipient.options).some((o) => o.value === m.from)) {
-            const option = node("option", m.from); option.value = m.from; recipient.append(option);
-          }
-          recipient.value = m.from;
+          selectRecipient(m.from);
         }
         if (m.type === "soru") el("tip").value = "cevap";
         if (m.type === "gorev") el("tip").value = "sonuc";
@@ -231,7 +233,7 @@
       session.history.oldest = rows[0].message.id;
       el("gecmis").hidden = !session.history.hasMore;
     }
-    if (rows.length && !targetExplicit && !filter) target = rows[rows.length - 1].thread;
+    if (rows.length && !targetExplicit && !filter && !text.value) target = rows[rows.length - 1].thread;
     updateBaglam();
     refreshContext();
     if (wasBottom) scrollDown(); else if (visibleAdded) el("yeni").hidden = false;
@@ -293,7 +295,7 @@
       for (const m of data.messages) after = Math.max(after, m.id);
     }
   }
-  el("guncel").addEventListener("click", () => { if (active) openRoom(active, active.room); });
+  el("guncel").addEventListener("click", () => { if (active) openRoom(active, active.room, true); });
   el("gecmis").addEventListener("click", async () => {
     const session = active, history = session?.history;
     if (!session || !history || !history.oldest || el("gecmis").disabled) return;
@@ -315,13 +317,36 @@
     } catch (_) { /* Oda değişimi ve çıkış bekleyen sayfayı iptal eder. */ }
     finally { if (!signal.aborted) el("gecmis").disabled = false; }
   });
+  function validateRecipient() {
+    const unavailable = Array.from(recipient.options).some((o) => o.value === recipient.value && o.disabled);
+    recipient.setCustomValidity(unavailable ? "Seçtiğin alıcı artık bu odada yok. Yeni bir alıcı seç." : "");
+    el("alici-uyari").hidden = !unavailable;
+    return !unavailable;
+  }
+  function selectRecipient(name, unavailable = true) {
+    if (name && !Array.from(recipient.options).some((o) => o.value === name)) {
+      const option = node("option", name + (unavailable ? " (odada değil)" : ""));
+      option.value = name; option.disabled = unavailable; recipient.append(option);
+    }
+    recipient.value = name;
+    validateRecipient();
+  }
+  function refreshRecipients(agents) {
+    const selected = recipient.value;
+    recipient.replaceChildren(node("option", "herkes")); recipient.firstChild.value = "";
+    for (const a of agents) {
+      if (a.name !== active?.name) {
+        const option = node("option", a.name); option.value = a.name; recipient.append(option);
+      }
+    }
+    selectRecipient(selected);
+  }
+  recipient.addEventListener("change", validateRecipient);
   async function agentsLoop(session, signal) {
     while (!signal.aborted) {
       const data = await request(session, "/agents", signal);
       if (signal.aborted) return;
       el("ajanlar").replaceChildren();
-      const selected = recipient.value;
-      recipient.replaceChildren(node("option", "herkes")); recipient.firstChild.value = "";
       const participants = [...data.agents].sort((a, b) => Number(b.waiting) - Number(a.waiting) || a.name.localeCompare(b.name, "tr-TR"));
       for (const a of participants) {
         const li = node("li", undefined, "katilimci");
@@ -336,17 +361,23 @@
         li.append(avatar, content, node("span", a.kind === "insan" ? "İnsan" : "Ajan", "katilimci-tur"));
         el("ajanlar").append(li);
       }
-      for (const a of data.agents) {
-        if (a.name !== session.name) {
-          const option = node("option", a.name); option.value = a.name; recipient.append(option);
-        }
-      }
+      refreshRecipients(data.agents);
       el("katilimci-sayisi").textContent = String(data.agents.length);
-      if (Array.from(recipient.options).some((o) => o.value === selected)) recipient.value = selected;
       await pause(30000, signal);
     }
   }
-  function openRoom(session, room) {
+  function readDraft() {
+    return {body: text.value, to: recipient.value, type: el("tip").value, filter,
+      recipientMissing: Array.from(recipient.options).some((o) => o.value === recipient.value && o.disabled),
+      target: currentTarget(), explicit: targetExplicit, reply, replyLabel: el("yanit-bilgi").textContent};
+  }
+  function restoreDraft(draft) {
+    text.value = draft.body; count(); selectRecipient(draft.to, draft.recipientMissing); el("tip").value = draft.type;
+    showFilter(draft.filter); target = draft.target; targetExplicit = draft.explicit; reply = draft.reply;
+    el("yanit-bilgi").textContent = draft.replyLabel; el("yanit").hidden = reply === null; updateBaglam();
+  }
+  function openRoom(session, room, preserveDraft = false) {
+    const draft = preserveDraft && session.room === room ? readDraft() : null;
     if (session.roomController) session.roomController.abort();
     status.classList.remove("canli"); status.textContent = "Oda yükleniyor…";
     resetRoom(); session.room = room; session.roomController = new AbortController();
@@ -357,6 +388,7 @@
     el("ozet-oda").textContent = title; el("odasiz-durum").hidden = true;
     menu(false); panel(!narrow.matches);
     el("oda-icerik").hidden = false;
+    if (draft) restoreDraft(draft);
     const signal = session.roomController.signal;
     logLoop(session, signal).catch(() => {}); agentsLoop(session, signal).catch(() => {});
   }
@@ -502,7 +534,7 @@
   el("oda-dialog").addEventListener("close", () => {
     el("oda-kod").value = ""; el("oda-baslik-girdi").value = ""; el("oda-uyeler").replaceChildren();
     el("oda-hata").textContent = ""; showRoomVerification();
-    if (active?.yonetici) (matchMedia("(max-width: 760px)").matches ? el("menu-ac") : el("oda-ekle")).focus();
+    if (active?.yonetici) (matchMedia("(max-width: 760px)").matches ? navigationButton() : el("oda-ekle")).focus();
   });
   el("oda-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -798,6 +830,7 @@
     managementCountdown(); clearInterval(managementClock); managementClock = setInterval(managementCountdown, 1000);
   }
   el("yonetim-ac").addEventListener("click", managementAction(async () => {
+    menu(false); panel(false);
     view.hidden = true; el("yonetim").hidden = false;
     if (managementSession && Date.now() < managementExpiry) await refreshManagement();
     else { clearYonetim(); el("yonetim-kod").focus(); }
@@ -861,6 +894,7 @@
   el("gonderme").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!active || !active.room || el("gonder").disabled || !text.value.trim()) return;
+    if (!validateRecipient()) { recipient.reportValidity(); return; }
     count();
     if (!text.checkValidity()) { text.reportValidity(); return; }
     const session = active, signal = session.roomController.signal;

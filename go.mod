@@ -1,6 +1,6 @@
 module github.com/MehmetKoc16/Agent-message
 
-go 1.27.0
+go 1.27.3
 
 require modernc.org/sqlite v1.60.1
 
