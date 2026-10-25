@@ -47,6 +47,7 @@ export function createPreviewServer() {
   };
   const messages = seed();
   const closed = new Set();
+  const readMarks = new Map();
   const changes = new EventEmitter();
   changes.setMaxListeners(100);
   const types = ["soru", "gorev", "bilgi", "cevap", "sonuc"];
@@ -89,6 +90,34 @@ export function createPreviewServer() {
       }
       if (url.pathname === "/v1/rooms" && req.method === "GET") {
         send(200,{rooms:rooms.map((name)=>({name,title:titles.get(name)}))});return;
+      }
+      if (url.pathname === "/v1/unread" && req.method === "GET") {
+        const summaries = new Map();
+        for (const m of messages.filter((m) => members.get(m.room)?.includes("demo"))) {
+          const key = m.room + "/" + m.thread;
+          let s = summaries.get(key);
+          if (!s) { s = {room:m.room,thread:m.thread,title:m.body.slice(0,180),total:0,last_id:0,last_incoming_id:0,read_id:readMarks.get(key)||0}; summaries.set(key,s); }
+          s.total++; s.last_id = Math.max(s.last_id,m.id);
+          if (m.from !== "demo") s.last_incoming_id = Math.max(s.last_incoming_id,m.id);
+        }
+        send(200,{threads:[...summaries.values()].sort((a,b)=>b.last_id-a.last_id)}); return;
+      }
+      const readRoute = /^\/v1\/rooms\/([^/]+)\/threads\/(T-\d+)\/(read|log)$/.exec(url.pathname);
+      if (readRoute) {
+        const [,room,thread,action] = readRoute;
+        if (!members.get(room)?.includes("demo")) { send(403,{error:"yasak"});return; }
+        const selected = messages.filter((m)=>m.room===room && m.thread===thread), key=room+"/"+thread;
+        if (action==="read" && req.method==="POST") {
+          const {last_id:id} = await readJSON(req);
+          if (!selected.some((m)=>m.id===id)) { send(400,{error:"gecersiz_okuma"});return; }
+          readMarks.set(key,Math.max(id,readMarks.get(key)||0));send(200,{ok:true});return;
+        }
+        if (action==="log" && req.method==="GET") {
+          const before = Number(url.searchParams.get("before")||0);
+          const page = selected.filter((m)=>!before||m.id<before).slice(-100);
+          send(200,{messages:page,has_more:page.length===100});return;
+        }
+        send(405,{error:"yontem"});return;
       }
       if (url.pathname.startsWith("/v1/yonetim/")) {
         if (url.pathname === "/v1/yonetim/oturum" && req.method === "POST") {

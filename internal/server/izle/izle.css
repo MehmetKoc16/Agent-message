@@ -446,3 +446,8 @@ h1, h2, h3, p { margin: 0; }
   .yonetim-kenar { overflow-y: auto; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+
+/* The dot stays at the far left and uses the existing light/dark green token. */
+.konusma-satir { position: relative; padding-left: 25px; }
+.okunmamis-nokta { position: absolute; left: 9px; top: 17px; width: 7px; height: 7px; border-radius: 50%; background: var(--yesil); }
+.okunmamis-oda { color: var(--yesil); }

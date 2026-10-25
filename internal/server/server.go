@@ -68,6 +68,7 @@ func (s *Server) Close() { s.hub.Close() }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.yonetimRoutes(mux)
+	s.unreadRoutes(mux)
 	mux.HandleFunc("GET /v1/me", s.authed(s.handleMe))
 	mux.HandleFunc("GET /v1/rooms", s.authed(s.handleRooms))
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
