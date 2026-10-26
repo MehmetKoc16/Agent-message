@@ -43,7 +43,9 @@ soldaki konuşmalar bölümündedir; dar ekranda önce menüyü açın.
 ## Okunmamış konuşma denemesi
 
 Girişte konuşmaların yanındaki yeşil noktalar görünür. Bir konuşmayı açınca o
-konuşmanın noktası kaybolur; diğerleri kalır. Yönetim ekranı ve arka plan sekmesi
+konuşmanın noktası kaybolur; diğerleri kalır. Tüm konuşmalar görünümünde bir
+konuşmanın en yeni mesajı ekranda görülünce (kaydırma durduktan yarım saniye sonra)
+o konuşmanın noktası da kaybolur. Yönetim ekranı ve arka plan sekmesi
 gelen mesajları okundu saymaz. Önizleme okuma durumunu yalnız bellekte tutar;
 gerçek uygulama hesaba göre SQLite'a kaydeder.
 

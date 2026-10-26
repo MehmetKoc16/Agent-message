@@ -8,6 +8,21 @@
   const preferredRoom = new URLSearchParams(location.search).get("oda");
   const threads = new Map();
   const maxRows = 500, encoder = new TextEncoder();
+  // A row counts as seen while half of it, or half of the message area, is on screen.
+  // Reads wait for scrolling to settle so skimmed rows do not spend the POST rate limit.
+  const onScreen = new Set();
+  let seenTimer = 0;
+  const seenObserver = typeof IntersectionObserver === "function" ? new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const seen = entry.isIntersecting && (entry.intersectionRatio >= 0.5 ||
+        entry.intersectionRect.height >= (entry.rootBounds?.height ?? Infinity) / 2);
+      if (seen) onScreen.add(entry.target); else onScreen.delete(entry.target);
+    }
+    clearTimeout(seenTimer); seenTimer = setTimeout(markSelectedRead, 500);
+  }, {root: messages, threshold: [0, 0.25, 0.5, 1]}) : null;
+  function clearMessages() {
+    rows = []; ids = new Set(); messages.replaceChildren(); onScreen.clear(); seenObserver?.disconnect();
+  }
   const narrow = matchMedia("(max-width: 1150px)");
   function navigationButton() { return el("oda-icerik").hidden ? el("odasiz-menu-ac") : el("menu-ac"); }
   function drawerBackdrop() {
@@ -103,7 +118,7 @@
     menu(false); panel(false);
   }
   function resetRoom() {
-    rows = []; ids = new Set(); target = ""; targetExplicit = false; messages.replaceChildren(); el("ajanlar").replaceChildren();
+    clearMessages(); target = ""; targetExplicit = false; el("ajanlar").replaceChildren();
     threads.clear(); el("konusma-listesi").replaceChildren();
     el("konusma-sayisi").textContent = "0"; el("konusma-bos").hidden = false;
     el("katilimci-sayisi").textContent = "0";
@@ -139,7 +154,9 @@
     el("yeni-konusma").hidden = false;
     el("yeni-konusma").disabled = !active || !active.room;
   }
-  function showFilter(thread) {
+  // A clicked message stays where it was; other filter changes jump to the newest message.
+  function showFilter(thread, anchor) {
+    const before = anchor?.getBoundingClientRect().top;
     filter = thread; targetExplicit = false; clearReply();
     el("filtre").textContent = thread ? "Konuşma: " + thread : "Tüm konuşmalar";
     el("kapat").hidden = !thread || thread === "T-0";
@@ -147,8 +164,9 @@
     refreshContext();
     if (view.classList.contains("menu-acik")) { menu(false); el("menu-ac").focus(); }
     updateBaglam();
-    scrollDown();
-    if (thread) markSelectedRead();
+    if (anchor) { messages.scrollTop += anchor.getBoundingClientRect().top - before; el("yeni").hidden = true; }
+    else scrollDown();
+    markSelectedRead();
   }
   function refreshContext() {
     const visible = rows.filter((row) => !filter || row.thread === filter);
@@ -207,11 +225,11 @@
       const time = node("time", stamp.toLocaleString("tr-TR", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}), "zaman");
       time.dateTime = m.created_at; time.title = stamp.toLocaleString("tr-TR"); meta.append(time);
       const thread = node("button", m.thread + " · " + m.turn + "/" + (m.max_turns || "∞"), "konusma");
-      thread.type = "button"; thread.addEventListener("click", () => showFilter(m.thread));
+      thread.type = "button"; thread.addEventListener("click", () => showFilter(m.thread, row));
       const answer = node("button", "Yanıtla", "yanitla"); answer.type = "button";
       answer.addEventListener("click", () => {
         target = m.thread; targetExplicit = false;
-        showFilter(m.thread); reply = m.id;
+        showFilter(m.thread, row); reply = m.id;
         if (m.from !== session.name) {
           selectRecipient(m.from);
         }
@@ -224,10 +242,12 @@
       row.append(avatar, meta, node("div", m.body, "govde"), actions);
       row.hidden = !!filter && filter !== m.thread;
       visibleAdded = visibleAdded || !row.hidden;
-      rows.push({thread: m.thread, element: row, message: m}); messages.append(row);
+      rows.push({thread: m.thread, element: row, message: m}); messages.append(row); seenObserver?.observe(row);
     }
     if (rows.length > maxRows) {
-      for (const row of rows.splice(0, rows.length - maxRows)) { row.element.remove(); ids.delete(row.message.id); }
+      for (const row of rows.splice(0, rows.length - maxRows)) {
+        seenObserver?.unobserve(row.element); onScreen.delete(row.element); row.element.remove(); ids.delete(row.message.id);
+      }
       if (session.history) session.history.hasMore = true;
     }
     threads.clear(); el("konusma-listesi").replaceChildren();
@@ -321,7 +341,7 @@
       if (signal.aborted) return;
       history.hasMore = data.has_more;
       if (data.messages.length) {
-        rows = []; ids = new Set(); messages.replaceChildren(); threads.clear();
+        clearMessages(); threads.clear();
         el("konusma-listesi").replaceChildren(); showFilter("");
         addMessages(data.messages, session);
         messages.scrollTop = 0;
@@ -368,16 +388,25 @@
       await pause(10000, session.controller.signal);
     }
   }
-  async function markSelectedRead() {
-    const session = active, thread = filter;
-    if (!session?.unreadSummaries || !thread || view.hidden || document.visibilityState === "hidden") return;
+  // The selected conversation is read as a whole; in other views only rows on screen count.
+  function markSelectedRead() {
+    const session = active;
+    if (!session?.unreadSummaries || view.hidden || document.visibilityState === "hidden") return;
+    const seen = new Map();
+    for (const row of rows) {
+      if (row.element.hidden || (row.thread !== filter && !onScreen.has(row.element))) continue;
+      seen.set(row.thread, Math.max(seen.get(row.thread) || 0, row.message.id));
+    }
+    for (const [thread, id] of seen) markThreadRead(session, thread, id);
+  }
+  async function markThreadRead(session, thread, id) {
     const key = readKey(session, thread);
-    const id = Math.max(0, ...rows.filter((row) => row.thread === thread && !row.element.hidden).map((row) => row.message.id));
     const summary = session.unreadSummaries.get(key);
     const read = Math.max(summary?.read_id || 0, session.localReads?.get(key) || 0);
-    if (!id || id <= read || session.readPending) return;
+    session.readPending ||= new Set();
+    if (id <= read || session.readPending.has(key)) return;
     const room = session.room, signal = session.roomController.signal;
-    session.readPending = true;
+    session.readPending.add(key);
     try {
       const {response} = await api(session, "/v1/rooms/" + encodeURIComponent(room) + "/threads/" + encodeURIComponent(thread) + "/read", signal, {
         method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({last_id: id})
@@ -388,10 +417,10 @@
       }
     } catch (_) { /* Preserve unread status if the server did not acknowledge. */ }
     finally {
-      session.readPending = false;
+      session.readPending.delete(key);
       if (signal.aborted && active === session) markSelectedRead();
-      // If a newer visible message arrived during the write, acknowledge only that new snapshot.
-      if (!signal.aborted && active === session && filter === thread && session.localReads?.get(key) >= id &&
+      // If a newer message arrived during the write, acknowledge it only if it is seen too.
+      if (!signal.aborted && active === session && session.localReads?.get(key) >= id &&
           rows.some((row) => row.thread === thread && row.message.id > id)) markSelectedRead();
     }
   }
@@ -403,7 +432,7 @@
     try {
       const data = await request(session, "/threads/" + encodeURIComponent(thread) + "/log", signal);
       if (signal.aborted || active !== session || session.room !== room || filter !== thread) return;
-      rows = []; ids = new Set(); messages.replaceChildren();
+      clearMessages();
       session.history.hasMore = data.has_more;
       addMessages(data.messages, session); showFilter(thread);
     } catch (_) { /* Keep the dot if the requested conversation could not be displayed. */ }
