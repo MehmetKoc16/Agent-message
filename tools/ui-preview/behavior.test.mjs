@@ -68,7 +68,7 @@ async function harness(fetch, width = 1440, globals = {}) {
   });
   const source = await readFile(new URL("../../internal/server/izle/izle.js", import.meta.url), "utf8");
   vm.runInContext(source.replace(/\}\)\(\);\s*$/, `
-    globalThis.inspect = {setSession(s) { active = s; }, addMessages, stop, refreshRecipients, refreshUnread, markSelectedRead, openUnreadThread, showFilter,
+    globalThis.inspect = {setSession(s) { active = s; }, addMessages, stop, refreshRecipients, refreshUnread, markSelectedRead, openUnreadThread, showFilter, unreadLoop,
       sizes() { return {rows: rows.length, ids: ids.size, threads: threads.size}; }};
   })();`), context);
   const session = {name: "demo", token: "test-only", room: "r1", maxBody: 16384,
@@ -463,4 +463,47 @@ test("mesajın konuşma etiketi ve Yanıtla düğmesi tıklanan mesajı yerinde 
     assert.equal(h.el("filtre").textContent,"Konuşma: T-1");
     assert.equal(rowOf(7).getBoundingClientRect().top,before,button + " moved the clicked message");
   }
+});
+
+test("eski konuşmadan tüm konuşmalara dönünce oda görünümü yeniden yüklenir", async (t) => {
+  const msg = (id, thread) => ({id,thread,room:"r1",from:"other",type:"bilgi",body:thread+"/"+id,created_at:"2026-10-25T00:00:00Z"});
+  const paths = [];
+  const h = await harness(async (path) => {
+    paths.push(path);
+    if (path.includes("wait=")) return new Promise(() => {});
+    const data = path === "/v1/unread" ? {threads: [["T-1",101],["T-2",102],["T-9",9]].map(([thread,id]) =>
+        ({room:"r1",thread,title:thread,total:1,last_id:id,last_incoming_id:id,read_id:id}))} :
+      path === "/v1/rooms/r1/threads/T-9/log" ? {messages: [msg(8,"T-9"), msg(9,"T-9")], has_more: false} :
+      path === "/v1/rooms/r1/log?tail=1" ? {messages: [msg(101,"T-1"), msg(102,"T-2")], has_more: true} :
+      path.endsWith("/agents") ? {agents: []} : {ok: true};
+    return {ok:true,status:200,json:async () => data};
+  });
+  t.after(() => h.inspect.stop());
+  const shown = () => h.el("mesajlar").children.filter((row) => !row.hidden).map((row) => row.children[2].textContent);
+  h.inspect.addMessages([msg(101,"T-1"), msg(102,"T-2")], h.session);
+  await h.inspect.refreshUnread(h.session);
+  await h.inspect.openUnreadThread("T-9");
+  assert.deepEqual(shown(), ["T-9/8","T-9/9"]);
+  h.inspect.showFilter("");
+  for (let i = 0; i < 5; i++) await new Promise(setImmediate);
+  assert.equal(h.el("filtre").textContent, "Tüm konuşmalar");
+  assert.deepEqual(shown(), ["T-1/101","T-2/102"], "room messages were lost after an old conversation");
+  assert.ok(paths.includes("/v1/rooms/r1/log?tail=1"));
+});
+
+test("arka plan sekmesi okunmamış özetini sorgulamaz, görünür olunca hemen yeniler", async (t) => {
+  let summaries = 0;
+  const h = await harness(async (path) => {
+    if (path === "/v1/unread") summaries++;
+    return {ok:true,status:200,json:async () => ({threads: []})};
+  });
+  t.after(() => h.inspect.stop());
+  h.setVisibility("hidden");
+  h.inspect.unreadLoop(h.session).catch(() => {});
+  await new Promise(setImmediate);
+  assert.equal(summaries, 0, "a hidden tab queried unread summaries");
+  h.session.unreadSummaries = new Map();
+  h.setVisibility("visible"); h.documentListeners.get("visibilitychange")();
+  await new Promise(setImmediate);
+  assert.equal(summaries, 1);
 });

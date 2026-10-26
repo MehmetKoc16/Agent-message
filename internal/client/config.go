@@ -23,7 +23,8 @@ type Config struct {
 	Agent string `json:"agent"`
 	Token string `json:"token"`
 
-	statePath string
+	statePath       string
+	legacyStatePath string // '-' ayırıcılı eski ad; yalnız geçiş için
 }
 
 // DefaultConfigPath ~/.agent-relay/config.json yoludur.
@@ -73,8 +74,72 @@ func LoadConfig(path string) (*Config, error) {
 	if c.URL, err = checkURL(c.URL); err != nil {
 		return nil, err
 	}
-	c.statePath = filepath.Join(filepath.Dir(abs), "state-"+c.Room+"-"+c.Agent+".json")
+	c.statePath, c.legacyStatePath = stateFileNames(filepath.Dir(abs), "state", c.Room, c.Agent)
 	return &c, nil
+}
+
+// stateFileNames yeni ve eski durum dosyası adlarını üretir. Adlarda '-' izinli
+// olduğundan eski ayırıcı ("a-b"+"c" ile "a"+"b-c") çakışıyordu; '@' adlarda
+// izinli değildir ve Windows dosya adlarında da geçerlidir.
+func stateFileNames(dir, prefix string, parts ...string) (string, string) {
+	return filepath.Join(dir, prefix+"@"+strings.Join(parts, "@")+".json"),
+		filepath.Join(dir, prefix+"-"+strings.Join(parts, "-")+".json")
+}
+
+// migrateLegacy eski adlı durum dosyasını yeni ada taşır; mevcut kurulumların imleci
+// ve köprü oturumları sıfırlanmaz. Yeni dosya varsa dokunulmaz. Taşıma başarısızsa
+// (ör. Windows'ta dosya açık) içerik kopyalanır. Kopyalanamıyorsa sessizce sıfırdan
+// başlamak eski mesajları yeniden işleteceği için hata döner.
+func migrateLegacy(oldPath, newPath string) error {
+	if _, err := os.Lstat(newPath); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("durum dosyası denetlenemedi: %s", newPath)
+	}
+	st, err := os.Lstat(oldPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil || !st.Mode().IsRegular() {
+		return fmt.Errorf("eski durum dosyası taşınamadı: %s", oldPath)
+	}
+	if os.Rename(oldPath, newPath) == nil {
+		return nil
+	}
+	if _, err := os.Lstat(newPath); err == nil {
+		return nil // eşzamanlı başka bir relay süreci taşıdı
+	}
+	b, err := os.ReadFile(oldPath)
+	if err == nil {
+		err = writePrivateFile(newPath, b)
+	}
+	if err != nil {
+		if _, serr := os.Lstat(newPath); serr == nil {
+			return nil
+		}
+		return fmt.Errorf("eski durum dosyası taşınamadı: %s", oldPath)
+	}
+	return nil
+}
+
+// writePrivateFile içeriği aynı dizinde 0600 geçici dosyaya yazıp atomik olarak yerine koyar.
+func writePrivateFile(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	err = tmp.Chmod(0o600)
+	if err == nil {
+		_, err = tmp.Write(data)
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = renameRetry(tmp.Name(), path)
+	}
+	return err
 }
 
 // checkURL https zorunlu; düz http yalnız döngü adresi (localhost) için kabul edilir,

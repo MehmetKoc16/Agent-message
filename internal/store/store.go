@@ -36,6 +36,7 @@ var (
 	ErrRequestConflict = errors.New("istek kimliği farklı bir mesaj için kullanılmış")
 	ErrBadRoomTitle    = errors.New("geçersiz oda başlığı")
 	ErrBadMember       = errors.New("geçersiz oda üyesi")
+	ErrUnknownRoom     = errors.New("oda yok")
 )
 
 // Store veritabanı erişim katmanıdır.

@@ -191,6 +191,19 @@ func TestOlmayanThread404(t *testing.T) {
 	}
 }
 
+// NEDEN: insan odadaki özel mesajları görür; gördüğü mesaja yanıt verebilmeli. Ajanlar için
+// görünürlük kuralı TestReplyToGorunmeyenMesaj400'de kalır.
+func TestInsanOzelMesajaYanitVerebilir(t *testing.T) {
+	e := newEnv(t, nil)
+	st, private := e.send("r1", "ali", map[string]any{"to": "veli", "type": "soru"})
+	if st != 201 {
+		t.Fatalf("özel mesaj: %d %v", st, private)
+	}
+	if st, m := e.send("r1", "mehmet", map[string]any{"to": "ali", "type": "cevap", "thread": private["thread"], "reply_to": private["id"]}); st != 201 || num(m["reply_to"]) != num(private["id"]) {
+		t.Fatalf("insan özel mesaja yanıt veremedi: %d %v", st, m)
+	}
+}
+
 // NEDEN: reply_to aynı odada var olmalı; başka odadaki mesaja bağlanmak oda ayrımını delerdi.
 func TestOlmayanReplyTo400(t *testing.T) {
 	e := newEnv(t, nil)

@@ -187,7 +187,7 @@ func readCalls(dir string) []call {
 
 func (f *fixture) after() int64 {
 	f.t.Helper()
-	b, err := os.ReadFile(filepath.Join(f.dir, "state-oda-kopru.json"))
+	b, err := os.ReadFile(filepath.Join(f.dir, "state@oda@kopru.json"))
 	if os.IsNotExist(err) {
 		return 0
 	}
@@ -208,7 +208,7 @@ func (f *fixture) states(runner string) map[string]struct {
 	Pending []proto.Message `json:"pending"`
 } {
 	f.t.Helper()
-	b, err := os.ReadFile(filepath.Join(f.dir, "bridge-oda-kopru-"+runner+".json"))
+	b, err := os.ReadFile(filepath.Join(f.dir, "bridge@oda@kopru@"+runner+".json"))
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -725,7 +725,7 @@ func Test_gecici_http_hatalari_yeniden_denenir(t *testing.T) {
 	go func() { code, _ := f.execute(ctx, "codex", false); ch <- code }()
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
-		b, _ := os.ReadFile(filepath.Join(f.dir, "state-oda-kopru.json"))
+		b, _ := os.ReadFile(filepath.Join(f.dir, "state@oda@kopru.json"))
 		if bytes.Contains(b, []byte(`"after":1`)) {
 			break
 		}
@@ -821,7 +821,9 @@ func Test_tampon_sinirlarinda_en_eski_duser(t *testing.T) {
 
 func Test_bozuk_kalici_dosyalar_agdan_once_reddedilir(t *testing.T) {
 	// NEDEN: bozuk oturum/imleci sıfırlamak eski mesajların istemeden çalıştırılmasına yol açar.
-	for _, name := range []string{"bridge-oda-kopru-codex.json", "state-oda-kopru.json"} {
+	// Dosya adları '@' ayırıcısına geçti (çakışma düzeltmesi); bozuk eski adlı dosya
+	// da taşınıp aynı şekilde reddedildiği için iki adlandırma da sınanır.
+	for _, name := range []string{"bridge@oda@kopru@codex.json", "state@oda@kopru.json", "bridge-oda-kopru-codex.json", "state-oda-kopru.json"} {
 		f := newFixture(t)
 		if err := os.WriteFile(filepath.Join(f.dir, name), []byte("{bozuk"), 0o600); err != nil {
 			t.Fatal(err)

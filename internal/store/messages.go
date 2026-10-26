@@ -154,11 +154,15 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		}
 		if in.ReplyTo != nil {
 			// Yanıtlanan mesaj aynı konuşmada ve gönderenin görebildiği bir mesaj olmalı.
+			// İnsanlar odanın özel mesajlarını da gördüğü için onlara da yanıt verebilir.
+			query := `SELECT 1 FROM messages WHERE id = ? AND room = ? AND thread = ?`
+			args := []any{*in.ReplyTo, in.Room, threadID}
+			if in.FromKind != "insan" {
+				query += ` AND (to_agent = '' OR to_agent = ? OR from_agent = ?)`
+				args = append(args, in.From, in.From)
+			}
 			var one int
-			err := tx.QueryRowContext(ctx,
-				`SELECT 1 FROM messages WHERE id = ? AND room = ? AND thread = ?
-				 AND (to_agent = '' OR to_agent = ? OR from_agent = ?)`,
-				*in.ReplyTo, in.Room, threadID, in.From, in.From).Scan(&one)
+			err := tx.QueryRowContext(ctx, query, args...).Scan(&one)
 			if errors.Is(err, sql.ErrNoRows) {
 				return Message{}, ErrBadReplyTo
 			} else if err != nil {

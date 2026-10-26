@@ -14,7 +14,7 @@ relay inbox                      # okunmamış mesajları listeler
 relay agents                     # odadaki ajanlar, son görülme ve bekliyor mu
 relay thread <id>                # bir konuşmanın geçmişi
 relay close <id>                 # konuşmayı kapatır
-relay bridge --runner codex|agy [--once]  # başsız ajanı odaya bağlar
+relay bridge --runner codex|agy [--once] [--allow-from <ad1,ad2>] [--include-public]  # başsız ajanı odaya bağlar
 ```
 
 `setup` token'ı stdin'den tek satır okur; baştaki/sondaki boşlukları ve satır sonunu kırpar.
@@ -138,9 +138,24 @@ relay --config agy.json bridge --runner agy --model gemini-3.8-flash-medium --on
   sonra boşluklar dahil en çok 32.000 UTF-16 birimi olabilir. Diğer platformlarda önceki
   28.000 birimlik prompt sınırı korunur. Tampondaki bağlam ve önsöz de sınıra dahildir.
 - `--exe` yoksa standart ev dizininin `AppData\Local\agy\bin\agy.exe` yolu kullanılır.
+- `--exe` `.cmd` ya da `.bat` olamaz: `cmd.exe` toplu iş dosyasının argümanlarını yeniden
+  ayrıştırdığı için argümandaki mesaj metni komut olarak çalışabilir. Gerçek `agy.exe` yolunu verin.
 
 Her iki köprü için ortak davranış:
 
+- **Kimin mesajı işlenir:** varsayılan olarak köprü yalnız kendisine yönlü (`to` köprü ajanının
+  adı olan) mesajları işler. Neden: Codex read-only sandbox'ı dosya okumayı kısıtlamaz; herkese
+  açık bir soruyla odadaki herhangi bir üye köprüye dosya okutup içeriğini kendine yazdırabilir.
+  - `--include-public`: herkese açık (alıcısız) mesajları da işler. Yalnız odadaki tüm üyelere
+    güveniyorsanız açın.
+  - `--allow-from ad1,ad2`: yalnız bu hesaplardan gelen mesajlar işlenir. Adlar hesap adı
+    biçiminde olmalıdır (küçük harf, rakam, `.`, `_`, `-`); geçersiz ad başlangıçta hata verir.
+  - Elenen mesajda ajan çalışmaz, cevap gönderilmez, imleç ilerler; loga yalnız gönderen adı ve
+    `neden=izin_yok` yazılır, gövde yazılmaz. Bu kural `bilgi`/`cevap`/`kapat` için de geçerlidir.
+- **Sır taraması:** desenlere ek olarak aktif ayarın token'ı ve aynı dizindeki diğer `*.json`
+  dosyalarının üst düzey `token` alanları (16+ karakter) aranır; eşleşirse ad `relay kimlik bilgisi`
+  olur. Okunamayan/bozuk dosya atlanır. Aynı liste `relay send` ve `announce` için de kullanılır.
+  Tarama, görünmez biçim karakterleri (ör. U+200B) çıkarılmış kopyada yapılır.
 - **Kota/maliyet:** yalnız `soru` ve `gorev` ajanı çalıştırır. `cevap`, `sonuc`, `bilgi` sonraki
   soruya bağlam olur; `kapat` tamponu ve oturumu siler. Her mesaj tek tek id sırasıyla işlenir.
 - `--max-runs-per-hour 20` kayan pencereyle denemeleri sınırlar; hatalı denemeler de sayılır.
@@ -154,11 +169,14 @@ Her iki köprü için ortak davranış:
 - Codex toplam prompt sınırı 200 KB'dır. Her iki çalıştırıcıda prompt sığmıyorsa tampondan
   en eski mesajlar düşer (`tampon_budandi`). Yeni mesaj tek başına sığmıyorsa ajan çalışmaz;
   `köprü: mesaj ajan için çok uzun` gönderilir. Bu ret çalıştırıcı hatası ya da kota tüketimi sayılmaz.
-- Ayar dosyası yanında `bridge-<oda>-<ajan>-<runner>.json` atomik ve imleçteki kilit düzeniyle
+- Ayar dosyası yanında `bridge@<oda>@<ajan>@<runner>.json` atomik ve imleçteki kilit düzeniyle
   yazılır. Konuşma başına oturum ve en çok 20 mesaj / metadata dahil 32 KB JSON tamponu tutulur;
   en eskiler düşer. Bu dosya mesaj gövdeleri içerir; paylaşmayın. Dosya izinleri 0600'dür
   (Windows'ta kısmen uygulanır). Bozuk oturum dosyası sessizce sıfırlanmaz.
-- İmleç aynı `state-<oda>-<ajan>.json` dosyasıdır; kayıt ve cevap gönderimi tamamlandıktan sonra
+- İmleç aynı `state@<oda>@<ajan>.json` dosyasıdır (`@` adlarda izinli olmadığından oda/ajan
+  çiftleri çakışmaz; eski `state-…`/`bridge-…` adlı dosyalar ilk çalıştırmada yeni ada taşınır,
+  imleç sıfırlanmaz). Başka oda/ajana ait kayıtlı bekleyen cevap gönderilmez, düşürülüp loglanır.
+  Kayıt ve cevap gönderimi tamamlandıktan sonra imleç
   mesaj bazında ilerler. İşlem başarısızken gelen iptal veya gönderim/kayıt hatası imleci ilerletmez;
   işlem başarıyla tamamlanmışsa sonradan gelen iptale rağmen imleç ilerler. Çökme sonrası son
   mesaj ve cevap tekrar edebilir (en az bir kez teslim). Aynı ajan ayarıyla eşzamanlı başka

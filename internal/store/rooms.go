@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -36,6 +37,17 @@ func (s *Store) AllRooms(ctx context.Context) ([]Room, error) {
 
 func ensureRoomTx(ctx context.Context, tx *sql.Tx, room, stamp string) error {
 	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO rooms(name,title,created_at) VALUES (?,?,?)`, room, room, stamp)
+	return err
+}
+
+// requireRoomTx web yolları içindir: web oda açmaz, odalar başlık ve üye seçimiyle
+// ayrıca oluşturulur. SSH/CLI yolları ensureRoomTx ile oda açmaya devam eder.
+func requireRoomTx(ctx context.Context, tx *sql.Tx, room string) error {
+	var one int
+	err := tx.QueryRowContext(ctx, `SELECT 1 FROM rooms WHERE name=?`, room).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrUnknownRoom
+	}
 	return err
 }
 

@@ -74,9 +74,17 @@ func runSetup(ctx context.Context, args []string, env Env, path string) int {
 		return r.apiFail(ErrCanceled)
 	}
 	cfg := &Config{URL: checkedURL, Room: *room, Agent: *agent, Token: token}
-	if err := writeSetupConfig(path, cfg, *force); err != nil {
+	backup, err := writeSetupConfig(path, cfg, *force, *force && !*noCheck)
+	if err != nil {
 		return r.fail(ExitError, "hata: %v", err)
 	}
+	// Yedek yalnız 401'de geri konur; diğer her sonuçta yeni ayar kalır, yedek silinir.
+	keepBackup := false
+	defer func() {
+		if backup != "" && !keepBackup {
+			os.Remove(backup)
+		}
+	}()
 	if *noCheck {
 		fmt.Fprintln(env.Stdout, "ayar dosyası yazıldı")
 		return ExitOK
@@ -87,6 +95,14 @@ func runSetup(ctx context.Context, args []string, env Env, path string) int {
 	if err != nil {
 		var ae *APIError
 		if errors.As(err, &ae) && ae.Status == 401 {
+			if backup != "" {
+				// --force yanlış token'la çalışan eski ayarı silmemeli.
+				if err := renameRetry(backup, path); err != nil {
+					keepBackup = true // elle geri yüklenebilsin diye yedek bırakılır
+					return r.fail(ExitError, "token geçersiz; önceki ayar geri yüklenemedi, yedek dosyası: %s", backup)
+				}
+				return r.fail(ExitError, "token geçersiz; önceki ayar geri yüklendi")
+			}
 			if err := os.Remove(path); err != nil {
 				return r.fail(ExitError, "token geçersiz; ayar dosyası silinemedi, elle silin")
 			}
@@ -114,26 +130,37 @@ func setupDestination(path string) error {
 	return nil
 }
 
-func writeSetupConfig(path string, cfg *Config, force bool) error {
+// writeSetupConfig ayarı atomik yazar. withBackup ise mevcut normal dosyanın 0600
+// kopyası aynı dizinde alınır ve yolu döner; bağlantı denetimi 401 verirse geri konur.
+func writeSetupConfig(path string, cfg *Config, force, withBackup bool) (string, error) {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return errors.New("ayar klasörü oluşturulamadı")
+		return "", errors.New("ayar klasörü oluşturulamadı")
 	}
 	// İki setup'ın aynı dosyayı eşzamanlı değiştirmesini engeller.
 	lock, err := os.OpenFile(path+".setup.lock", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return errors.New("ayar kilidi alınamadı; başka bir setup çalışıyor olabilir")
+		return "", errors.New("ayar kilidi alınamadı; başka bir setup çalışıyor olabilir")
 	}
 	lock.Close()
 	defer os.Remove(path + ".setup.lock")
 	if !force {
 		if err := setupDestination(path); err != nil {
-			return err
+			return "", err
+		}
+	}
+	var backup string
+	if withBackup {
+		if backup, err = backupSetupConfig(path); err != nil {
+			return "", err
 		}
 	}
 	tmp, err := os.CreateTemp(dir, ".relay-*.tmp")
 	if err != nil {
-		return errors.New("geçici ayar dosyası oluşturulamadı")
+		if backup != "" {
+			os.Remove(backup)
+		}
+		return "", errors.New("geçici ayar dosyası oluşturulamadı")
 	}
 	defer os.Remove(tmp.Name())
 	data, _ := json.MarshalIndent(cfg, "", "  ")
@@ -152,9 +179,47 @@ func writeSetupConfig(path string, cfg *Config, force bool) error {
 		err = renameRetry(tmp.Name(), path)
 	}
 	if err != nil {
-		return errors.New("ayar dosyası yazılamadı")
+		if backup != "" {
+			os.Remove(backup)
+		}
+		return "", errors.New("ayar dosyası yazılamadı")
 	}
-	return nil
+	return backup, nil
+}
+
+// backupSetupConfig mevcut normal ayar dosyasının birebir kopyasını 0600 geçici dosyaya
+// alır. Dosya yoksa ya da normal dosya değilse yedek alınmaz ("" döner).
+func backupSetupConfig(path string) (string, error) {
+	st, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) || (err == nil && !st.Mode().IsRegular()) {
+		return "", nil
+	}
+	if err != nil {
+		return "", errors.New("ayar dosyası denetlenemedi")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", errors.New("önceki ayar yedeklenemedi")
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".relay-yedek-*.tmp")
+	if err != nil {
+		return "", errors.New("önceki ayar yedeklenemedi")
+	}
+	err = tmp.Chmod(0o600)
+	if err == nil {
+		_, err = tmp.Write(data)
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+		return "", errors.New("önceki ayar yedeklenemedi")
+	}
+	return tmp.Name(), nil
 }
 
 func readSetupToken(ctx context.Context, env Env) (string, error) {

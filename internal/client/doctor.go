@@ -173,12 +173,19 @@ func runDoctor(parent context.Context, args []string, env Env, path string) int 
 	}
 	doctorLine(env, "OK", "AYAR", "Ayar biçimi ve zorunlu alanlar geçerli.")
 	localOK := true
-	state, stateErr := os.Stat(cfg.statePath)
+	// doctor dosya taşımaz; henüz taşınmamış eski adlı imleç de raporlanır.
+	statePath := cfg.statePath
+	if _, err := os.Lstat(statePath); errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Lstat(cfg.legacyStatePath); err == nil {
+			statePath = cfg.legacyStatePath
+		}
+	}
+	state, stateErr := os.Stat(statePath)
 	if errors.Is(stateErr, os.ErrNotExist) {
 		doctorLine(env, "BİLGİ", "İMLEÇ", "Henüz okuma imleci yok; bu durum yeni kurulumda normaldir.")
 	} else {
 		if stateErr == nil && state.Mode().IsRegular() && state.Size() <= doctorMaxBytes {
-			_, stateErr = (cursor{path: cfg.statePath}).Read()
+			_, stateErr = (cursor{path: statePath}).Read()
 		} else {
 			stateErr = errors.New("imleç okunamıyor")
 		}

@@ -118,6 +118,7 @@
     menu(false); panel(false);
   }
   function resetRoom() {
+    if (active?.history) active.history.scope = "";
     clearMessages(); target = ""; targetExplicit = false; el("ajanlar").replaceChildren();
     threads.clear(); el("konusma-listesi").replaceChildren();
     el("konusma-sayisi").textContent = "0"; el("konusma-bos").hidden = false;
@@ -156,6 +157,10 @@
   }
   // A clicked message stays where it was; other filter changes jump to the newest message.
   function showFilter(thread, anchor) {
+    // The rows hold only one conversation's log; any other view needs the room window back.
+    if (active?.room && active.history?.scope && active.history.scope !== thread) {
+      clearReply(); filter = thread; openRoom(active, active.room, true); return;
+    }
     const before = anchor?.getBoundingClientRect().top;
     filter = thread; targetExplicit = false; clearReply();
     el("filtre").textContent = thread ? "Konuşma: " + thread : "Tüm konuşmalar";
@@ -316,7 +321,7 @@
     const history = session.history;
     const initial = await request(session, "/log?tail=1", signal);
     if (signal.aborted) return;
-    history.hasMore = initial.has_more;
+    if (!history.scope) history.hasMore = initial.has_more;
     addMessages(initial.messages, session);
     let after = Math.max(0, ...initial.messages.map((m) => m.id));
     while (!signal.aborted) {
@@ -341,8 +346,9 @@
       if (signal.aborted) return;
       history.hasMore = data.has_more;
       if (data.messages.length) {
+        const thread = filter;
         clearMessages(); threads.clear();
-        el("konusma-listesi").replaceChildren(); showFilter("");
+        el("konusma-listesi").replaceChildren(); history.scope = thread; showFilter(thread);
         addMessages(data.messages, session);
         messages.scrollTop = 0;
       }
@@ -382,9 +388,12 @@
     }
     renderUnread(session); markSelectedRead();
   }
+  // A background tab shows no dots, so it skips the summary query; it refreshes on return.
   async function unreadLoop(session) {
     while (!session.controller.signal.aborted) {
-      try { await refreshUnread(session); } catch (_) { /* Failed reads never clear a dot. */ }
+      if (document.visibilityState !== "hidden") {
+        try { await refreshUnread(session); } catch (_) { /* Failed reads never clear a dot. */ }
+      }
       await pause(10000, session.controller.signal);
     }
   }
@@ -433,11 +442,14 @@
       const data = await request(session, "/threads/" + encodeURIComponent(thread) + "/log", signal);
       if (signal.aborted || active !== session || session.room !== room || filter !== thread) return;
       clearMessages();
-      session.history.hasMore = data.has_more;
+      session.history.hasMore = data.has_more; session.history.scope = thread;
       addMessages(data.messages, session); showFilter(thread);
     } catch (_) { /* Keep the dot if the requested conversation could not be displayed. */ }
   }
-  document.addEventListener("visibilitychange", () => markSelectedRead());
+  document.addEventListener("visibilitychange", () => {
+    markSelectedRead();
+    if (document.visibilityState !== "hidden" && active?.unreadSummaries) refreshUnread(active).catch(() => {});
+  });
   // Document bubbling runs after the return button has made the chat visible.
   document.addEventListener("click", (event) => { if (event.target === el("sohbete-don")) markSelectedRead(); });
 
@@ -582,6 +594,7 @@
     yoneticiye_dokunulamaz: "Yönetici hesabı yalnız SSH ile değiştirilebilir.",
     zaten_var: "Bu adla bir hesap zaten var.", hesap_yok: "Hesap yok veya iptal edilmiş.",
     gecersiz_ad: "Geçersiz hesap adı.", gecersiz_oda: "Geçersiz oda adı; en az bir oda gerekli.",
+    oda_yok: "Bu adda oda yok. Önce ODALAR yanındaki + ile odayı oluştur.",
     gecersiz_tur: "Tür ajan veya insan olmalı.", gecersiz_son: "Kayıt sayısı 1–1000 olmalı.",
     gecersiz_baslik: "Oda başlığı 1–80 karakter olmalı; satır sonu içeremez.",
     gecersiz_uye: "Üye seçimi geçersiz; yalnız aktif hesapları seçebilirsin.",

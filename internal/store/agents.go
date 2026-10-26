@@ -65,7 +65,11 @@ func (s *Store) addAgent(ctx context.Context, name, kind, tokenHash string, room
 		return err
 	}
 	for _, r := range rooms {
-		if err := ensureRoomTx(ctx, tx, r, s.stamp()); err != nil {
+		if web {
+			if err := requireRoomTx(ctx, tx, r); err != nil {
+				return err
+			}
+		} else if err := ensureRoomTx(ctx, tx, r, s.stamp()); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx,

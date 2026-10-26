@@ -330,3 +330,35 @@ func Test_setup_yalniz_ilk_satiri_okur(t *testing.T) {
 	}
 	assertSetupConfig(t, path, "https://relay.example.com", setupTestToken())
 }
+
+// NEDEN: --force ile girilen yanlış token, çalışan eski ayarı silmemeli; 401 sonrası
+// önceki dosya bayt bayt geri gelmeli ve yedek/geçici dosya kalmamalı.
+func Test_setup_force_401_eski_ayari_geri_yukler(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `{"error":"yetkisiz"}`)
+	}))
+	defer ts.Close()
+	path := filepath.Join(t.TempDir(), "config.json")
+	old := []byte(`{"url":"https://relay.example.com","room":"oda-1","agent":"ali.ajan","token":"eski-sahte-kimlik-0123456789"}` + "\n")
+	if err := os.WriteFile(path, old, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errOut := runSetupTest(t, path, setupTestToken(), append(setupArgs(ts.URL), "--force")...)
+	if code != ExitError || !strings.Contains(errOut, "token geçersiz") || !strings.Contains(errOut, "önceki ayar geri yüklendi") {
+		t.Fatalf("setup: %d %q", code, errOut)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(data, old) {
+		t.Fatal("eski ayar geri yüklenmedi")
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil || len(entries) != 1 {
+		t.Fatal("yedek ya da geçici dosya kalmış")
+	}
+	if runtime.GOOS != "windows" {
+		if st, err := os.Stat(path); err != nil || st.Mode().Perm() != 0o600 {
+			t.Fatal("geri yüklenen ayarın izni 0600 değil")
+		}
+	}
+}

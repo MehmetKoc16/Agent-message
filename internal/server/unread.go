@@ -10,7 +10,7 @@ import (
 
 func (s *Server) unreadRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/unread", s.authed(s.handleUnread))
-	mux.HandleFunc("POST /v1/rooms/{room}/threads/{thread}/read", s.room(s.handleReadThread))
+	mux.HandleFunc(readPattern, s.room(s.handleReadThread))
 	mux.HandleFunc("GET /v1/rooms/{room}/threads/{thread}/log", s.room(s.handleThreadLog))
 }
 

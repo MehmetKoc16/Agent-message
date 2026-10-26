@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +25,12 @@ func yonetimEnv(t *testing.T) (*testEnv, *time.Time) {
 	e.st.Now = func() time.Time { return now }
 	if err := e.st.SetYonetici(context.Background(), "mehmet", testTOTPSecret); err != nil {
 		t.Fatal(err)
+	}
+	// Web üyelik uçları oda açmaz; r3'ü SSH yolu gibi açıp boş bırak.
+	for _, islem := range []string{"odaya-ekle", "odadan-cikar"} {
+		if err := e.st.ChangeAccount(context.Background(), "", islem, "dis", "r3", "", false); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return e, &now
 }
@@ -235,6 +242,14 @@ func TestYonetimHesapAc(t *testing.T) {
 		yonetimWant(t, yonetimReq(e, "POST", "/hesaplar", "mehmet", session, body), 400, "")
 	}
 	yonetimWant(t, yonetimReq(e, "POST", "/hesaplar", "mehmet", session, `{"ad":"yeni","tur":"ajan","odalar":["r1"]}`), 409, "zaten_var")
+	// Yazım hatalı oda adı başlıksız yeni bir oda açmamalı; hesap da açılmamalı.
+	yonetimWant(t, yonetimReq(e, "POST", "/hesaplar", "mehmet", session, `{"ad":"yazim","tur":"ajan","odalar":["r1","rl"]}`), 404, "oda_yok")
+	if rooms, err := e.st.AgentRooms(context.Background(), "yazim"); err != nil || len(rooms) != 0 {
+		t.Fatal("oda yokken hesap açıldı:", rooms, err)
+	}
+	if rooms, err := e.st.AllRooms(context.Background()); err != nil || slices.ContainsFunc(rooms, func(r store.Room) bool { return r.Name == "rl" }) {
+		t.Fatal("web formu yeni oda açtı:", err)
+	}
 }
 
 // NEDEN: üyelik ve iptal uygulanmalı; kendisi dahil yönetici hedefler dokunulmazdır.
@@ -297,4 +312,34 @@ func TestYonetimGirdiVeHizSiniri(t *testing.T) {
 	e.srv.rate = newRateLimiter(1, 10)
 	yonetimWant(t, yonetimReq(e, "POST", "/hesaplar/ali/odalar", "mehmet", session, `{"oda":"r3"}`), 200, "")
 	yonetimWant(t, yonetimReq(e, "DELETE", "/hesaplar/ali/odalar/r3", "mehmet", session, ""), 429, "hiz_siniri")
+}
+
+// NEDEN: ikinci sekmede açılan yönetim oturumu ilk sekmeyi düşürmemeli; oturum sayısı
+// yine de sınırlı kalmalı ve süre dolunca hepsi geçersizleşmeli.
+func TestYonetimOturumlariSekmelerdeBirlikteGecerli(t *testing.T) {
+	e, now := yonetimEnv(t)
+	first := yonetimLogin(t, e, *now)
+	*now = now.Add(30 * time.Second)
+	second := yonetimLogin(t, e, *now)
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", first, ""), 200, "")
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", second, ""), 200, "")
+	for i := 0; i < maxYonetimSessions-1; i++ {
+		*now = now.Add(30 * time.Second)
+		yonetimLogin(t, e, *now)
+	}
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", first, ""), 401, "yonetim_oturumu_gerekli")
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", second, ""), 200, "")
+	*now = now.Add(11 * time.Minute)
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", second, ""), 401, "yonetim_oturumu_gerekli")
+}
+
+// NEDEN: web üyelik ucu da yazım hatalı oda adıyla başlıksız yeni oda açmamalı.
+func TestYonetimUyelikOlmayanOdayiAcmaz(t *testing.T) {
+	e, now := yonetimEnv(t)
+	session := yonetimLogin(t, e, *now)
+	yonetimWant(t, yonetimReq(e, "POST", "/hesaplar/ali/odalar", "mehmet", session, `{"oda":"rl"}`), 404, "oda_yok")
+	rooms, err := e.st.AllRooms(context.Background())
+	if err != nil || slices.ContainsFunc(rooms, func(r store.Room) bool { return r.Name == "rl" }) {
+		t.Fatal("web üyelik ucu yeni oda açtı:", err)
+	}
 }

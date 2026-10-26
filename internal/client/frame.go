@@ -10,10 +10,13 @@ import (
 
 // frameText terminal komutlarını görünür metne çevirir; satır sonu ve tab kalır.
 // Mesaj içeriği hem insanın terminalinde hem ajan çerçevesinde güvenilmeyen veridir.
+// Görünmez biçim karakterleri (Cf: bidi yönlendirme, sıfır genişlik, BOM) ve
+// satır/paragraf ayırıcıları (Zl, Zp) da görünür kaçışla yazılır: metni ters
+// gösterip yanıltamaz, sahte satır sonu üretemez.
 func frameText(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+		if (unicode.IsControl(r) && r != '\n' && r != '\t') || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp) {
 			fmt.Fprintf(&b, `\u%04x`, r)
 		} else {
 			b.WriteRune(r)

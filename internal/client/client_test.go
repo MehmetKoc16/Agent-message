@@ -76,7 +76,8 @@ func (e *cenv) writeConfig(name, url, token string) string {
 }
 
 func (e *cenv) statePath(name string) string {
-	return filepath.Join(e.dir, "state-r1-"+name+".json")
+	// Ayırıcı '@': adlarda izinli olmadığından oda/ajan çiftleri çakışmaz.
+	return filepath.Join(e.dir, "state@r1@"+name+".json")
 }
 
 // run istemciyi süreç içinde çalıştırır.

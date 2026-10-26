@@ -29,6 +29,12 @@ var (
 
 const maxFetch = 100
 
+// Arayüz ekranda görülen her konuşma için okundu yazar; bu sınırlar yalnız
+// bozuk ya da kötü niyetli bir istemcinin DB yazma yükünü tavanlar.
+const readPerMin, readPerDay = 240, 20000
+
+const readPattern = "POST /v1/rooms/{room}/threads/{thread}/read"
+
 // Server HTTP işleyicilerini ve sınırları bir arada tutar.
 type Server struct {
 	cfg          config.Server
@@ -37,6 +43,7 @@ type Server struct {
 	hub          *Hub
 	rate         *rateLimiter
 	announce     *rateLimiter // T-0 duyuruları için ajan başına ayrı, düşük kota
+	reads        *rateLimiter // okundu imleci; mesaj gönderim kotasını harcamaz
 	conns        *connLimiter
 	unauth       *unauthLimiter
 	authenticate func(context.Context, string) (store.Agent, error)
@@ -44,7 +51,7 @@ type Server struct {
 	touchMu         sync.Mutex
 	touched         map[string]time.Time
 	yonetimMu       sync.Mutex
-	yonetimSessions map[string]yonetimSession
+	yonetimSessions map[string][]yonetimSession
 }
 
 // New sunucuyu kurar. Log hiçbir zaman gövde, token ya da Authorization içermez.
@@ -53,11 +60,12 @@ func New(cfg config.Server, st *store.Store, log *slog.Logger) *Server {
 		cfg: cfg, st: st, log: log, hub: NewHub(),
 		rate:            newRateLimiter(cfg.RatePerMin, cfg.RatePerDay),
 		announce:        newRateLimiter(cfg.AnnouncePerMin, cfg.AnnouncePerDay),
+		reads:           newRateLimiter(readPerMin, readPerDay),
 		conns:           newConnLimiter(cfg.MaxConnsPerAgent),
 		unauth:          newUnauthLimiter(cfg.UnauthPerMin, cfg.UnauthGlobalPerMin),
 		authenticate:    st.Authenticate,
 		touched:         map[string]time.Time{},
-		yonetimSessions: map[string]yonetimSession{},
+		yonetimSessions: map[string][]yonetimSession{},
 	}
 }
 
@@ -133,7 +141,11 @@ func (s *Server) room(h roomHandler) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "yasak")
 			return
 		}
-		if r.Method == http.MethodPost && !s.rate.Allow(a.Name) {
+		limiter := s.rate
+		if r.Pattern == readPattern {
+			limiter = s.reads
+		}
+		if r.Method == http.MethodPost && !limiter.Allow(a.Name) {
 			writeErr(w, http.StatusTooManyRequests, "hiz_siniri")
 			return
 		}

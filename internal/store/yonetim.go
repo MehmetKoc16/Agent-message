@@ -60,7 +60,11 @@ func (s *Store) ChangeAccount(ctx context.Context, yapan, islem, ad, oda, secret
 		if revoked.Valid {
 			return ErrNotFound
 		}
-		if err := ensureRoomTx(ctx, tx, oda, s.stamp()); err != nil {
+		if islem == "odaya_eklendi" { // web üyelik uçları
+			if err := requireRoomTx(ctx, tx, oda); err != nil {
+				return err
+			}
+		} else if err := ensureRoomTx(ctx, tx, oda, s.stamp()); err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO agent_rooms(agent,room) VALUES (?,?)`, ad, oda)

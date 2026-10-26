@@ -22,6 +22,9 @@ type conversation struct {
 }
 
 type pendingDelivery struct {
+	// Room/Agent teslimin hangi köprüye ait olduğunu kaydeder; yeniden göndermeden önce denetlenir.
+	Room   string        `json:"room,omitempty"`
+	Agent  string        `json:"agent,omitempty"`
 	Source proto.Message `json:"source"`
 	Reply  Outgoing      `json:"reply"`
 }
