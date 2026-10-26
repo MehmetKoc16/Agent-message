@@ -146,8 +146,8 @@ func TestYonetimOturumKilit(t *testing.T) {
 	*now = now.Add(30 * time.Second)
 	yonetimWant(t, yonetimReq(e, "POST", "/oturum", "mehmet", "", `{"kod":"xxxxxx"}`), 401, "kod_gecersiz")
 	yonetimLogin(t, e, *now)
-	if len(e.srv.yonetimFailures) != 0 {
-		t.Fatal("başarı sayacı temizlemedi")
+	for i := 0; i < 4; i++ {
+		yonetimWant(t, yonetimReq(e, "POST", "/oturum", "mehmet", "", `{"kod":"xxxxxx"}`), 401, "kod_gecersiz")
 	}
 	// NEDEN: sabit pencere sınırının iki yanındaki beş deneme kilidi atlatmamalı.
 	e2, clock := yonetimEnv(t)

@@ -27,6 +27,9 @@ func TestGocV2SayaciVeMesajlariKorur(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err = s.db.Exec(`ALTER TABLE threads DROP COLUMN public_turns`); err != nil {
+		t.Fatal(err)
+	}
 	s.Close()
 	s, err = Open(path, 20)
 	if err != nil {

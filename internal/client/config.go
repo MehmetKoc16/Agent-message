@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/MehmetKoc16/Agent-message/internal/config"
@@ -45,6 +46,13 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("ayar dosyası okunamadı: %s", abs)
 	}
 	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, errors.New("ayar dosyası normal bir dosya olmalı")
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+		return nil, errors.New("token dosyası yalnız sahibi tarafından erişilebilir olmalı; chmod 600 ile izinleri düzeltin")
+	}
 	var c Config
 	dec := json.NewDecoder(f)
 	dec.DisallowUnknownFields()
