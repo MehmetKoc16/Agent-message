@@ -58,7 +58,9 @@ func Run(runner string) {
 		os.Exit(1)
 	}
 	if strings.Contains(prompt, "YAVAS_ISTE") {
-		time.Sleep(3 * time.Second)
+		// Zaman aşımı testindeki 6 sn sınırından uzun olmalı: yavaş CI makinesinde de
+		// "süreç öldürüldü" ile "işini bitirdi" ayırt edilebilsin.
+		time.Sleep(8 * time.Second)
 		_ = os.WriteFile("slow-finished", []byte("tamam"), 0o600)
 	}
 	if strings.Contains(prompt, "BOZUK_ISTE") {

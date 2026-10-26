@@ -498,10 +498,13 @@ func Test_zaman_asimi_sureci_oldurur(t *testing.T) {
 		start := time.Now()
 		code, log := f.run(context.Background(), runner, "--runner-timeout", "1")
 		mustOK(t, code, log)
-		if time.Since(start) >= 3*time.Second || len(f.replies) != 1 || f.replies[0].Body != "köprü: ajan çalıştırılamadı" {
+		// Sahte ajan 8 sn uyur; 1 sn zaman aşımı yavaş Windows CI makinesinde de 6 sn içinde
+		// uygulanmış olmalı (eski 3 sn sınırı uykuyla aynıydı ve CI'da 3,94 sn ile düştü).
+		if time.Since(start) >= 6*time.Second || len(f.replies) != 1 || f.replies[0].Body != "köprü: ajan çalıştırılamadı" {
 			t.Fatal("zaman aşımı uygulanmadı")
 		}
-		time.Sleep(2200 * time.Millisecond)
+		// Süreç yaşasaydı 8. saniyede dosyayı yazardı; o andan sonra bak.
+		time.Sleep(time.Until(start.Add(9 * time.Second)))
 		if _, err := os.Stat(filepath.Join(f.dir, "slow-finished")); !os.IsNotExist(err) {
 			t.Fatal("öldürülen süreç çalışmaya devam etti")
 		}
