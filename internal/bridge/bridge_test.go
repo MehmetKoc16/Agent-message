@@ -128,7 +128,7 @@ func newFixture(t *testing.T) *fixture {
 	}))
 	t.Cleanup(f.ts.Close)
 	f.cfg = filepath.Join(f.dir, "config.json")
-	b, _ := json.Marshal(map[string]string{"url": f.ts.URL, "room": "oda", "agent": "kopru", "token": "test"})
+	b, _ := json.Marshal(map[string]string{"url": f.ts.URL, "room": "oda", "agent": "kopru", "token": "bridge-test-credential-0123456789"})
 	if err := os.WriteFile(f.cfg, b, 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -39,7 +39,7 @@ func (r *runner) cmdAnnounce(ctx context.Context, fs *flag.FlagSet, args []strin
 	if strings.TrimSpace(body) == "" {
 		return r.fail(ExitError, "duyuru metni boş olamaz")
 	}
-	if name, found := ScanSecrets(body); found {
+	if name, found := r.scanSecrets(body); found {
 		return r.fail(ExitSecret, "GÖNDERİLMEDİ: mesajda sır deseni bulundu (%s).", name)
 	}
 	var rooms struct {

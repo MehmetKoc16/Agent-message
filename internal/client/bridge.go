@@ -39,7 +39,7 @@ func (r *runner) cmdBridge(ctx context.Context, fs *flag.FlagSet, args []string)
 	o.Timeout = time.Duration(*seconds) * time.Second
 	o.StatePath = filepath.Join(filepath.Dir(r.cur.path), "bridge-"+r.cfg.Room+"-"+r.cfg.Agent+"-"+o.Runner+".json")
 	d := bridge.Dependencies{
-		Cursor: r.cur, Frame: Render, Scan: ScanSecrets,
+		Cursor: r.cur, Frame: Render, Scan: r.scanSecrets,
 		Fetch: r.api.fetch, Transient: isTransient,
 		Send: func(ctx context.Context, in bridge.Outgoing) error {
 			_, err := r.api.send(ctx, sendInput{To: in.To, Type: in.Type, Thread: in.Thread, ReplyTo: &in.ReplyTo, Body: in.Body, RequestID: in.RequestID})

@@ -159,7 +159,9 @@ func (r *runner) apiFail(err error) int {
 		case 429:
 			return r.fail(ExitError, "çok fazla istek: hız sınırı, biraz sonra deneyin")
 		case 400:
-			return r.fail(ExitError, "sunucu isteği reddetti (%s)", ae.Code)
+			// Error codes are remote input, and may contain credentials or
+			// terminal escape sequences. Keep terminal diagnostics local.
+			return r.fail(ExitError, "sunucu isteği reddetti (HTTP 400)")
 		}
 		return r.fail(ExitError, "sunucu hatası: HTTP %d", ae.Status)
 	}
@@ -189,7 +191,7 @@ func (r *runner) cmdSend(ctx context.Context, fs *flag.FlagSet, args []string) i
 		}
 		text = strings.ToValidUTF8(string(b), "�")
 	}
-	if name, found := ScanSecrets(text); found {
+	if name, found := r.scanSecrets(text); found {
 		return r.fail(ExitSecret, "GÖNDERİLMEDİ: mesajda sır deseni bulundu (%s). Sırları mesaja yazmayın.", name)
 	}
 	in := sendInput{To: *to, Type: *typ, Thread: *thread, Body: text}
