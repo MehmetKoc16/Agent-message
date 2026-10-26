@@ -11,7 +11,7 @@ $notice = @{Kind='required-update';Reason='Türkçe test';Action='Yeni sürümü
 Send-AdminNotification @notice
 Send-AdminNotification @notice
 Assert-True ($global:NotifyCalls.Count -eq 2) 'relay was not called'
-Assert-True ('Admin Notifications' -in $global:NotifyCalls[0].Args) 'wrong room'
+Assert-True ('Admin Notification' -in $global:NotifyCalls[0].Args) 'wrong room'
 Assert-True ($global:NotifyCalls[0].Body.Contains('Türkçe test')) 'UTF-8 text changed'
 Assert-True (($global:NotifyCalls[0].Args -join '|') -eq ($global:NotifyCalls[1].Args -join '|')) 'repeat changed request identity'
 
@@ -27,8 +27,8 @@ function global:Invoke-RestMethod {
         '/v1/me' { return @{kind='insan';yonetici=$true} }
         '/v1/yonetim/oturum' { return @{oturum='fake-session'} }
         '/v1/yonetim/odalar' {
-            if ($global:DuplicateRoom) { return @{rooms=@(@{name='r1';title='Admin Notifications'}, @{name='r2';title='Admin Notifications'})} }
-            return @{rooms=@(@{name='r1';title='Admin Notifications'})}
+            if ($global:DuplicateRoom) { return @{rooms=@(@{name='r1';title='Admin Notification'}, @{name='r2';title='Admin Notification'})} }
+            return @{rooms=@(@{name='r1';title='Admin Notification'})}
         }
         '/v1/yonetim/hesaplar' {
             $list = @(@{name='ece-claude';kind='ajan';revoked=$false;rooms=$global:Members['ece-claude']})

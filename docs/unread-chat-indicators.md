@@ -25,7 +25,7 @@ Sunucu bu dalda **şema v5**'e geçer ve `(hesap, oda, konuşma)` okuma imleci e
 Mevcut mesajlar silinmez. Eski mesajlar ilk açılana kadar okunmamış görünebilir.
 Kurulumdan önce veritabanı yedeği alınır; eski v4 ikilisi v5 veritabanını açmaz.
 Geri alma gerekiyorsa v4 yedeği geri yüklenir. Merge ve canlı kurulum sonrasında
-bu yükseltme gereksinimi Admin Notifications'ta yöneticilere bildirilir.
+bu yükseltme gereksinimi Admin Notification'da yöneticilere bildirilir.
 
 API: insan hesapları için `GET /v1/unread`, oda üyeleri için
 `POST /v1/rooms/{room}/threads/{thread}/read` (`last_id`) ve insanlara ait sayfalı
