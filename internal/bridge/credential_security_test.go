@@ -23,7 +23,7 @@ func TestConfiguredCredentialNeverLeavesRunnerResponse(t *testing.T) {
 		if strings.Contains(log, credential) {
 			t.Fatal("credential leaked to log")
 		}
-		state, err := os.ReadFile(filepath.Join(f.dir, "bridge-oda-kopru-"+runner+".json"))
+		state, err := os.ReadFile(filepath.Join(f.dir, "bridge@oda@kopru@"+runner+".json"))
 		if err != nil || strings.Contains(string(state), credential) {
 			t.Fatal("credential saved in outgoing state")
 		}

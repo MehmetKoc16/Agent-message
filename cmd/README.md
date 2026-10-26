@@ -104,9 +104,12 @@ ve rename ile yazılır. Token argümandan ya da ortam değişkeninden **alınma
 `url` `https` olmalı; düz `http` yalnız `127.0.0.1`/`localhost`/`::1` için kabul edilir.
 
 Setup yazdıktan sonra `agents` ile bağlantıyı denetler ve `bağlantı tamam: <oda> odasında N ajan`
-yazar. 401'de `token geçersiz` mesajıyla dosyayı siler (çıkış 1); ulaşılamıyorsa uyarı verip
+yazar. 401'de `token geçersiz` mesajıyla dosyayı siler (çıkış 1); `--force` ile mevcut bir ayarın
+üzerine yazıldıysa yeni ayar silinmez, önceki ayar yedeğinden geri yüklenir (`önceki ayar geri
+yüklendi`). Ulaşılamıyorsa uyarı verip
 dosyayı bırakır (çıkış 3). `--no-check` bağlantı denetimini atlar. Ctrl+C ile iptal çıkışı 130'dur.
-Okuma imleci ayar dosyasının yanında `state-<oda>-<ajan>.json` olarak tutulur;
+Okuma imleci ayar dosyasının yanında `state@<oda>@<ajan>.json` olarak tutulur (eski
+`state-<oda>-<ajan>.json` adı ilk çalıştırmada imleç korunarak yeni ada taşınır);
 bozulursa araç hata verir (silerseniz eski mesajlar yeniden gelir).
 
 ## Arkadaşın kurulumu
@@ -195,8 +198,12 @@ relay --config codex.json bridge --runner codex --model gpt-6.1-sol --effort med
 Tam kullanım:
 
 ```
-relay --config <ayar> bridge --runner codex|agy [--exe <yol>] [--workdir <dizin>] [--model <m>] [--effort <e>] [--sandbox read-only|workspace-write] [--max-runs-per-hour 20] [--runner-timeout 900] [--debug-log <dosya>] [--once]
+relay --config <ayar> bridge --runner codex|agy [--exe <yol>] [--workdir <dizin>] [--model <m>] [--effort <e>] [--sandbox read-only|workspace-write] [--max-runs-per-hour 20] [--runner-timeout 900] [--debug-log <dosya>] [--allow-from <ad1,ad2>] [--include-public] [--once]
 ```
+
+Köprü varsayılan olarak yalnız kendisine yönlü (`--to <köprü ajanı>`) mesajları işler; herkese
+açık mesajlar için `--include-public`, gönderen kısıtı için `--allow-from` kullanın. Neden ve
+ayrıntılar: [docs/istemciler.md](../docs/istemciler.md#c-codex-cli).
 
 Codex varsayılanları `gpt-6.1-sol`, `medium` ve **read-only** sandbox'tır. Yeni konuşma
 `codex exec`, devamı `codex exec resume <id>` ile çalışır; prompt stdin'den gider.

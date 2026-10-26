@@ -113,6 +113,15 @@ func Run(ctx context.Context, o Options, d Dependencies) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+			if !e.permitted(m) {
+				// Gövde loglanmaz; imleç ilerler ki aynı mesaj her turda yeniden elenmesin.
+				e.log(m, "atlandi", 0, fmt.Sprintf(" gönderen=%q neden=izin_yok", m.From))
+				if err := d.Cursor.Advance(m.ID); err != nil {
+					return err
+				}
+				after = m.ID
+				continue
+			}
 			if err := e.process(ctx, m); err != nil {
 				return err // başarısız gönderim/kayıt: imleç yerinde kalır
 			}
@@ -137,6 +146,24 @@ func Run(ctx context.Context, o Options, d Dependencies) error {
 func (e *engine) log(m proto.Message, action string, duration time.Duration, detail string) {
 	fmt.Fprintf(e.d.Stderr, "%s konuşma=%q mesaj=%d tip=%q işlem=%s süre=%.3fs%s\n",
 		time.Now().Format(time.RFC3339), m.Thread, m.ID, m.Type, action, duration.Seconds(), detail)
+}
+
+// permitted köprünün mesajı işleyip işlemeyeceğine karar verir. Codex read-only
+// sandbox'ı okumayı kısıtlamaz; herkese açık soruyla her oda üyesi köprüye dosya
+// okutabilirdi. Varsayılan yalnız köprüye yönlü mesajlardır.
+func (e *engine) permitted(m proto.Message) bool {
+	if m.To != e.o.Agent && !(e.o.IncludePublic && m.To == "") {
+		return false
+	}
+	if len(e.o.AllowFrom) == 0 {
+		return true
+	}
+	for _, name := range e.o.AllowFrom {
+		if m.From == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *engine) allowed(now time.Time) bool {
@@ -172,7 +199,7 @@ func (e *engine) sendReply(ctx context.Context, m proto.Message, typ, body strin
 		RequestID: fmt.Sprintf("bridge-%s-%d", e.o.Runner, m.ID)}
 	source := m
 	source.Body = "" // Yeniden gönderim için gelen mesajın gövdesi gerekmez.
-	c.Delivery = &pendingDelivery{Source: source, Reply: pending}
+	c.Delivery = &pendingDelivery{Room: e.o.Room, Agent: e.o.Agent, Source: source, Reply: pending}
 	if err := e.store.update(m.Thread, c); err != nil {
 		return err
 	}
@@ -204,6 +231,15 @@ func (e *engine) resumeDeliveries(ctx context.Context) error {
 	}
 	sort.Slice(pending, func(i, j int) bool { return pending[i].Source.ID < pending[j].Source.ID })
 	for _, p := range pending {
+		if !e.ownDelivery(p) {
+			// Eski çakışan dosya adları başka oda/ajanın teslimini getirebilir; yanlış
+			// odaya göndermek yerine düşürülür. İmleç bu odaya ait değil, ilerletilmez.
+			e.log(p.Source, "dusuruldu", 0, " neden=baska_oda_ya_da_ajan")
+			if err := e.clearDelivery(p.Source.Thread); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := e.deliver(ctx, p.Source, p.Reply, 0); err != nil {
 			return err
 		}
@@ -215,6 +251,20 @@ func (e *engine) resumeDeliveries(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// ownDelivery kayıtlı teslimin bu köprünün odası ve ajanına ait olduğunu doğrular.
+// Alanları olmayan eski kayıtta oda, gelen mesajın Room alanından okunur; aynı oda
+// adıyla aynı dosya adı yalnız aynı ajanda oluşabildiği için bu yeterlidir.
+func (e *engine) ownDelivery(p *pendingDelivery) bool {
+	room := p.Room
+	if room == "" {
+		room = p.Source.Room
+	}
+	if room != e.o.Room {
+		return false
+	}
+	return p.Agent == "" || p.Agent == e.o.Agent
 }
 
 func (e *engine) deliver(ctx context.Context, m proto.Message, pending Outgoing, duration time.Duration) error {

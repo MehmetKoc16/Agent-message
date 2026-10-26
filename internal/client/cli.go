@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -51,7 +52,8 @@ const usage = `kullanım: relay [--config <json>] <komut>
   agents                    odadaki ajanlar
   thread <T-n>              bir konuşmanın geçmişi
   close <T-n>               konuşmayı kapatır
-  bridge --runner codex|agy [--once]  başsız ajanı odaya bağlar
+  bridge --runner codex|agy [--once] [--allow-from <ad,ad>] [--include-public]
+                            başsız ajanı odaya bağlar; varsayılan yalnız ona yönlü mesajlar
 çıkış kodları: 0 mesaj, 1 hata/kilitli, 2 zaman aşımı, 3 ulaşılamıyor, 4 sır taraması`
 
 type runner struct {
@@ -59,6 +61,8 @@ type runner struct {
 	cfg *Config
 	api *api
 	cur cursor
+	// tokens aynı dizindeki diğer relay ayarlarının token'larıdır; yalnız sır taraması içindir.
+	tokens []string
 }
 
 // Run bir relay komutunu çalıştırır ve çıkış kodunu döndürür.
@@ -100,7 +104,12 @@ func Run(ctx context.Context, args []string, env Env) int {
 		fmt.Fprintln(env.Stderr, "hata:", err)
 		return ExitError
 	}
-	r := &runner{env: env, cfg: cfg, api: newAPI(cfg), cur: cursor{path: cfg.statePath}}
+	if err := migrateLegacy(cfg.legacyStatePath, cfg.statePath); err != nil {
+		fmt.Fprintln(env.Stderr, "hata:", err)
+		return ExitError
+	}
+	r := &runner{env: env, cfg: cfg, api: newAPI(cfg), cur: cursor{path: cfg.statePath},
+		tokens: siblingTokens(filepath.Dir(cfg.statePath))}
 
 	cfs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	cfs.SetOutput(env.Stderr)

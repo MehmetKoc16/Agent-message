@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/MehmetKoc16/Agent-message/internal/config"
 )
 
 var sessionRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -27,11 +29,21 @@ type Options struct {
 	Room, Agent, StatePath                       string
 	DebugLog                                     string
 	SandboxExplicit, Once                        bool
-	MaxRuns                                      int
-	Timeout                                      time.Duration
+	// IncludePublic false iken yalnız köprü ajanına yönlü (to == Agent) mesajlar işlenir.
+	// Herkese açık soruyu her oda üyesi yazabilir; köprüye dosya okutmanın yolu olmamalı.
+	IncludePublic bool
+	// AllowFrom boş değilse yalnız bu hesaplardan gelen mesajlar işlenir.
+	AllowFrom []string
+	MaxRuns   int
+	Timeout   time.Duration
 }
 
 func (o *Options) prepare() error {
+	for _, name := range o.AllowFrom {
+		if !config.NameRe.MatchString(name) {
+			return errors.New("--allow-from adları geçersiz (küçük harf, rakam, . _ -; virgülle ayrılır)")
+		}
+	}
 	if o.Runner != "codex" && o.Runner != "agy" {
 		return errors.New("--runner codex ya da agy olmalı")
 	}

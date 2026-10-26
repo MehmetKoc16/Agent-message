@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/MehmetKoc16/Agent-message/internal/bridge"
@@ -24,6 +25,8 @@ func (r *runner) cmdBridge(ctx context.Context, fs *flag.FlagSet, args []string)
 	fs.IntVar(&o.MaxRuns, "max-runs-per-hour", 20, "kayan saatte çalıştırma sınırı")
 	seconds := fs.Int("runner-timeout", 900, "çalıştırıcı zaman aşımı (sn)")
 	fs.BoolVar(&o.Once, "once", false, "bekleyen mesajları bir kez işle")
+	allowFrom := fs.String("allow-from", "", "yalnız bu hesaplardan gelen mesajlar ajanı tetikler (ad1,ad2; boş: herkes)")
+	fs.BoolVar(&o.IncludePublic, "include-public", false, "herkese açık (alıcısız) mesajları da işle; varsayılan yalnız köprüye yönlü mesajlar")
 	pos, err := flagx.Parse(fs, args)
 	if err != nil {
 		return ExitError
@@ -31,13 +34,25 @@ func (r *runner) cmdBridge(ctx context.Context, fs *flag.FlagSet, args []string)
 	if len(pos) != 0 || *seconds <= 0 || int64(*seconds) > int64((time.Duration(1<<63-1))/time.Second) {
 		return r.fail(ExitError, "hata: bridge argümanları ya da runner-timeout geçersiz")
 	}
+	if *allowFrom != "" {
+		for _, name := range strings.Split(*allowFrom, ",") {
+			o.AllowFrom = append(o.AllowFrom, strings.TrimSpace(name))
+		}
+	}
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "sandbox" {
 			o.SandboxExplicit = true
 		}
 	})
 	o.Timeout = time.Duration(*seconds) * time.Second
-	o.StatePath = filepath.Join(filepath.Dir(r.cur.path), "bridge-"+r.cfg.Room+"-"+r.cfg.Agent+"-"+o.Runner+".json")
+	var legacy string
+	o.StatePath, legacy = stateFileNames(filepath.Dir(r.cur.path), "bridge", r.cfg.Room, r.cfg.Agent, o.Runner)
+	// Bilinmeyen runner adı dosya yoluna girmeden önce bridge.Run içinde reddedilir.
+	if o.Runner == "codex" || o.Runner == "agy" {
+		if err := migrateLegacy(legacy, o.StatePath); err != nil {
+			return r.fail(ExitError, "hata: %v", err)
+		}
+	}
 	d := bridge.Dependencies{
 		Cursor: r.cur, Frame: Render, Scan: r.scanSecrets,
 		Fetch: r.api.fetch, Transient: isTransient,
