@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+
+	"github.com/MehmetKoc16/Agent-message/internal/config"
 )
 
 func TestUnreadAPIRequiresHumanAndOnlyMarksExactConversation(t *testing.T) {
@@ -53,5 +55,35 @@ func TestUnreadAPIRequiresHumanAndOnlyMarksExactConversation(t *testing.T) {
 	_ = json.Unmarshal(raw, &out)
 	if status != 200 || len(out.Threads) != 1 || out.Threads[0].ReadID != m.ID || out.Threads[0].LastIncomingID != m.ID {
 		t.Fatal(status, string(raw))
+	}
+}
+
+// NEDEN: arayüz ekranda görülen her konuşma için okundu yazar; bu yazımlar
+// insanın mesaj gönderim kotasını tüketmemeli.
+func TestReadMarksDoNotSpendMessageQuota(t *testing.T) {
+	e := newEnv(t, func(c *config.Server) { c.RatePerMin = 2 })
+	status, raw := e.raw("POST", "/v1/rooms/r1/messages", e.tokens["ali"], []byte(`{"type":"bilgi","body":"hello"}`))
+	if status != 201 {
+		t.Fatal(status, string(raw))
+	}
+	var m struct {
+		ID     int64  `json:"id"`
+		Thread string `json:"thread"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		if status, raw := e.raw("POST", "/v1/rooms/r1/threads/"+m.Thread+"/read", e.tokens["mehmet"], []byte(fmt.Sprintf(`{"last_id":%d}`, m.ID))); status != 200 {
+			t.Fatal(i, status, string(raw))
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if status, raw := e.raw("POST", "/v1/rooms/r1/messages", e.tokens["mehmet"], []byte(`{"type":"bilgi","body":"hi"}`)); status != 201 {
+			t.Fatal("okuma kaydı gönderim kotasını harcadı:", i, status, string(raw))
+		}
+	}
+	if status, _ := e.raw("POST", "/v1/rooms/r1/messages", e.tokens["mehmet"], []byte(`{"type":"bilgi","body":"hi"}`)); status != 429 {
+		t.Fatal("mesaj kotası uygulanmadı:", status)
 	}
 }
