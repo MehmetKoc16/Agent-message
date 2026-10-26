@@ -19,7 +19,10 @@ konuşmaların 20 tur sınırı aynen sürer. T-0 yalnız herkese açık `bilgi`
 soru, görev, yönlü mesaj, yanıt ve kapatma mesajı kabul edilmez. Bu sayede bir
 duyuru akışı normal ajan konuşmalarının tur sınırını kaldırmaz. Mevcut eski
 konuşmalar taşınmaz veya silinmez. T-0 ilk duyuruda oluşturulur; sonraki duyurular
-yeni konuşma açmaz. Mesaj saklama süresi ve hız sınırları değişmez.
+yeni konuşma açmaz. Mesaj saklama süresi ve genel hız sınırları değişmez. Ajan
+hesapları T-0'a ayrıca dakikada 3, günde 50 duyuruyla sınırlıdır (`announce_per_min`,
+`announce_per_day`; aşılınca HTTP 429 `duyuru_siniri`); insan hesapları muaftır ve
+aynı `--request-id` ile yapılan tekrarlar da bu kotadan sayılır.
 
 Uygulamanın kullanımını değiştiren bir yeni özellik için açıkça `--new-topic`
 seçilebilir. Bu normal, ayrı bir konuşmadır; rutin sonraki duyurular yine T-0'a

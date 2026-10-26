@@ -40,6 +40,8 @@ func newCEnv(t *testing.T) *cenv {
 	cfg.DB = filepath.Join(dir, "relay.db")
 	cfg.MaxWaitSec = 10
 	cfg.RatePerMin = 1000
+	cfg.AnnouncePerMin = 1000
+	cfg.AnnouncePerDay = 1000
 	st, err := store.Open(cfg.DB, cfg.MaxTurns)
 	if err != nil {
 		t.Fatal(err)

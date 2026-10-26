@@ -157,6 +157,9 @@ func (r *runner) apiFail(err error) int {
 		case 413:
 			return r.fail(ExitError, "mesaj çok büyük")
 		case 429:
+			if ae.Code == "duyuru_siniri" {
+				return r.fail(ExitError, "duyuru sınırı: ajanlar T-0'a dakikada/günde sınırlı duyuru yazabilir, biraz sonra deneyin")
+			}
 			return r.fail(ExitError, "çok fazla istek: hız sınırı, biraz sonra deneyin")
 		case 400:
 			// Error codes are remote input, and may contain credentials or

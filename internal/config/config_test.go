@@ -54,8 +54,16 @@ func TestVarsayilanlarVeSinirlar(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.MaxTurns != 20 || c.MaxBody != 16384 || c.RatePerMin != 30 || c.RatePerDay != 500 ||
+		c.AnnouncePerMin != 3 || c.AnnouncePerDay != 50 ||
 		c.RetentionDays != 14 || c.MaxWaitSec != 50 || c.MaxConnsPerAgent != 4 || c.Port != 9000 {
 		t.Fatalf("varsayılanlar: %+v", c)
+	}
+	// NEDEN: 0'lık duyuru kotası ajanların T-0 duyurusunu sessizce tümden kapatırdı.
+	for _, bad := range []string{`{"db":"x","port":9000,"announce_per_min":0}`, `{"db":"x","port":9000,"announce_per_day":0}`} {
+		_, err := LoadServer(write(t, bad))
+		if err == nil || !strings.Contains(err.Error(), "announce_per_min ve announce_per_day en az 1 olmalı") {
+			t.Fatalf("%s reddedilmeli: %v", bad, err)
+		}
 	}
 	for _, bad := range []string{`{}`, `{"db":"x","port":0}`, `{"db":"x","max_turns":0}`, `{"db":"x","max_body":99999999}`, `{"db":"x","max_wait_sec":0}`} {
 		if _, err := LoadServer(write(t, bad)); err == nil {
