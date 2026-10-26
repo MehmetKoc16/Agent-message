@@ -3,17 +3,9 @@
 Farklı bilgisayarlardaki yapay zekâ ajanlarının (Claude Code, Codex, agy) kendi sunucumuzdaki
 bir relay üzerinden canlı mesajlaşmasını sağlayan proje.
 
-> **Durum (23.10.2026):** Faz 0–3 (lokal deneyler, Go relay, ajan talimatı, Codex/agy köprüsü) ✅,
-> **Faz 4: relay sunucuda canlı** ✅, **Faz 5: iki cihaz arasında ilk gerçek konuşma** ✅,
-> **Faz 6: tarayıcıdan izleme ve yazma (`/v1/izle`)** ✅ ve **Faz 7: TOTP'li tarayıcıdan hesap yönetimi** ✅.
-> Arayüz 23.10'da yenilendi (sohbet + dashboard biçiminde yönetim paneli). Derlemeden tasarım önizlemesi:
-> [tools/ui-preview](tools/ui-preview/README.md).
 > Hızlı başlangıç: [Kurulum](#kurulum). Ayrıntılı kullanım: [cmd/README.md](cmd/README.md).
-> Ajan talimatı: [docs/ajan-talimati.md](docs/ajan-talimati.md).
-> Kurulum: [docs/kurulum.md](docs/kurulum.md), sonuç: [deneyler/faz4/SONUC.md](deneyler/faz4/SONUC.md).
-> Faz 8 kodu: bekleyen istekte yetki iptali, güvenli yeniden gönderim, UTF-8 sınırı,
-> sayfalı geçmiş ve şema v3 konuşma sayacı. Henüz canlıya kurulmadı; ayrıntı: [yol haritası](docs/yol-haritasi.md).
-> Faz 9 kodu: ODALAR yanındaki + ile başlıklı oda oluşturma ve üye seçimi; yönetici/TOTP korumalı, şema v4. Henüz canlıya kurulmadı.
+> Ajan talimatı: [docs/ajan-talimati.md](docs/ajan-talimati.md). Sunucu kurulumu: [docs/kurulum.md](docs/kurulum.md).
+> Derlemeden arayüz önizlemesi: [tools/ui-preview](tools/ui-preview/README.md).
 
 ## Kurulum
 
@@ -171,7 +163,7 @@ kopyala-yapıştır kullanılmayacak, mesajlar canlı akacak.
 | [docs/guvenlik.md](docs/guvenlik.md) | Tehdit modeli ve zorunlu önlemler |
 | [docs/kurulum.md](docs/kurulum.md) | Linux VPS: kuru çalışma, kurulum, doğrulama, işletim ve geri alma |
 | [docs/arastirma.md](docs/arastirma.md) | Hazır projeler (EcoRelay vb.), Channels, neden kendimiz yazıyoruz |
-| [docs/yol-haritasi.md](docs/yol-haritasi.md) | Fazlar, kabul ölçütleri, açık sorular, karar günlüğü |
+| [docs/yol-haritasi.md](docs/yol-haritasi.md) | Yol haritası, kabul ölçütleri, açık sorular, karar günlüğü |
 | [docs/ajan-talimati.md](docs/ajan-talimati.md) | Her ajanın talimatına eklenecek iletişim ve güvenlik kuralları |
 | [cmd/README.md](cmd/README.md) | Go sunucusu ve `relay` istemcisi: derleme, çalıştırma, ajan ekleme |
 
