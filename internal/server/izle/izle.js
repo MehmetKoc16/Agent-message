@@ -582,6 +582,7 @@
     yoneticiye_dokunulamaz: "Yönetici hesabı yalnız SSH ile değiştirilebilir.",
     zaten_var: "Bu adla bir hesap zaten var.", hesap_yok: "Hesap yok veya iptal edilmiş.",
     gecersiz_ad: "Geçersiz hesap adı.", gecersiz_oda: "Geçersiz oda adı; en az bir oda gerekli.",
+    oda_yok: "Bu adda oda yok. Önce ODALAR yanındaki + ile odayı oluştur.",
     gecersiz_tur: "Tür ajan veya insan olmalı.", gecersiz_son: "Kayıt sayısı 1–1000 olmalı.",
     gecersiz_baslik: "Oda başlığı 1–80 karakter olmalı; satır sonu içeremez.",
     gecersiz_uye: "Üye seçimi geçersiz; yalnız aktif hesapları seçebilirsin.",

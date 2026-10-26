@@ -65,7 +65,15 @@ func (s *Store) addAgent(ctx context.Context, name, kind, tokenHash string, room
 		return err
 	}
 	for _, r := range rooms {
-		if err := ensureRoomTx(ctx, tx, r, s.stamp()); err != nil {
+		if web {
+			// Web formu oda açmaz: odalar başlık ve üye seçimiyle ayrıca oluşturulur.
+			var one int
+			if err := tx.QueryRowContext(ctx, `SELECT 1 FROM rooms WHERE name=?`, r).Scan(&one); errors.Is(err, sql.ErrNoRows) {
+				return ErrUnknownRoom
+			} else if err != nil {
+				return err
+			}
+		} else if err := ensureRoomTx(ctx, tx, r, s.stamp()); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx,

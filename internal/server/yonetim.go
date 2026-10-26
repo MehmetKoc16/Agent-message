@@ -196,6 +196,10 @@ func (s *Server) handleYonetimCreate(w http.ResponseWriter, r *http.Request, a s
 		writeErr(w, 409, "zaten_var")
 		return
 	}
+	if errors.Is(err, store.ErrUnknownRoom) {
+		writeErr(w, 404, "oda_yok")
+		return
+	}
 	if err != nil {
 		s.internal(w, "hesap açma", err)
 		return

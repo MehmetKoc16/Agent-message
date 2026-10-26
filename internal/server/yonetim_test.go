@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -235,6 +236,14 @@ func TestYonetimHesapAc(t *testing.T) {
 		yonetimWant(t, yonetimReq(e, "POST", "/hesaplar", "mehmet", session, body), 400, "")
 	}
 	yonetimWant(t, yonetimReq(e, "POST", "/hesaplar", "mehmet", session, `{"ad":"yeni","tur":"ajan","odalar":["r1"]}`), 409, "zaten_var")
+	// Yazım hatalı oda adı başlıksız yeni bir oda açmamalı; hesap da açılmamalı.
+	yonetimWant(t, yonetimReq(e, "POST", "/hesaplar", "mehmet", session, `{"ad":"yazim","tur":"ajan","odalar":["r1","rl"]}`), 404, "oda_yok")
+	if rooms, err := e.st.AgentRooms(context.Background(), "yazim"); err != nil || len(rooms) != 0 {
+		t.Fatal("oda yokken hesap açıldı:", rooms, err)
+	}
+	if rooms, err := e.st.AllRooms(context.Background()); err != nil || slices.ContainsFunc(rooms, func(r store.Room) bool { return r.Name == "rl" }) {
+		t.Fatal("web formu yeni oda açtı:", err)
+	}
 }
 
 // NEDEN: üyelik ve iptal uygulanmalı; kendisi dahil yönetici hedefler dokunulmazdır.
