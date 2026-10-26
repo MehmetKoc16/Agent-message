@@ -30,6 +30,12 @@ class Element {
     return [];
   }
   getClientRects() { return [{}]; }
+  // Rows stack at 100px each inside their scrolled parent; hidden rows take no space.
+  getBoundingClientRect() {
+    const siblings = this.parentElement.children || [];
+    const top = siblings.slice(0, siblings.indexOf(this)).filter((child) => !child.hidden).length * 100;
+    return {top: top - (this.parentElement.scrollTop || 0), height: 100};
+  }
   focus() {}
   showModal() { this.open = true; }
   close() { if (this.open) { this.open = false; this.listeners.get("close")?.({}); } }
@@ -38,7 +44,7 @@ class Element {
   reportValidity() {}
 }
 
-async function harness(fetch, width = 1440) {
+async function harness(fetch, width = 1440, globals = {}) {
   const nodes = new Map();
   const el = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   const queries = new Map();
@@ -58,6 +64,7 @@ async function harness(fetch, width = 1440) {
     document: {visibilityState: "visible", getElementById: el, createElement: (tag) => new Element(tag),
       addEventListener(type, fn) { documentListeners.set(type, fn); },
       documentElement: new Element(), body: new Element()},
+    ...globals,
   });
   const source = await readFile(new URL("../../internal/server/izle/izle.js", import.meta.url), "utf8");
   vm.runInContext(source.replace(/\}\)\(\);\s*$/, `
@@ -354,7 +361,7 @@ test("yönetici olmayan oturum yeni oda akışını başlatamaz", async () => {
   assert.equal(calls,0);assert.equal(h.el("oda-dialog").open,false);
 });
 
-test("okunmamış işareti yalnız açılan konuşmada kalkar; arka plan ve eski özet okumayı geri almaz", async () => {
+test("okunmamış işareti açılan konuşmada kalkar; arka plan ve eski özet okumayı geri almaz", async () => {
   const writes = [];
   const snapshots = [{room:"r1",thread:"T-1",title:"first",total:1,last_id:1,last_incoming_id:1,read_id:0},
     {room:"r1",thread:"T-2",title:"second",total:1,last_id:2,last_incoming_id:2,read_id:0}];
@@ -402,4 +409,58 @@ test("başarısız okuma kaydı işareti silmez ve görünmeyen yeni mesajı oku
   h.inspect.showFilter("T-1");await new Promise(setImmediate);
   assert.deepEqual(writes,[{last_id:1}]);
   assert.equal(h.el("konusma-listesi").children[0].children[0].hidden,false);
+});
+
+test("tüm konuşmalarda yalnız ekranda duran mesajlar okundu sayılır", async () => {
+  const writes = [];
+  let observer;
+  class FakeIntersectionObserver {
+    constructor(callback) { this.callback = callback; this.targets = new Set(); observer = this; }
+    observe(target) { this.targets.add(target); }
+    unobserve(target) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+  }
+  const h = await harness(async (path, options) => {
+    if (path === "/v1/unread") return {ok:true, json:async () => ({threads: [1, 2, 3].map((n) =>
+      ({room:"r1",thread:"T-"+n,title:"T-"+n,total:1,last_id:n,last_incoming_id:n,read_id:0}))})};
+    writes.push({path, body:JSON.parse(options.body)});
+    return {ok:true,json:async()=>({ok:true})};
+  }, 1440, {IntersectionObserver: FakeIntersectionObserver});
+  const msg = (id) => ({id,thread:"T-"+id,room:"r1",from:"other",type:"bilgi",body:"T-"+id,created_at:"2026-10-25T00:00:00Z"});
+  h.el("izleme").hidden = false;
+  h.inspect.addMessages([msg(1),msg(2),msg(3)],h.session);
+  await h.inspect.refreshUnread(h.session);
+  assert.equal(writes.length,0,"loading all conversations must not mark them read");
+  const row = (id) => [...observer.targets][id - 1];
+  const show = (id, ratio = 1, height = 100) => ({target:row(id),isIntersecting:ratio > 0,intersectionRatio:ratio,
+    intersectionRect:{height},rootBounds:{height:400}});
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 550));
+  observer.callback([show(1, 0.1, 10), show(2), show(3)]); await settle();
+  assert.deepEqual(writes.map((w) => [w.path.split("/")[5], w.body.last_id]).sort(), [["T-2",2],["T-3",3]]);
+  const dot = (name) => h.el("konusma-listesi").children.find((button)=>button.title===name).children[0];
+  assert.equal(dot("T-1").hidden,false,"a row barely on screen was marked read");
+  assert.equal(dot("T-2").hidden,true);
+  h.setVisibility("hidden");
+  observer.callback([show(1)]); await settle();
+  assert.equal(writes.length,2,"a background tab marked rows read");
+  h.setVisibility("visible");h.documentListeners.get("visibilitychange")();await new Promise(setImmediate);
+  assert.equal(writes.at(-1).body.last_id,1);
+  assert.equal(dot("T-1").hidden,true);
+});
+
+test("mesajın konuşma etiketi ve Yanıtla düğmesi tıklanan mesajı yerinde tutar", async () => {
+  const h = await harness(async () => ({ok:true,json:async()=>({ok:true})}));
+  const list = Array.from({length: 10}, (_, i) => ({id:i+1,thread:i % 2 ? "T-2" : "T-1",room:"r1",from:"other",type:"bilgi",
+    body:"m"+(i+1),created_at:"2026-10-25T00:00:00Z"}));
+  h.inspect.addMessages(list,h.session);
+  const messages = h.el("mesajlar"), rowOf = (id) => messages.children[id - 1];
+  for (const button of ["konusma", "yanitla"]) {
+    h.inspect.showFilter("");
+    messages.scrollTop = 500;
+    const before = rowOf(7).getBoundingClientRect().top;
+    const index = button === "konusma" ? 0 : 1;
+    rowOf(7).children.at(-1).children[index].listeners.get("click")();
+    assert.equal(h.el("filtre").textContent,"Konuşma: T-1");
+    assert.equal(rowOf(7).getBoundingClientRect().top,before,button + " moved the clicked message");
+  }
 });
