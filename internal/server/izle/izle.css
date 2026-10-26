@@ -451,6 +451,10 @@ h1, h2, h3, p { margin: 0; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
 
 #uyelik-dialog > p { color: var(--ikincil); line-height: 1.6; }
+#uyelik-form { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 10px; margin: 18px 0 4px; }
+#uyelik-form[hidden] { display: none; }
+#uyelik-form label { grid-column: 1 / -1; font-size: 12px; font-weight: 500; }
+#uyelik-form input { width: 100%; min-width: 0; font-size: 13px; }
 #uyelik-hesaplar { max-height: 50dvh; overflow-y: auto; }
 .uyelik-satir { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--cizgi); }
 .uyelik-satir span:nth-child(2) { flex: 1; overflow-wrap: anywhere; }
