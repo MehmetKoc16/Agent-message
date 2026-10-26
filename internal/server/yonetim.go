@@ -274,6 +274,10 @@ func (s *Server) handleYonetimChange(w http.ResponseWriter, r *http.Request, a s
 		writeErr(w, 403, "yoneticiye_dokunulamaz")
 		return
 	}
+	if errors.Is(err, store.ErrUnknownRoom) {
+		writeErr(w, 404, "oda_yok")
+		return
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, 404, "hesap_yok")
 		return

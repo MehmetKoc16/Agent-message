@@ -61,7 +61,7 @@ func New(cfg config.Server, st *store.Store, log *slog.Logger) *Server {
 		rate:            newRateLimiter(cfg.RatePerMin, cfg.RatePerDay),
 		announce:        newRateLimiter(cfg.AnnouncePerMin, cfg.AnnouncePerDay),
 		reads:           newRateLimiter(readPerMin, readPerDay),
-		conns:          newConnLimiter(cfg.MaxConnsPerAgent),
+		conns:           newConnLimiter(cfg.MaxConnsPerAgent),
 		unauth:          newUnauthLimiter(cfg.UnauthPerMin, cfg.UnauthGlobalPerMin),
 		authenticate:    st.Authenticate,
 		touched:         map[string]time.Time{},
