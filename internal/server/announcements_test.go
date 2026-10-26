@@ -9,7 +9,13 @@ import (
 )
 
 func TestBroadcastFeedOnlyAcceptsInformationAndKeepsOneThread(t *testing.T) {
-	e := newEnv(t, func(c *config.Server) { c.RatePerMin = 1000; c.RatePerDay = 1000 })
+	// ali/veli ajan hesabıdır; bu test duyuru kotasını değil T-0 biçimini sınar.
+	e := newEnv(t, func(c *config.Server) {
+		c.RatePerMin = 1000
+		c.RatePerDay = 1000
+		c.AnnouncePerMin = 1000
+		c.AnnouncePerDay = 1000
+	})
 	path := "/v1/rooms/r1/announcements"
 	for i := 0; i < 23; i++ {
 		who := "ali"

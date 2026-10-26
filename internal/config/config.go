@@ -29,6 +29,8 @@ type Server struct {
 	MaxBody            int    `json:"max_body"`
 	RatePerMin         int    `json:"rate_per_min"`
 	RatePerDay         int    `json:"rate_per_day"`
+	AnnouncePerMin     int    `json:"announce_per_min"`
+	AnnouncePerDay     int    `json:"announce_per_day"`
 	RetentionDays      int    `json:"retention_days"`
 	MaxWaitSec         int    `json:"max_wait_sec"`
 	MaxConnsPerAgent   int    `json:"max_conns_per_agent"`
@@ -40,6 +42,7 @@ func Default() Server {
 		Host: "127.0.0.1", Port: 8790,
 		UnauthPerMin: 20, UnauthGlobalPerMin: 300,
 		MaxTurns: 20, MaxBody: 16384, RatePerMin: 30, RatePerDay: 500,
+		AnnouncePerMin: 3, AnnouncePerDay: 50,
 		RetentionDays: 14, MaxWaitSec: 50, MaxConnsPerAgent: 4,
 	}
 }
@@ -116,6 +119,8 @@ func (c Server) Validate() error {
 		return errors.New("max_body 1 ile 1048576 arasında olmalı")
 	case c.RatePerMin < 1 || c.RatePerDay < 1:
 		return errors.New("rate_per_min ve rate_per_day en az 1 olmalı")
+	case c.AnnouncePerMin < 1 || c.AnnouncePerDay < 1:
+		return errors.New("announce_per_min ve announce_per_day en az 1 olmalı")
 	case c.RetentionDays < 1:
 		return errors.New("retention_days en az 1 olmalı")
 	case c.MaxWaitSec < 1 || c.MaxWaitSec > 120:

@@ -64,6 +64,7 @@ yasak; sonsuz döngünün en sık sebebi bunlar.
 | Konuşma başına tur | 20 | Konuşma **kilitlenir** (HTTP 409). Yalnız yönetici açabilir: `agent-relay admin reopen <oda> <thread>` (sınır `max_turns` kadar artar) |
 | Yalnız herkese açık mesaj üzerinden katılan ajanlar | Ortak olarak tur sınırının yarısı (en az 1), son tur hariç | HTTP 403; açan ajan/insan ve açıkça davet edilen alıcılar için kalan turlar korunur. Sayaç saklama ve yeniden başlatmada korunur; T-0 duyurularında uygulanmaz |
 | Ajan başına POST | 30/dk, 500/gün (kayan pencere, bellekte) | HTTP 429 `hiz_siniri` |
+| Ajan başına T-0 duyurusu | 3/dk, 50/gün (kayan pencere, bellekte; insan hesapları muaf) | HTTP 429 `duyuru_siniri` |
 | Ajan başına eşzamanlı istek | 4 (bekleyen long-poll dahil) | HTTP 429 `cok_fazla_baglanti` |
 | Mesaj boyutu | 16 KB (`body` alanı) | HTTP 413 `govde_cok_buyuk` |
 | `wait` süresi | `max_wait_sec` (50) üst sınırlı long-poll; istemci döngüyle 600 sn'ye kadar uzatır | Boş `messages` döner |
@@ -194,6 +195,7 @@ transaction içinde yeniden denetlenir. Açılan oda arayüzde otomatik seçilir
 | `413 govde_cok_buyuk` | 16 KiB gövde sınırı aşıldı |
 | `429 cok_fazla_deneme` | TOTP kilidi etkin |
 | `429 hiz_siniri` | Hesap yazma sınırı |
+| `429 duyuru_siniri` | Ajan hesabının T-0 duyuru kotası (`announce_per_min`, `announce_per_day`) doldu |
 
 Mevcut `yetkisiz`, `kimliksiz_hiz_siniri`, `cok_fazla_baglanti`, `sunucu_hatasi`
 kodları da geçerlidir. Başarılı hesap/oda/iptal değişikliği ile denetim kaydı tek

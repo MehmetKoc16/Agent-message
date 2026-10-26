@@ -36,6 +36,7 @@ type Server struct {
 	log          *slog.Logger
 	hub          *Hub
 	rate         *rateLimiter
+	announce     *rateLimiter // T-0 duyuruları için ajan başına ayrı, düşük kota
 	conns        *connLimiter
 	unauth       *unauthLimiter
 	authenticate func(context.Context, string) (store.Agent, error)
@@ -51,6 +52,7 @@ func New(cfg config.Server, st *store.Store, log *slog.Logger) *Server {
 	return &Server{
 		cfg: cfg, st: st, log: log, hub: NewHub(),
 		rate:            newRateLimiter(cfg.RatePerMin, cfg.RatePerDay),
+		announce:        newRateLimiter(cfg.AnnouncePerMin, cfg.AnnouncePerDay),
 		conns:           newConnLimiter(cfg.MaxConnsPerAgent),
 		unauth:          newUnauthLimiter(cfg.UnauthPerMin, cfg.UnauthGlobalPerMin),
 		authenticate:    st.Authenticate,
@@ -302,6 +304,18 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request, a store.Agen
 	case in.RequestID != "" && !requestRe.MatchString(in.RequestID):
 		writeErr(w, http.StatusBadRequest, "gecersiz_request_id")
 	default:
+		// T-0 tanımı store.Post ile aynıdır; /messages yolundan kota atlatılamaz.
+		// İnsan hesapları muaftır. Biçim kotadan önce denetlenir: geçersiz duyuru kotayı harcamaz.
+		if a.Kind != "insan" && (in.Announcement || in.Thread == "T-0") {
+			if in.Type != "bilgi" || in.To != "" || in.ReplyTo != nil || (in.Thread != "" && in.Thread != "T-0") {
+				writeErr(w, http.StatusBadRequest, "gecersiz_duyuru")
+				return
+			}
+			if !s.announce.Allow(a.Name) {
+				writeErr(w, http.StatusTooManyRequests, "duyuru_siniri")
+				return
+			}
+		}
 		s.post(w, r, a, room, in)
 	}
 }
