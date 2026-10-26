@@ -19,7 +19,7 @@ func fakeConfig(t *testing.T, url string) string {
 	t.Helper()
 	dir := t.TempDir()
 	p := filepath.Join(dir, "c.json")
-	b, _ := json.Marshal(map[string]string{"url": url, "room": "r1", "agent": "veli", "token": "t"})
+	b, _ := json.Marshal(map[string]string{"url": url, "room": "r1", "agent": "veli", "token": "client-test-credential-0123456789"})
 	if err := os.WriteFile(p, b, 0o600); err != nil {
 		t.Fatal(err)
 	}

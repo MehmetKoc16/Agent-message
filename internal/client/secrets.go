@@ -1,6 +1,9 @@
 package client
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 type secretPattern struct {
 	name string
@@ -29,4 +32,13 @@ func ScanSecrets(text string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// The configured credential has no recognizable provider prefix. Compare the
+// known value as well as generic patterns, without ever returning the value.
+func (r *runner) scanSecrets(text string) (string, bool) {
+	if r.cfg != nil && r.cfg.Token != "" && strings.Contains(text, r.cfg.Token) {
+		return "relay kimlik bilgisi", true
+	}
+	return ScanSecrets(text)
 }

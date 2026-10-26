@@ -218,6 +218,12 @@ func (e *engine) resumeDeliveries(ctx context.Context) error {
 }
 
 func (e *engine) deliver(ctx context.Context, m proto.Message, pending Outgoing, duration time.Duration) error {
+	// An earlier binary may have saved a reply under weaker scanning rules.
+	// Recheck durable deliveries before every resumed network send.
+	if name, found := e.d.Scan(pending.Body); found {
+		e.log(m, "hata", duration, fmt.Sprintf(" sır_deseni=%q gönderim=engellendi", name))
+		return errors.New("köprü: kayıtlı cevap sır denetimini geçemedi; gönderim durduruldu")
+	}
 	for attempt := 1; attempt <= 5; attempt++ {
 		err := e.d.Send(ctx, pending)
 		if err == nil {
