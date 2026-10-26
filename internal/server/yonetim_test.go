@@ -307,3 +307,22 @@ func TestYonetimGirdiVeHizSiniri(t *testing.T) {
 	yonetimWant(t, yonetimReq(e, "POST", "/hesaplar/ali/odalar", "mehmet", session, `{"oda":"r3"}`), 200, "")
 	yonetimWant(t, yonetimReq(e, "DELETE", "/hesaplar/ali/odalar/r3", "mehmet", session, ""), 429, "hiz_siniri")
 }
+
+// NEDEN: ikinci sekmede açılan yönetim oturumu ilk sekmeyi düşürmemeli; oturum sayısı
+// yine de sınırlı kalmalı ve süre dolunca hepsi geçersizleşmeli.
+func TestYonetimOturumlariSekmelerdeBirlikteGecerli(t *testing.T) {
+	e, now := yonetimEnv(t)
+	first := yonetimLogin(t, e, *now)
+	*now = now.Add(30 * time.Second)
+	second := yonetimLogin(t, e, *now)
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", first, ""), 200, "")
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", second, ""), 200, "")
+	for i := 0; i < maxYonetimSessions-1; i++ {
+		*now = now.Add(30 * time.Second)
+		yonetimLogin(t, e, *now)
+	}
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", first, ""), 401, "yonetim_oturumu_gerekli")
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", second, ""), 200, "")
+	*now = now.Add(11 * time.Minute)
+	yonetimWant(t, yonetimReq(e, "GET", "/hesaplar", "mehmet", second, ""), 401, "yonetim_oturumu_gerekli")
+}

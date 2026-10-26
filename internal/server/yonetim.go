@@ -21,6 +21,26 @@ type yonetimSession struct {
 	expires          time.Time
 }
 
+// Her sekme kendi oturumunu alır; yeni giriş eski sekmeyi düşürmez. En yeni
+// maxYonetimSessions oturum geçerli kalır.
+const maxYonetimSessions = 5
+
+// liveYonetimSessions süresi dolanları atar; çağıran yonetimMu'yu tutar.
+func (s *Server) liveYonetimSessions(name string) []yonetimSession {
+	live := []yonetimSession{}
+	for _, session := range s.yonetimSessions[name] {
+		if s.st.Now().Before(session.expires) {
+			live = append(live, session)
+		}
+	}
+	if len(live) == 0 {
+		delete(s.yonetimSessions, name)
+	} else {
+		s.yonetimSessions[name] = live
+	}
+	return live
+}
+
 func (s *Server) yonetimRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/yonetim/oturum", s.yonetim(s.handleYonetimLogin, true))
 	m.HandleFunc("GET /v1/yonetim/hesaplar", s.yonetim(s.handleYonetimList, false))
@@ -49,16 +69,17 @@ func (s *Server) yonetim(h func(http.ResponseWriter, *http.Request, store.Agent)
 				s.internal(w, "oturum denetimi", err)
 				return
 			}
-			s.yonetimMu.Lock()
-			session, ok := s.yonetimSessions[a.Name]
-			if !s.st.Now().Before(session.expires) {
-				delete(s.yonetimSessions, a.Name)
-				ok = false
-			}
-			s.yonetimMu.Unlock()
 			got := sha256.Sum256([]byte(r.Header.Get("X-Yonetim-Oturum")))
 			sh := sha256.Sum256([]byte(secret))
-			if !ok || len(r.Header.Values("X-Yonetim-Oturum")) != 1 || subtle.ConstantTimeCompare(got[:], session.hash[:]) != 1 || sh != session.secretHash {
+			ok := false
+			s.yonetimMu.Lock()
+			for _, session := range s.liveYonetimSessions(a.Name) {
+				if subtle.ConstantTimeCompare(got[:], session.hash[:]) == 1 && sh == session.secretHash {
+					ok = true
+				}
+			}
+			s.yonetimMu.Unlock()
+			if !ok || len(r.Header.Values("X-Yonetim-Oturum")) != 1 {
 				writeErr(w, 401, "yonetim_oturumu_gerekli")
 				return
 			}
@@ -127,7 +148,8 @@ func (s *Server) handleYonetimLogin(w http.ResponseWriter, r *http.Request, a st
 	if !s.audit(w, r, a, "oturum_acildi", a.Name, "") {
 		return
 	}
-	s.yonetimSessions[a.Name] = yonetimSession{sha256.Sum256([]byte(token)), sha256.Sum256([]byte(secret)), expires}
+	sessions := append(s.liveYonetimSessions(a.Name), yonetimSession{sha256.Sum256([]byte(token)), sha256.Sum256([]byte(secret)), expires})
+	s.yonetimSessions[a.Name] = sessions[max(0, len(sessions)-maxYonetimSessions):]
 	writeJSON(w, 200, map[string]string{"oturum": token, "bitis": expires.UTC().Format(time.RFC3339)})
 }
 func (s *Server) audit(w http.ResponseWriter, r *http.Request, a store.Agent, islem, hedef, ayrinti string) bool {

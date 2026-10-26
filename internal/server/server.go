@@ -51,7 +51,7 @@ type Server struct {
 	touchMu         sync.Mutex
 	touched         map[string]time.Time
 	yonetimMu       sync.Mutex
-	yonetimSessions map[string]yonetimSession
+	yonetimSessions map[string][]yonetimSession
 }
 
 // New sunucuyu kurar. Log hiçbir zaman gövde, token ya da Authorization içermez.
@@ -65,7 +65,7 @@ func New(cfg config.Server, st *store.Store, log *slog.Logger) *Server {
 		unauth:          newUnauthLimiter(cfg.UnauthPerMin, cfg.UnauthGlobalPerMin),
 		authenticate:    st.Authenticate,
 		touched:         map[string]time.Time{},
-		yonetimSessions: map[string]yonetimSession{},
+		yonetimSessions: map[string][]yonetimSession{},
 	}
 }
 
