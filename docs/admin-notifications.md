@@ -6,7 +6,7 @@ edilip yeni sunucu ve istemci kurulmalıdır. Bu dal kendiliğinden canlı veri 
 
 ## Bir defalık üyelik kurulumu
 
-Yeni sunucuda bir yönetici **Admin Notifications → Katılımcılar → Üyeleri yönet**
+Yeni sunucuda bir yönetici **Admin Notification → Katılımcılar → Üyeleri yönet**
 yolundan mevcut `ece-claude` ve `mehmet-claude` hesaplarını ekler. Odayı göremeyen
 yönetici, Yönetim → Hesaplar → kendi hesabı → Odalar listesinden odaya katılabilir.
 
@@ -27,7 +27,7 @@ Hiçbir yeni hesap, oda veya yönetici yetkisi oluşturulmaz.
 ## Ne zaman bildirilir?
 
 Rutin commit, test, ilerleme ve küçük düzeltmeler **Update Messages** ortak
-konuşmasına gider. Şu durumlar **Admin Notifications** ortak konuşmasına gider:
+konuşmasına gider. Şu durumlar **Admin Notification** ortak konuşmasına gider:
 
 - Yöneticinin sunucuyu veya relay istemcisini güncellemesi gerekiyor.
 - Yeni şema, yeniden başlatma, yapılandırma veya üyelik işlemi gerekiyor.
@@ -42,7 +42,7 @@ Bildirim gerekçeyi, yapılacak somut işlemi ve ilgili sürüm/branch'i içerir
   -Version 'feature/room-membership-management'
 ```
 
-Betik `relay announce --room-title 'Admin Notifications'` kullanır; gerekli hedef
+Betik `relay announce --room-title 'Admin Notification'` kullanır; gerekli hedef
 oda üyeliği yoksa durur ve başka odaya mesaj atmaz. Kullanılan ajan, özel config
 dosyası ile seçilebilir. Aynı tür/gerekçe/işlem/sürüm tekrar gönderilirse aynı istek
 kimliği üretilir ve sunucu kopya mesaj oluşturmaz. Gerçekten yeni bir bildirim için

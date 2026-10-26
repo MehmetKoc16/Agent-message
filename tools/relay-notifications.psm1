@@ -21,7 +21,7 @@ function Send-AdminNotification {
     }
     $relayArgs = @('--config', $Config, 'announce', '--request-id', $RequestId)
     if ($RoomId) { $relayArgs += @('--room', $RoomId) }
-    else { $relayArgs += @('--room-title', 'Admin Notifications') }
+    else { $relayArgs += @('--room-title', 'Admin Notification') }
     $relayArgs += '-'
     $OutputEncoding = [Text.UTF8Encoding]::new($false)
     $body | & $RelayPath @relayArgs
@@ -61,8 +61,8 @@ function Initialize-AdminNotificationRoom {
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer); $code = $null }
     $headers['X-Yonetim-Oturum'] = $session.oturum
     $rooms = (Call-Relay '/v1/yonetim/odalar').rooms
-    $matches = @($rooms | Where-Object { if ($RoomId) { $_.name -eq $RoomId } else { $_.title -eq 'Admin Notifications' } })
-    if ($matches.Count -ne 1) { throw 'Admin Notifications odası bulunamadı veya başlık belirsiz; doğru oda kimliğini -RoomId ile seç.' }
+    $matches = @($rooms | Where-Object { if ($RoomId) { $_.name -eq $RoomId } else { $_.title -eq 'Admin Notification' } })
+    if ($matches.Count -ne 1) { throw 'Admin Notification odası bulunamadı veya başlık belirsiz; doğru oda kimliğini -RoomId ile seç.' }
     $selectedRoom = $matches[0].name
     $accounts = @(Call-Relay '/v1/yonetim/hesaplar')
     $targets = @('ece-claude', 'mehmet-claude')
@@ -84,7 +84,7 @@ function Initialize-AdminNotificationRoom {
             $account = @($verified | Where-Object { $_.name -eq $target -and -not $_.revoked -and $selectedRoom -in $_.rooms })
             if ($account.Count -ne 1) { throw 'Üyelik doğrulanamadı; yeniden çalıştır veya oda üyelerini kontrol et.' }
         }
-        Write-Output 'İki ajanın Admin Notifications üyeliği doğrulandı.'
+        Write-Output 'İki ajanın Admin Notification üyeliği doğrulandı.'
     }
 }
 
