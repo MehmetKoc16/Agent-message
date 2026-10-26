@@ -121,10 +121,12 @@ func (s *Server) handleYonetimLogin(w http.ResponseWriter, r *http.Request, a st
 	if !yonetimBody(w, r, &in) {
 		return
 	}
-	s.yonetimMu.Lock()
-	defer s.yonetimMu.Unlock()
+	// Tekrar kullanım (step > last) ve deneme kilidi store.AttemptTOTP'de tek
+	// BEGIN IMMEDIATE işleminde çözülür; süreç kilidi bunun için gerekmez.
+	// yonetimMu yalnız oturum haritasına dokunurken tutulur: yavaş DB'deki bir
+	// giriş diğer /v1/yonetim/* oturum denetimlerini bekletmez.
 	now := s.st.Now()
-	secret, ok, locked, err := s.st.AttemptTOTP(r.Context(), a.Name, in.Kod, admin.MatchTOTP)
+	secret, ok, locked, err := s.attemptTOTP(r.Context(), a.Name, in.Kod, admin.MatchTOTP)
 	if err != nil {
 		s.internal(w, "TOTP denetimi", err)
 		return
@@ -148,8 +150,12 @@ func (s *Server) handleYonetimLogin(w http.ResponseWriter, r *http.Request, a st
 	if !s.audit(w, r, a, "oturum_acildi", a.Name, "") {
 		return
 	}
+	// Eşzamanlı girişler haritayı sırayla günceller; kırpma en fazla
+	// maxYonetimSessions oturum bırakır.
+	s.yonetimMu.Lock()
 	sessions := append(s.liveYonetimSessions(a.Name), yonetimSession{sha256.Sum256([]byte(token)), sha256.Sum256([]byte(secret)), expires})
 	s.yonetimSessions[a.Name] = sessions[max(0, len(sessions)-maxYonetimSessions):]
+	s.yonetimMu.Unlock()
 	writeJSON(w, 200, map[string]string{"oturum": token, "bitis": expires.UTC().Format(time.RFC3339)})
 }
 func (s *Server) audit(w http.ResponseWriter, r *http.Request, a store.Agent, islem, hedef, ayrinti string) bool {

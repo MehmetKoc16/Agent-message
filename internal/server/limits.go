@@ -1,9 +1,42 @@
 package server
 
 import (
+	"crypto/sha256"
+	"net/netip"
 	"sync"
 	"time"
 )
+
+// unauthKey kimliksiz sınırlayıcının sayaç anahtarıdır. IPv6 adresleri /64
+// önekine indirilir: tek abone /64'ün içinde adres değiştirerek kovayı
+// aşamaz. IPv4 ve IPv4-mapped IPv6 tam IPv4 adresidir; çözülemeyen değer
+// ("unknown") aynen kalır. clientIP'nin döndürdüğü değer (log vb.) değişmez.
+func unauthKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap()
+	if addr.Is4() {
+		return addr.String()
+	}
+	p, err := addr.WithZone("").Prefix(64)
+	if err != nil {
+		return ip
+	}
+	return p.String()
+}
+
+// isKnown token son bir saatte doğrulanmışsa true verir (recognize).
+func (l *unauthLimiter) isKnown(token string) bool {
+	if token == "" {
+		return false
+	}
+	h := sha256.Sum256([]byte(token))
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.known[h].After(l.now())
+}
 
 // rateLimiter ajan başına POST sayısını kayan pencerede (dakika ve gün) sınırlar.
 // Yalnız kabul edilen istekler sayılır; reddedilenler pencereyi uzatmaz.
