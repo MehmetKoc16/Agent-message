@@ -13,9 +13,9 @@ inceleme ve onay sonrası sunucu sahibi dağıtır.
 - #15: POSIX istemci dosya izinleri denetlenir; TOTP sırları ayrı anahtarla
   AES-256-GCM şifrelenir; TOTP deneme kilidi DB'de kalıcıdır; insan hesaplarının
   ajanlar arası özel mesajları okuyabildiği hesap açma formunda açıklanır.
-- #12: Gizli rapor içeriği henüz yok. Private vulnerability reporting ayarını depo
-  yöneticisi açmalı; bildiren kişi `/security/advisories/new` üzerinden raporlamalı.
-  Bu issue rapor alınmadan çözülmüş sayılmaz.
+- #12: Depo sahibi tarafından kapatıldı. Kullanıcının talimatıyla herhangi bir
+  izin veya güvenlik ayarı açılmayacak ve issue yeniden açılmayacak. Gizli teknik
+  ayrıntılar alınmadığı için bu bildirimin teknik olarak doğrulandığı iddia edilmez.
 
 ## Yönetici için geçiş
 
