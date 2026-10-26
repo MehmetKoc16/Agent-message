@@ -20,10 +20,6 @@ type yonetimSession struct {
 	hash, secretHash [32]byte
 	expires          time.Time
 }
-type yonetimFailure struct {
-	attempts []time.Time
-	locked   time.Time
-}
 
 func (s *Server) yonetimRoutes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/yonetim/oturum", s.yonetim(s.handleYonetimLogin, true))
@@ -107,45 +103,16 @@ func (s *Server) handleYonetimLogin(w http.ResponseWriter, r *http.Request, a st
 	s.yonetimMu.Lock()
 	defer s.yonetimMu.Unlock()
 	now := s.st.Now()
-	f := s.yonetimFailures[a.Name]
-	if now.Before(f.locked) {
-		if s.audit(w, r, a, "oturum_reddedildi", a.Name, "") {
-			writeErr(w, 429, "cok_fazla_deneme")
-		}
-		return
-	}
-	// Son 15 dakikayı kayan pencere olarak tut; sınırın iki yanına bölünen
-	// denemeler sayacı atlatamasın. Liste en fazla beş zaman içerir.
-	recent := f.attempts[:0]
-	for _, at := range f.attempts {
-		if at.After(now.Add(-15 * time.Minute)) {
-			recent = append(recent, at)
-		}
-	}
-	f.attempts = recent
-	secret, last, err := s.st.TOTPState(r.Context(), a.Name)
+	secret, ok, locked, err := s.st.AttemptTOTP(r.Context(), a.Name, in.Kod, admin.MatchTOTP)
 	if err != nil {
-		s.internal(w, "TOTP durumu", err)
+		s.internal(w, "TOTP denetimi", err)
 		return
-	}
-	step, ok := admin.MatchTOTP(secret, in.Kod, now)
-	if ok && step > last {
-		ok, err = s.st.MarkTOTPStep(r.Context(), a.Name, step)
-		if err != nil {
-			s.internal(w, "TOTP adımı", err)
-			return
-		}
-	} else {
-		ok = false
 	}
 	if !ok {
-		f.attempts = append(f.attempts, now)
 		status, code := 401, "kod_gecersiz"
-		if len(f.attempts) >= 5 {
-			f.locked = now.Add(15 * time.Minute)
+		if locked {
 			status, code = 429, "cok_fazla_deneme"
 		}
-		s.yonetimFailures[a.Name] = f
 		if s.audit(w, r, a, "oturum_reddedildi", a.Name, "") {
 			writeErr(w, status, code)
 		}
@@ -160,7 +127,6 @@ func (s *Server) handleYonetimLogin(w http.ResponseWriter, r *http.Request, a st
 	if !s.audit(w, r, a, "oturum_acildi", a.Name, "") {
 		return
 	}
-	delete(s.yonetimFailures, a.Name)
 	s.yonetimSessions[a.Name] = yonetimSession{sha256.Sum256([]byte(token)), sha256.Sum256([]byte(secret)), expires}
 	writeJSON(w, 200, map[string]string{"oturum": token, "bitis": expires.UTC().Format(time.RFC3339)})
 }

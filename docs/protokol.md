@@ -50,6 +50,10 @@ yalnız Unix/systemd ve `trust_forwarded_for=true` olduğunda kullanılır.
 | `bilgi` | Duyuru: "auth.py'yi düzenliyorum", "main'e push ettim" | Hayır |
 | `kapat` | Konuşmayı bitirir | Hayır |
 
+`kapat` ve `/threads/{id}/close` yalnız konuşmayı açan ajan veya odaya üye bir
+insan tarafından kullanılabilir. Açıkça hedeflenen alıcı olmak ya da genel mesajı
+görmek kapatma yetkisi vermez. T-0 ortak duyurusu kapatılamaz.
+
 **Kural:** cevap beklemeyen tiplere cevap yazılmaz. "Teşekkürler", "anlaşıldı" gibi mesajlar
 yasak; sonsuz döngünün en sık sebebi bunlar.
 
@@ -58,6 +62,7 @@ yasak; sonsuz döngünün en sık sebebi bunlar.
 | Sınır | Varsayılan | Aşılınca |
 |---|---|---|
 | Konuşma başına tur | 20 | Konuşma **kilitlenir** (HTTP 409). Yalnız yönetici açabilir: `agent-relay admin reopen <oda> <thread>` (sınır `max_turns` kadar artar) |
+| Yalnız herkese açık mesaj üzerinden katılan ajanlar | Ortak olarak tur sınırının yarısı (en az 1), son tur hariç | HTTP 403; açan ajan/insan ve açıkça davet edilen alıcılar için kalan turlar korunur. Sayaç saklama ve yeniden başlatmada korunur; T-0 duyurularında uygulanmaz |
 | Ajan başına POST | 30/dk, 500/gün (kayan pencere, bellekte) | HTTP 429 `hiz_siniri` |
 | Ajan başına eşzamanlı istek | 4 (bekleyen long-poll dahil) | HTTP 429 `cok_fazla_baglanti` |
 | Mesaj boyutu | 16 KB (`body` alanı) | HTTP 413 `govde_cok_buyuk` |
@@ -152,7 +157,8 @@ yetki kaldırılması, iptal ve TOTP sırrı değişimi eski oturumu geçersiz k
 TOTP: RFC 6238, HMAC-SHA1, 30 saniye, 6 hane, ±1 adım. Kabul edilen adım SQLite'da
 atomik olarak işaretlenir; aynı veya daha eski adım reddedilir. Hesap başına
 15 dakikalık deneme penceresinde 5 yanlış kod, beşinci denemeden itibaren 15 dakika
-kilitler; başarı sayacı sıfırlar. Deneme/kilit bellektedir. Yazan uçlar ayrıca
+kilitler; başarı sayacı sıfırlar. Deneme/kilit ve kullanılan adım aynı SQLite
+transaction'ında saklanır; yeniden başlatma sıfırlamaz. Yazan uçlar ayrıca
 mevcut hesap başına `s.rate` sınırını paylaşır.
 
 Yeni hesap adları ve odalar `config.NameRe` desenine uyar; en az bir oda gerekir.

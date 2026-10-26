@@ -49,6 +49,10 @@ func (s *Store) ChangeAccount(ctx context.Context, yapan, islem, ad, oda, secret
 		if kind != "insan" || revoked.Valid {
 			return ErrNotFound
 		}
+		secret, err = s.sealTOTP(ad, secret)
+		if err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, `UPDATE agents SET yonetici=1,totp_secret=?,totp_last_step=0 WHERE name=?`, secret, ad)
 	case "yonetici-al":
 		_, err = tx.ExecContext(ctx, `UPDATE agents SET yonetici=0,totp_secret=NULL,totp_last_step=0 WHERE name=?`, ad)
@@ -127,6 +131,10 @@ func affected(res sql.Result, err error) error {
 	return nil
 }
 func (s *Store) SetYonetici(ctx context.Context, ad, secret string) error {
+	secret, err := s.sealTOTP(ad, secret)
+	if err != nil {
+		return err
+	}
 	return affected(s.db.ExecContext(ctx, `UPDATE agents SET yonetici=1,totp_secret=?,totp_last_step=0 WHERE name=? AND kind='insan' AND revoked_at IS NULL`, secret, ad))
 }
 func (s *Store) ClearYonetici(ctx context.Context, ad string) error {
@@ -147,6 +155,10 @@ func (s *Store) TOTPState(ctx context.Context, ad string) (string, int64, error)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
+	if err != nil {
+		return "", step, err
+	}
+	secret, err = s.openTOTP(ad, secret)
 	return secret, step, err
 }
 func (s *Store) MarkTOTPStep(ctx context.Context, ad string, step int64) (bool, error) {

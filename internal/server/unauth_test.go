@@ -114,6 +114,27 @@ func Test_global_kimliksiz_sinir(t *testing.T) {
 	}
 }
 
+// A restart or expiry clears the recognition cache. Even a new account on the
+// attacker's IP must authenticate while both failure buckets are full.
+func TestColdTokenSurvivesSaturatedUnauthLimits(t *testing.T) {
+	e := newEnv(t, func(c *config.Server) { c.UnauthPerMin = 1; c.UnauthGlobalPerMin = 1 })
+	if got := dene(e.srv, "127.0.0.1:1", ""); got != 401 {
+		t.Fatal(got)
+	}
+	for _, ip := range []string{"127.0.0.1:2", "[::1]:3"} {
+		e.srv.unauth.known = make(map[[32]byte]time.Time)
+		if got := dene(e.srv, ip, e.tokens["ali"]); got != 200 {
+			t.Fatalf("cold valid token at %s: %d", ip, got)
+		}
+	}
+	if err := e.st.RevokeAgent(context.Background(), "veli"); err != nil {
+		t.Fatal(err)
+	}
+	if got := dene(e.srv, "127.0.0.1:2", e.tokens["veli"]); got != 429 {
+		t.Fatalf("revoked token bypassed limit: %d", got)
+	}
+}
+
 // NEDEN: paralel denemeler ve sahte IP'ler belleği sınırsız büyütmemeli.
 func Test_kimliksiz_harita_ve_rezervasyon_siniri(t *testing.T) {
 	l := newUnauthLimiter(1, maxUnauthIPs+1)

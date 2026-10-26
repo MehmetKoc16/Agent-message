@@ -349,7 +349,7 @@ func TestKapatKilitler(t *testing.T) {
 	e := newEnv(t, nil)
 	_, m := e.send("r1", "ali", map[string]any{"type": "soru", "to": "veli"})
 	th := m["thread"].(string)
-	if st, _ := e.send("r1", "veli", map[string]any{"type": "kapat", "thread": th}); st != 201 {
+	if st, _ := e.send("r1", "ali", map[string]any{"type": "kapat", "thread": th}); st != 201 {
 		t.Fatalf("kapat: %d", st)
 	}
 	_, info := e.call("GET", "/v1/rooms/r1/threads/"+th, "ali", nil)
@@ -361,7 +361,7 @@ func TestKapatKilitler(t *testing.T) {
 	}
 }
 
-// NEDEN: konuşmayı yalnız tarafları ya da bir insan kapatabilir; üçüncü ajan kapatamaz.
+// NEDEN: konuşmayı yalnız açan ajan ya da bir insan kapatabilir.
 func TestKapatmaYetkisi(t *testing.T) {
 	e := newEnv(t, nil)
 	_, m := e.send("r1", "ali", map[string]any{"to": "veli"})
@@ -373,8 +373,8 @@ func TestKapatmaYetkisi(t *testing.T) {
 	if st, _ := e.call("POST", "/v1/rooms/r1/threads/T-77/close", "ali", nil); st != 404 {
 		t.Fatalf("olmayan konuşma: %d", st)
 	}
-	if st, r := e.call("POST", path, "veli", nil); st != 200 || r["status"] != "kapali" {
-		t.Fatalf("hedef olan ajan: %d %v", st, r)
+	if st, r := e.call("POST", path, "veli", nil); st != 403 {
+		t.Fatalf("alıcı kapatamamalı: %d %v", st, r)
 	}
 	_, m2 := e.send("r1", "ali", map[string]any{})
 	if st, _ := e.call("POST", "/v1/rooms/r1/threads/"+m2["thread"].(string)+"/close", "mehmet", nil); st != 200 {
@@ -549,7 +549,9 @@ func TestEszamanliGonderimdeIdVeTurTutarli(t *testing.T) {
 	}
 	results := make(chan res, n)
 	start := make(chan struct{})
-	agents := []string{"ali", "veli", "can"}
+	// Trusted writers exercise the total turn limit; wildcard viewers have
+	// their own shared budget, covered by TestPublicViewersCannotCloseOrExhaustThread.
+	agents := []string{"ali", "mehmet", "ali"}
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
@@ -648,4 +650,3 @@ func TestGecersizUTF8Reddedilir(t *testing.T) {
 		t.Fatalf("geçerli UTF-8 201 almalı: %d %s", st, b)
 	}
 }
-

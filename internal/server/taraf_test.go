@@ -77,7 +77,7 @@ func TestYeniKonusmadaReplyTo400(t *testing.T) {
 }
 
 // NEDEN: taraf bilgisi mesajlardan değil thread_parties'ten gelir; saklama süresi mesajları
-// silince alıcı konuşmayı kapatma hakkını kaybetmemeli (üçüncü ajan yine kapatamamalı).
+// silince alıcı okuma/yazma hakkını korur; kapatma açan ajan veya insana aittir.
 func TestSaklamadanSonraAliciHalaTaraf(t *testing.T) {
 	e := newEnv(t, nil)
 	ctx := context.Background()
@@ -95,8 +95,14 @@ func TestSaklamadanSonraAliciHalaTaraf(t *testing.T) {
 	if st, _ := e.call("POST", path, "can", nil); st != 403 {
 		t.Fatalf("taraf olmayan: %d", st)
 	}
-	if st, _ := e.call("POST", path, "veli", nil); st != 200 {
-		t.Fatalf("alıcı hâlâ taraf olmalı: %d", st)
+	if st, _ := e.call("POST", path, "veli", nil); st != 403 {
+		t.Fatalf("alıcı kapatamamalı: %d", st)
+	}
+	if st, _ := e.send("r1", "veli", map[string]any{"thread": m.Thread}); st != 201 {
+		t.Fatalf("alıcı hâlâ yazabilmeli: %d", st)
+	}
+	if st, _ := e.call("POST", path, "ali", nil); st != 200 {
+		t.Fatalf("açan ajan kapatabilmeli: %d", st)
 	}
 }
 

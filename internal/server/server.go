@@ -44,7 +44,6 @@ type Server struct {
 	touched         map[string]time.Time
 	yonetimMu       sync.Mutex
 	yonetimSessions map[string]yonetimSession
-	yonetimFailures map[string]yonetimFailure
 }
 
 // New sunucuyu kurar. Log hiçbir zaman gövde, token ya da Authorization içermez.
@@ -57,7 +56,6 @@ func New(cfg config.Server, st *store.Store, log *slog.Logger) *Server {
 		authenticate:    st.Authenticate,
 		touched:         map[string]time.Time{},
 		yonetimSessions: map[string]yonetimSession{},
-		yonetimFailures: map[string]yonetimFailure{},
 	}
 }
 
@@ -150,6 +148,22 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, store.Agent))
 		token := bearer(r)
 		// Başarısız sayılar ve eşzamanlı rezervasyonlar DB'den önce denetlenir.
 		finish, ok := s.unauth.begin(s.clientIP(r), token)
+		var a store.Agent
+		var err error
+		preauthenticated := false
+		// Dolu başarısızlık kovası henüz tanınmayan geçerli token'ları
+		// dışlayamaz. Yalnız biçimi geçerli token için ucuz özet araması yap.
+		if !ok && authTokenRe.MatchString(token) {
+			a, err = s.authenticate(r.Context(), token)
+			if err != nil && !errors.Is(err, store.ErrUnauthorized) {
+				s.internal(w, "kimlik doğrulama", err)
+				return
+			}
+			if err == nil {
+				ok, preauthenticated = true, true
+				finish = func(bool) {}
+			}
+		}
 		if !ok {
 			writeErr(w, http.StatusTooManyRequests, "kimliksiz_hiz_siniri")
 			return
@@ -161,7 +175,9 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, store.Agent))
 			writeErr(w, http.StatusUnauthorized, "yetkisiz")
 			return
 		}
-		a, err := s.authenticate(r.Context(), token)
+		if !preauthenticated {
+			a, err = s.authenticate(r.Context(), token)
+		}
 		if errors.Is(err, store.ErrUnauthorized) {
 			failed = true
 			writeErr(w, http.StatusUnauthorized, "yetkisiz")

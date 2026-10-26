@@ -92,6 +92,7 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		}
 	}
 	threadID, turn, limit := in.Thread, 1, s.maxTurns
+	publicOnly := false
 	if threadID == "" {
 		if in.ReplyTo != nil { // yeni konuşmada yanıtlanacak mesaj olamaz
 			return Message{}, ErrBadReplyTo
@@ -111,16 +112,19 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		}
 	} else {
 		var status, createdBy string
-		var turns int
+		var turns, publicTurns int
 		err := tx.QueryRowContext(ctx,
-			`SELECT status, turns, turn_limit, created_by FROM threads WHERE room = ? AND id = ?`,
-			in.Room, threadID).Scan(&status, &turns, &limit, &createdBy)
+			`SELECT status, turns, turn_limit, created_by, public_turns FROM threads WHERE room = ? AND id = ?`,
+			in.Room, threadID).Scan(&status, &turns, &limit, &createdBy, &publicTurns)
 		if errors.Is(err, sql.ErrNoRows) {
 			return Message{}, ErrThreadNotFound
 		} else if err != nil {
 			return Message{}, err
 		}
 		if in.FromKind != "insan" && createdBy != in.From {
+			if in.Type == "kapat" {
+				return Message{}, ErrNotParty
+			}
 			var one int
 			err := tx.QueryRowContext(ctx,
 				`SELECT 1 FROM thread_parties WHERE room = ? AND thread = ? AND agent IN (?, ?)`,
@@ -130,12 +134,23 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 			} else if err != nil {
 				return Message{}, err
 			}
+			var explicit int
+			err = tx.QueryRowContext(ctx, `SELECT 1 FROM thread_parties WHERE room=? AND thread=? AND agent=?`, in.Room, threadID, in.From).Scan(&explicit)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return Message{}, err
+			}
+			publicOnly = errors.Is(err, sql.ErrNoRows)
 		}
 		if limit == 0 && (in.Type != "bilgi" || in.To != "" || in.ReplyTo != nil) {
 			return Message{}, ErrBadAnnouncement
 		}
 		if status != "acik" || (limit > 0 && turns >= limit) {
 			return Message{}, ErrThreadClosed
+		}
+		// Wildcard viewers share at most half the budget and cannot consume
+		// the final turn. The counter survives retention and process restarts.
+		if publicOnly && limit > 0 && (publicTurns >= max(1, limit/2) || turns+1 >= limit) {
+			return Message{}, ErrNotParty
 		}
 		if in.ReplyTo != nil {
 			// Yanıtlanan mesaj aynı konuşmada ve gönderenin görebildiği bir mesaj olmalı.
@@ -152,7 +167,7 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		}
 		turn = turns + 1
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE threads SET turns = ? WHERE room = ? AND id = ?`, turn, in.Room, threadID); err != nil {
+			`UPDATE threads SET turns = ?, public_turns = public_turns + ? WHERE room = ? AND id = ?`, turn, boolInt(publicOnly), in.Room, threadID); err != nil {
 			return Message{}, err
 		}
 	}
@@ -163,6 +178,11 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 		to = anyAgent
 	}
 	for _, ag := range []string{in.From, to} {
+		// A public reply does not invite its author or another account into
+		// the trusted participant set, otherwise the next reply bypasses quota.
+		if publicOnly && ag != anyAgent {
+			continue
+		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO thread_parties (room, thread, agent) VALUES (?,?,?)`,
 			in.Room, threadID, ag); err != nil {
@@ -327,19 +347,19 @@ func (s *Store) CloseThreadFor(ctx context.Context, room, id, agent string) erro
 		return ErrBadAnnouncement
 	}
 	if kind != "insan" && creator != agent {
-		var one int
-		err = tx.QueryRowContext(ctx, `SELECT 1 FROM thread_parties WHERE room=? AND thread=? AND agent IN (?,?)`, room, id, agent, anyAgent).Scan(&one)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotParty
-		}
-		if err != nil {
-			return err
-		}
+		return ErrNotParty
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE threads SET status='kapali' WHERE room=? AND id=?`, room, id); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 // CloseThread güvenilir yerel işlemler içindir; HTTP CloseThreadFor kullanır.

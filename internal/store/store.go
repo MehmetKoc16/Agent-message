@@ -11,6 +11,7 @@ package store
 
 import (
 	"context"
+	"crypto/cipher"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -19,7 +20,7 @@ import (
 	_ "modernc.org/sqlite" // sürücü adı: "sqlite"
 )
 
-const schemaVersion = 5
+const schemaVersion = 6
 
 // Hata değerleri; server paketi bunları HTTP koduna çevirir.
 var (
@@ -39,8 +40,9 @@ var (
 
 // Store veritabanı erişim katmanıdır.
 type Store struct {
-	db       *sql.DB
-	maxTurns int
+	db         *sql.DB
+	maxTurns   int
+	totpCipher cipher.AEAD
 	// Now testlerde saati değiştirmek içindir.
 	Now func() time.Time
 }
@@ -49,7 +51,7 @@ type Store struct {
 func Open(path string, maxTurns int) (*Store, error) {
 	dsn := path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)" +
 		"&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=cache_size(-2000)" +
-		"&_txlock=immediate"
+		"&_pragma=secure_delete(1)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("veritabanı açılamadı: %w", err)
@@ -59,6 +61,10 @@ func Open(path string, maxTurns int) (*Store, error) {
 	db.SetConnMaxLifetime(0)
 	s := &Store{db: db, maxTurns: maxTurns, Now: time.Now}
 	if err := s.migrate(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.initTOTP(path); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -152,6 +158,13 @@ func (s *Store) migrate() error {
 	}
 	if v < 5 {
 		stmts = append(stmts, `CREATE TABLE IF NOT EXISTS thread_reads (agent TEXT NOT NULL REFERENCES agents(name), room TEXT NOT NULL, thread TEXT NOT NULL, last_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(agent,room,thread))`)
+	}
+	if v < 6 {
+		stmts = append(stmts,
+			`ALTER TABLE threads ADD COLUMN public_turns INTEGER NOT NULL DEFAULT 0`,
+			`CREATE TABLE IF NOT EXISTS yonetim_failures (agent TEXT PRIMARY KEY REFERENCES agents(name), attempts TEXT NOT NULL, locked TEXT NOT NULL)`,
+			`DELETE FROM thread_parties AS p WHERE p.agent <> '*' AND EXISTS (SELECT 1 FROM thread_parties b WHERE b.room=p.room AND b.thread=p.thread AND b.agent='*') AND NOT EXISTS (SELECT 1 FROM threads t WHERE t.room=p.room AND t.id=p.thread AND t.created_by=p.agent) AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.room=p.room AND m.thread=p.thread AND m.to_agent=p.agent)`,
+		)
 	}
 	for _, q := range stmts {
 		if _, err := tx.Exec(q); err != nil {

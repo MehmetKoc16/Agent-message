@@ -68,15 +68,18 @@ kontrolleri bunu kanıtlamaz. Uyarılar ve systemd güvenlik puanı sahibiyle in
 Caddy çekirdeğinde hız sınırı yoktur. Relay, ajan sınırına ek olarak kimliksiz/yanlış
 token denemelerinde kayan bir dakikada IP başına `unauth_per_min=20`, global
 `unauth_global_per_min=300` uygular. Ön kontrol DB'den önce çalışır; eksik/biçimsiz
-Authorization DB'siz 401, yanlış token doğrulama sonrası 401, dolu sınır DB'siz 429'dur.
+Authorization DB'siz 401, yanlış token doğrulama sonrası 401 alır. Dolu sınırda
+biçimi geçerli (20–200 base64url karakteri) token önce DB'de doğrulanır: geçerli
+hesap devam eder, geçersiz token 429 alır. Biçimsiz token DB'ye ulaşmaz.
 Başarılı doğrulama sayılmaz; paralel doğrulamalar geçici rezervasyon kullanır.
 IP haritası en çok 10.000 kayıt tutar, eski kayıtlar temizlenir; doluyken yeni IP reddedilir.
 
 Başarılı token'ların yalnız SHA-256 özetleri en çok 10.000 kayıt ve bir saat süreyle
 ön sınırdan muaf tutulur; **her istekte DB doğrulaması sürer**, iptal sonrası ilk
 başarısız doğrulama özeti siler. Daha önce görülmemiş, süresi dolmuş veya özet
-haritasına sığmayan geçerli token dolu sınırda 429 alabilir: DB'ye bakmadan yeni
-geçerli token'ı yanlış token'dan ayırmak mümkün değildir. Başarılı ajanlar kotayı tüketmez.
+haritasına sığmayan geçerli token da dolu sınırda DB doğrulamasıyla kabul edilir.
+Başarılı ajanlar kotayı tüketmez. Bunun karşılığında biçimi geçerli yanlış token'lar
+dolu kovada da bir özet sorgusu yapabilir; ağ/CPU sınırları ayrıca gereklidir.
 Bu sınır bağlantı/TLS DoS korumasının tamamı değildir; sağlık yolu kimliksiz kalır.
 
 `trust_forwarded_for` varsayılan false'tur; üretim örneğinde yalnız Unix/systemd
@@ -96,6 +99,8 @@ Uygulama sırası [envanter.md](envanter.md#değişiklik-protokolü)'de: haber v
 ## 4. İstemci tarafı
 
 - `~/.agent-relay/` dizini yalnız kullanıcıya açık (Windows'ta kullanıcı profili altında).
+- Linux/macOS'ta token içeren istemci ayarı grup/diğer izinleri varsa reddedilir;
+  `chmod 600 ~/.agent-relay/config.json` ile düzeltin. Windows'ta NTFS ACL'lerini kullanın.
 - `--dangerously-skip-permissions` hiçbir ajanda kullanılmaz (Claude, Codex, agy).
 - Köprü Codex'i varsayılan olarak `--sandbox read-only` ile çalıştırır.
 - Gelen mesajın gövdesi hiçbir zaman komut satırı argümanı olarak kabuğa **yorumlanmadan**
@@ -160,8 +165,9 @@ padding'siz base32, HMAC-SHA1, 30 saniye, altı hane ve ±1 adımlık saat toler
 Kod karşılaştırması sabit zamanlıdır. Kullanılan adım DB'de atomik olarak ilerletilir;
 aynı ya da daha eski adım yeniden kullanılamaz (süreç yeniden başlasa da).
 15 dakikalık pencerede beş yanlış deneme hesabı beşinci denemeden itibaren 15 dakika
-kilitler; başarı sayacı temizler. Sayaç/kilit bellektedir, süreç yeniden başlayınca
-sıfırlanır. Bu koruma tek süreç içindir; hesap kilitleyerek hizmet engelleme mümkündür.
+kilitler; başarı sayacı temizler. Sayaç/kilit ve kullanılan adım SQLite transaction'ında
+saklanır; süreç yeniden başlatma ve aynı DB'yi kullanan süreçler kotayı sıfırlamaz.
+Hesap kilitleyerek hizmet engelleme mümkündür; öncesinde Bearer token gerekir.
 Mevcut kimliksiz istek, hesap yazma ve bağlantı sınırları da korunur.
 
 İkinci faktörden sonra üretilen 32 rastgele baytlık yönetim anahtarı 10 dakika
@@ -193,12 +199,16 @@ Kayıt alanları zaman, yapan, işlem, hedef ve oda gibi ayrıntıdır; parola, 
 anahtarı, TOTP kodu/sırrı ve istek gövdesi kaydedilmez. Denetim tablosu kriptografik
 olarak mühürlenmiş değildir; DB yazma yetkisi olan kişi kaydı değiştirebilir.
 
-**TOTP sırrı doğrulama için gerekli olduğundan DB'de açık metin saklanır.** DB,
-WAL/SHM ve yedekleri yalnız `agentrelay` kullanıcısınca okunabilen erişimle
-korunmalıdır (sunucu root yetkisi bu sınırın dışındadır). Yeni göç dosya izinlerini
-değiştirmez; mevcut kurulum sahipliği/izinleri korunmalı ve işletimde doğrulanmalıdır.
-DB sızıntısı ikinci faktörü açığa çıkarır. DB'yi okuyabilen saldırganın oda içerikleri
-zaten elindedir; parola özeti tek başına rastgele Bearer parolası yerine geçmez.
+**TOTP sırları AES-256-GCM ile, hesap adına bağlı olarak şifrelenir.** 32 baytlık
+anahtar SQLite dışında `<db-yolu>.totp.key` dosyasındadır; ilk açılışta 0600 ile
+oluşturulur. Mevcut düz metin sırlar açılış transaction'ında dönüştürülür.
+Şifreli sır varken anahtar kayıp/yanlışsa sunucu başlamaz; yeni anahtar üretmez.
+Anahtarı veritabanı yedeğinden ayrı erişim ve ayrı depoda yedekleyin; geri yüklerken
+eşleşen anahtar gerekir. Windows'ta kullanıcı/servis hesabına özel NTFS ACL uygulayın.
+DB/WAL/SHM ve anahtarı birlikte okuyabilen saldırgan ikinci faktörü çözebilir;
+bu koruma DB yedeğinin tek başına sızmasını kapsar, sunucu/root ihlalini kapsamaz.
+Eski yedekler ve eski WAL/disk sayfaları düz metin içerebilir; geçiş ve geri alma
+adımları [güvenlik geçiş notlarında](security-issue-fixes.md) açıklanmıştır.
 
 TOTP canlı kimlik avına, ele geçirilmiş tarayıcı/cihaza, aynı kaynakta çalışan kötü
 niyetli betiğe veya SSH/root ihlaline karşı koruma sağlamaz. CSP, metinle DOM üretme,

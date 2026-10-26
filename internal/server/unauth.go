@@ -4,12 +4,16 @@ import (
 	"crypto/sha256"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
 
 const maxUnauthIPs = 10000
+
+// setup accepts 20–200 base64url characters, including older issued tokens.
+var authTokenRe = regexp.MustCompile(`^[A-Za-z0-9_-]{20,200}$`)
 
 type unauthEntry struct {
 	hist    []time.Time
