@@ -33,6 +33,19 @@ const maxFetch = 100
 // bozuk ya da kötü niyetli bir istemcinin DB yazma yükünü tavanlar.
 const readPerMin, readPerDay = 240, 20000
 
+// GET/HEAD istekleri hesap başına ayrı kovadan sayılır. Long-poll ve arayüz
+// yoklamaları (sekme başına /v1/unread 10 sn'de bir) bu tavana yaklaşmaz;
+// sınır yalnız wait=0 ya da /v1/unread döngüsüyle tek DB bağlantısını
+// tıkayan hesabı durdurur.
+const getPerMin, getPerDay = 600, 100000
+
+// maxAuthChecks, henüz tanınmayan token'lar için aynı anda çalışabilecek DB
+// kimlik denetimi sayısıdır. Son bir saatte doğrulanmış token'lar bu tavana takılmaz.
+const maxAuthChecks = 32
+
+// errAuthBusy kimlik denetimi tavanı doluyken döner; başarısızlık sayılmaz.
+var errAuthBusy = errors.New("kimlik denetimi tavanı dolu")
+
 const readPattern = "POST /v1/rooms/{room}/threads/{thread}/read"
 
 // Server HTTP işleyicilerini ve sınırları bir arada tutar.
@@ -44,9 +57,12 @@ type Server struct {
 	rate         *rateLimiter
 	announce     *rateLimiter // T-0 duyuruları için ajan başına ayrı, düşük kota
 	reads        *rateLimiter // okundu imleci; mesaj gönderim kotasını harcamaz
+	gets         *rateLimiter // kimliği doğrulanmış GET/HEAD; POST kotalarından ayrı
 	conns        *connLimiter
 	unauth       *unauthLimiter
+	authSlots    chan struct{} // tanınmayan token'ların eşzamanlı DB kimlik denetimi
 	authenticate func(context.Context, string) (store.Agent, error)
+	attemptTOTP  func(context.Context, string, string, func(string, string, time.Time) (int64, bool)) (string, bool, bool, error)
 
 	touchMu         sync.Mutex
 	touched         map[string]time.Time
@@ -61,9 +77,12 @@ func New(cfg config.Server, st *store.Store, log *slog.Logger) *Server {
 		rate:            newRateLimiter(cfg.RatePerMin, cfg.RatePerDay),
 		announce:        newRateLimiter(cfg.AnnouncePerMin, cfg.AnnouncePerDay),
 		reads:           newRateLimiter(readPerMin, readPerDay),
+		gets:            newRateLimiter(getPerMin, getPerDay),
 		conns:           newConnLimiter(cfg.MaxConnsPerAgent),
 		unauth:          newUnauthLimiter(cfg.UnauthPerMin, cfg.UnauthGlobalPerMin),
+		authSlots:       make(chan struct{}, maxAuthChecks),
 		authenticate:    st.Authenticate,
+		attemptTOTP:     st.AttemptTOTP,
 		touched:         map[string]time.Time{},
 		yonetimSessions: map[string][]yonetimSession{},
 	}
@@ -161,15 +180,17 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, store.Agent))
 		info := infoFrom(r.Context())
 		token := bearer(r)
 		// Başarısız sayılar ve eşzamanlı rezervasyonlar DB'den önce denetlenir.
-		finish, ok := s.unauth.begin(s.clientIP(r), token)
+		// IPv6 istemcileri /64 önekiyle aynı kovaya düşer (unauthKey).
+		finish, ok := s.unauth.begin(unauthKey(s.clientIP(r)), token)
 		var a store.Agent
 		var err error
 		preauthenticated := false
 		// Dolu başarısızlık kovası henüz tanınmayan geçerli token'ları
-		// dışlayamaz. Yalnız biçimi geçerli token için ucuz özet araması yap.
+		// dışlayamaz. Yalnız biçimi geçerli token için ucuz özet araması yap;
+		// eşzamanlı sayısı checkToken'daki küresel tavanla sınırlıdır.
 		if !ok && authTokenRe.MatchString(token) {
-			a, err = s.authenticate(r.Context(), token)
-			if err != nil && !errors.Is(err, store.ErrUnauthorized) {
+			a, err = s.checkToken(r.Context(), token)
+			if err != nil && !errors.Is(err, store.ErrUnauthorized) && !errors.Is(err, errAuthBusy) {
 				s.internal(w, "kimlik doğrulama", err)
 				return
 			}
@@ -190,9 +211,13 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, store.Agent))
 			return
 		}
 		if !preauthenticated {
-			a, err = s.authenticate(r.Context(), token)
+			a, err = s.checkToken(r.Context(), token)
 		}
-		if errors.Is(err, store.ErrUnauthorized) {
+		if errors.Is(err, errAuthBusy) {
+			// Tavan doluyken token hiç denetlenmedi; başarısızlık sayılmaz.
+			writeErr(w, http.StatusTooManyRequests, "kimliksiz_hiz_siniri")
+			return
+		} else if errors.Is(err, store.ErrUnauthorized) {
 			failed = true
 			writeErr(w, http.StatusUnauthorized, "yetkisiz")
 			return
@@ -204,6 +229,11 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, store.Agent))
 		// Kimlik doğrulandı: rezervasyonu uzun isteğin sonuna kadar tutma.
 		finish(false)
 		info.agent = a.Name
+		// Okuma döngüsü tek DB bağlantısını tıkamasın; POST kotaları ayrıdır.
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && !s.gets.Allow(a.Name) {
+			writeErr(w, http.StatusTooManyRequests, "hiz_siniri")
+			return
+		}
 		// Yer ayırma, DB'ye başka sorgu atmadan önce yapılır (tek bağlantıya gereksiz yük binmesin).
 		release, ok := s.conns.Acquire(a.Name)
 		if !ok {
@@ -213,6 +243,21 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, store.Agent))
 		defer release()
 		h(w, r, a)
 	}
+}
+
+// checkToken token'ı DB'de doğrular. Son bir saatte tanınmamış token'lar için
+// yer authSlots'tan yalnız DB çağrısı süresince tutulur; tavan doluysa
+// beklemeden errAuthBusy döner. Tanınan token'lar tavana takılmaz.
+func (s *Server) checkToken(ctx context.Context, token string) (store.Agent, error) {
+	if !s.unauth.isKnown(token) {
+		select {
+		case s.authSlots <- struct{}{}:
+			defer func() { <-s.authSlots }()
+		default:
+			return store.Agent{}, errAuthBusy
+		}
+	}
+	return s.authenticate(ctx, token)
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, a store.Agent) {
