@@ -81,6 +81,14 @@ func (o *Options) prepare() error {
 	if st, err := os.Stat(o.Exe); err != nil || !st.Mode().IsRegular() {
 		return errors.New("çalıştırıcı dosyası bulunamadı; --exe yolunu kontrol edin")
 	}
+	// cmd.exe, toplu iş dosyasının argümanlarını yeniden ayrıştırır: -p ile verilen
+	// güvenilmeyen mesaj metni komut olarak çalışabilir. Codex istemi stdin'den alır.
+	if o.Runner == "agy" {
+		switch strings.ToLower(filepath.Ext(o.Exe)) {
+		case ".bat", ".cmd":
+			return errors.New("agy için .cmd/.bat çalıştırıcı kullanılamaz; agy.exe yolunu verin")
+		}
+	}
 	if o.Workdir == "" {
 		o.Workdir = "."
 	}

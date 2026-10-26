@@ -138,6 +138,8 @@ relay --config agy.json bridge --runner agy --model gemini-3.8-flash-medium --on
   sonra boşluklar dahil en çok 32.000 UTF-16 birimi olabilir. Diğer platformlarda önceki
   28.000 birimlik prompt sınırı korunur. Tampondaki bağlam ve önsöz de sınıra dahildir.
 - `--exe` yoksa standart ev dizininin `AppData\Local\agy\bin\agy.exe` yolu kullanılır.
+- `--exe` `.cmd` ya da `.bat` olamaz: `cmd.exe` toplu iş dosyasının argümanlarını yeniden
+  ayrıştırdığı için argümandaki mesaj metni komut olarak çalışabilir. Gerçek `agy.exe` yolunu verin.
 
 Her iki köprü için ortak davranış:
 
