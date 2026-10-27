@@ -583,3 +583,31 @@ test("son mesaj T-0 duyurusuysa yazılan mesaj yeni konuşma açar; duyuruda Yan
   h.inspect.showFilter("T-1");
   assert.equal(h.el("baglam").textContent, "T-1 konuşmasına yazıyorsun");
 });
+
+test("bir odadan gelen 403 oturumu kapatmaz; oda listesi yenilenir, aynı oda yeniden reddedilirse çıkış yapılır", async (t) => {
+  let rooms = [{name: "r2", title: "İki"}];
+  const calls = [];
+  const h = await harness(async (path) => {
+    calls.push(path);
+    if (path === "/v1/rooms") return {ok: true, status: 200, json: async () => ({rooms})};
+    if (path.startsWith("/v1/rooms/r1/")) return {ok: false, status: 403, json: async () => ({error: "yasak"})};
+    if (path === "/v1/rooms/r2/log?tail=1") return {ok: true, status: 200, json: async () => ({messages: [], has_more: false})};
+    return new Promise(() => {});
+  });
+  t.after(() => h.inspect.stop());
+  h.session.rooms = [{name: "r1", title: "Bir"}, ...rooms];
+  h.el("oda").value = "r1"; h.el("oda").listeners.get("change")();
+  for (let i = 0; i < 5; i++) await new Promise(setImmediate);
+  assert.equal(h.el("izleme").hidden, false, "403 logged the session out");
+  assert.equal(h.session.room, "r2");
+  assert.equal(h.el("gonderim-durum").textContent, "Bir odasına erişimin kalmadı; oda listesi yenilendi.");
+  assert.ok(calls.includes("/v1/rooms"));
+
+  // Liste reddedilen odayı yine verirse yeniden yükleme döngüsü yerine çıkış yapılır.
+  rooms = [{name: "r1", title: "Bir"}];
+  h.el("oda").value = "r1"; h.el("oda").listeners.get("change")();
+  for (let i = 0; i < 10; i++) await new Promise(setImmediate);
+  assert.equal(h.el("izleme").hidden, true);
+  assert.equal(h.el("durum").textContent, "Bu odaya erişimin yok.");
+  assert.ok(calls.filter((p) => p === "/v1/rooms").length <= 3, "room list reloaded in a loop");
+});

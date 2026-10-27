@@ -303,13 +303,27 @@
     return {response, data};
   }
   function roomPath(session) { return "/v1/rooms/" + encodeURIComponent(session.room); }
+  // Bir odadan çıkarılmak oturumu kapatmaz; yalnız 401 çıkış yaptırır. Oda listesi
+  // yenilenir. Liste aynı odayı yeniden açtırırsa döngüye girmeden çıkış yapılır.
+  function roomForbidden(session) {
+    const room = session.room;
+    if (active !== session || session.roomsReloading) return;
+    if (session.forbiddenRoom === room) { logout("Bu odaya erişimin yok."); return; }
+    const title = session.rooms?.find((r) => r.name === room)?.title || room;
+    session.roomsReloading = true; session.forbiddenRoom = room; session.roomController?.abort();
+    reloadRooms(session).then(() => {
+      if (active === session && session.room) el("gonderim-durum").textContent = title + " odasına erişimin kalmadı; oda listesi yenilendi.";
+    }).catch(() => {
+      if (active === session) status.textContent = title + " odasına erişimin kalmadı; oda listesi yenilenemedi.";
+    }).finally(() => { session.roomsReloading = false; });
+  }
   async function request(session, suffix, signal) {
     let backoff = 2;
     while (!signal.aborted) {
       try {
         const {response, data} = await api(session, roomPath(session) + suffix, signal);
         if (response.status === 401) { logout("Ad ya da parola hatalı."); throw new Error("durdu"); }
-        if (response.status === 403) { logout("Bu odaya erişimin yok."); throw new Error("durdu"); }
+        if (response.status === 403) { roomForbidden(session); throw new Error("durdu"); }
         if (response.status === 429) {
           status.classList.remove("canli");
           status.textContent = "İstek sınırı: 30 saniye bekleniyor.";
@@ -330,6 +344,7 @@
     const history = session.history;
     const initial = await request(session, "/log?tail=1", signal);
     if (signal.aborted) return;
+    session.forbiddenRoom = "";
     if (!history.scope) history.hasMore = initial.has_more;
     addMessages(initial.messages, session);
     let after = Math.max(0, ...initial.messages.map((m) => m.id));
@@ -540,6 +555,7 @@
   el("oda").addEventListener("change", () => { if (active) openRoom(active, el("oda").value); });
   async function reloadRooms(session, selected = "", preserveDraft = false) {
     const {response, data} = await api(session, "/v1/rooms", session.controller.signal);
+    if (response.status === 401) { logout("Ad ya da parola hatalı."); throw new Error("durdu"); }
     if (!response.ok || !Array.isArray(data.rooms)) throw new Error("Odalar yüklenemedi.");
     if (active !== session) throw new Error("Oturum değişti.");
     session.rooms = data.rooms;
