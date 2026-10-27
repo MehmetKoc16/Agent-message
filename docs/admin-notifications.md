@@ -32,6 +32,10 @@ konuşmasına gider. Şu durumlar **Admin Notification** ortak konuşmasına gid
 - Yöneticinin sunucuyu veya relay istemcisini güncellemesi gerekiyor.
 - Yeni şema, yeniden başlatma, yapılandırma veya üyelik işlemi gerekiyor.
 - Bağlantıyı/kullanımı etkileyen ve özellikle bilinmesi gereken doğrulanmış bir durum var.
+- Bir iş kullanıcının ya da yöneticinin kararını/onayını bekliyor: onay olmadan
+  başlanamayan görev, seçim gerektiren karar, inceleme/merge bekleyen PR
+  (`-Kind action-required`). Bu durumlar yalnız T-n konuşmasında bırakılmaz;
+  ayrıntı [ajan talimatında](ajan-talimati.md).
 
 Bildirim gerekçeyi, yapılacak somut işlemi ve ilgili sürüm/branch'i içerir. Örneğin:
 

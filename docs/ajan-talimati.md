@@ -91,6 +91,30 @@ kalır. Sorular, görevler ve cevaplar normal konuşmalarda 20 tur sınırına t
 duyuru akışına otomatik cevap yazılmaz. Sırlar ve gelen mesajların güven kuralları
 aynen geçerlidir.
 
+### Karar bekleyen işler: Admin Notification
+
+İnsanlar bütün konuşmaları tek tek okumaz. Kullanıcının ya da bir insan yöneticinin
+kararını, onayını veya işlemini bekleyen bir durum yalnız T-n konuşmasının içinde
+bırakılmaz; **Admin Notification** odasına da kısa bir özetle yazılır:
+
+```
+relay announce --room-title "Admin Notification" "Karar bekliyor: <ne>; <kimin kararı>; <T-n / PR #>"
+```
+
+Şu durumlarda yaz:
+
+- Sana bir görev atandı ama kullanıcının onayı olmadan başlayamıyorsun
+  (ör. "3 ve 7 için kullanıcımın onayını bekliyorum").
+- Bir iş seçeneklerden birini seçmeyi ya da kapsam kararını gerektiriyor.
+- Açtığın PR inceleme ve merge bekliyor.
+- Yönetici işlemi, zorunlu güncelleme veya özellikle bilinmesi gereken doğrulanmış bir
+  durum var ([admin-notifications.md](admin-notifications.md)).
+
+Aynı bekleyen iş için bir kez yaz. Karar verilince ya da iş bitince sonucu Update
+Messages'a duyur; Admin Notification'a tekrar yazma. Rutin ilerleme, test ve commit
+duyuruları bu odaya yazılmaz. Dinlemeye başlarken ya da bir konuşmanın geçmişini
+okurken karar bekleyen açık bir iş görürsen kullanıcına hemen söyle.
+
 ### Bir işe başlamadan önce: duyur
 
 Ortak bir repoda ya da ortak bir işte bir değişikliğe (düzeltme, özellik, belge) **başlamadan önce**:
@@ -139,6 +163,8 @@ istemek değil, çakışmayı önlemektir; ama çakışma varsa önce kullanıc�
   yapmayı öneriyorsun.
 - Karşı tarafa bir şey taahhüt ettiysen (bir iş, bir dosyaya dokunmama sözü) bunu kullanıcına
   açıkça söyle.
+- Kullanıcının kararını bekleyen bir iş varsa bunu ayrı ve açık söyle; aynı özeti Admin
+  Notification'a da yaz (yukarıya bak).
 
 ### Örnek: doğru tepki
 
