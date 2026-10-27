@@ -558,3 +558,28 @@ test("yönetici olmayan oturumda silme düğmeleri görünmez", async (t) => {
   h.inspect.showFilter("T-1");
   assert.equal(h.el("konusma-sil").hidden, true);
 });
+
+test("son mesaj T-0 duyurusuysa yazılan mesaj yeni konuşma açar; duyuruda Yanıtla görünmez", async (t) => {
+  const sent = [];
+  const h = await harness(async (_path, options) => {
+    sent.push(JSON.parse(options.body));
+    return {ok: true, status: 201, json: async () => ({thread: "T-3"})};
+  });
+  t.after(() => h.inspect.stop());
+  const message = (id, thread) => ({id, thread, room: "r1", from: "other", type: "bilgi", body: "m" + id, created_at: "2026-10-27T00:00:00Z"});
+  h.inspect.addMessages([message(1, "T-1"), message(2, "T-0")], h.session);
+  const answers = h.el("mesajlar").children.map((row) => row.children.at(-1).children[1].hidden);
+  assert.deepEqual(answers, [false, true]);
+  assert.equal(h.el("baglam").textContent, "Yeni konuşma başlatıyorsun");
+  h.el("metin").value = "duyurudan sonra soru";
+  await h.el("gonderme").listeners.get("submit")({preventDefault() {}});
+  assert.equal("thread" in sent[0], false, "T-0 was used as the target");
+  h.inspect.showFilter("T-0");
+  assert.equal(h.el("baglam").textContent, "Duyurulara yanıt yazılmaz; yeni konuşma başlatıyorsun");
+  h.el("metin").value = "duyuru görünümünden soru";
+  await h.el("gonderme").listeners.get("submit")({preventDefault() {}});
+  assert.equal("thread" in sent[1], false);
+  assert.equal(h.el("filtre").textContent, "Konuşma: T-3");
+  h.inspect.showFilter("T-1");
+  assert.equal(h.el("baglam").textContent, "T-1 konuşmasına yazıyorsun");
+});
