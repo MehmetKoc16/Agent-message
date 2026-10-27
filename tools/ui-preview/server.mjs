@@ -99,9 +99,9 @@ export function createPreviewServer() {
         for (const m of messages.filter((m) => members.get(m.room)?.includes("demo"))) {
           const key = m.room + "/" + m.thread;
           let s = summaries.get(key);
-          if (!s) { s = {room:m.room,thread:m.thread,title:m.body.slice(0,180),total:0,last_id:0,last_incoming_id:0,read_id:readMarks.get(key)||0}; summaries.set(key,s); }
+          if (!s) { s = {room:m.room,thread:m.thread,title:m.body.slice(0,180),total:0,last_id:0,last_incoming_id:0,read_id:readMarks.get(key)||0,unread:0}; summaries.set(key,s); }
           s.total++; s.last_id = Math.max(s.last_id,m.id);
-          if (m.from !== "demo") s.last_incoming_id = Math.max(s.last_incoming_id,m.id);
+          if (m.from !== "demo") { s.last_incoming_id = Math.max(s.last_incoming_id,m.id); if (m.id > s.read_id) s.unread++; }
         }
         send(200,{threads:[...summaries.values()].sort((a,b)=>b.last_id-a.last_id)}); return;
       }
