@@ -152,6 +152,8 @@ sınırlamaz; yönetici tüm hesapları yönetir. Yetki yalnız SSH'den verilir/
 | DELETE | `/v1/yonetim/hesaplar/{ad}/odalar/{oda}` | `200 {"ok":true}` |
 | POST | `/v1/yonetim/hesaplar/{ad}/iptal` | `200 {"ok":true}` |
 | GET | `/v1/yonetim/kayit?son=100` | `200 [{"id":1,"zaman":"…","yapan":"…","islem":"…","hedef":"…","ayrinti":"…"}]` |
+| DELETE | `/v1/yonetim/odalar/{oda}/mesajlar/{id}` | `200 {"ok":true,"thread":"T-n"}` |
+| DELETE | `/v1/yonetim/odalar/{oda}/konusmalar/{T-n}` | `200 {"ok":true,"silinen":3}` |
 
 Oturum açma dışındaki uçlarda **hem** `Authorization: Bearer …` **hem**
 `X-Yonetim-Oturum: …` zorunludur. Oturum 32 rastgele bayttan base64url üretilir,
@@ -172,6 +174,15 @@ Token yalnız oluşturma cevabında bir kez gösterilir; listeler token/özet/s�
 Mevcut hesap üyeliği değiştirme uçlarında yönetici hesabına (çağıranın kendisi dahil) oda ekleme/çıkarma ve iptal yasaktır.
 Üyelik ekleme/çıkarma idempotenttir; iptal hesaba oda eklenemez.
 POST JSON gövdeleri 16 KiB ile sınırlıdır, çözümleme öncesi UTF-8 denetlenir.
+
+Mesaj silme kalıcıdır ve herkes için geçerlidir: tek mesaj ya da bir konuşmanın bütün
+mesajları silinir. Konuşma satırı saklama süresindeki gibi kalır; `T-n` ve mesaj
+numaraları yeniden kullanılmaz, tur sayacı ve taraflar korunur, açık konuşma yeni mesaj
+alabilir. Yetki, silme ve denetim kaydı tek transaction'dadır; kayıt `mesaj_silindi`
+(`#id · T-n`) ya da `konusma_silindi` (`T-n · sayı mesaj`) olarak düşer, mesaj gövdesi
+kayda yazılmaz. Olmayan oda `404 oda_yok`, odada olmayan mesaj ya da boş konuşma
+`404 mesaj_yok` döner. Ajanların daha önce aldığı mesajlar ve açık olan diğer tarayıcı
+sekmelerindeki satırlar silinmez; sekmeler yenilenince güncel görünür.
 
 **Yeni oda:** ODALAR başlığındaki + yalnız insan yöneticide görünür. Mevcut TOTP
 oturumu yoksa önce kod istenir. Başlık, baştaki/sondaki boşluklar temizlendikten sonra

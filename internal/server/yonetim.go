@@ -51,6 +51,8 @@ func (s *Server) yonetimRoutes(m *http.ServeMux) {
 	m.HandleFunc("DELETE /v1/yonetim/hesaplar/{ad}/odalar/{oda}", s.yonetim(s.handleYonetimChange, false))
 	m.HandleFunc("POST /v1/yonetim/hesaplar/{ad}/iptal", s.yonetim(s.handleYonetimChange, false))
 	m.HandleFunc("GET /v1/yonetim/kayit", s.yonetim(s.handleYonetimKayit, false))
+	m.HandleFunc("DELETE /v1/yonetim/odalar/{oda}/mesajlar/{id}", s.yonetim(s.handleDeleteMessage, false))
+	m.HandleFunc("DELETE /v1/yonetim/odalar/{oda}/konusmalar/{konusma}", s.yonetim(s.handleDeleteThread, false))
 }
 func (s *Server) yonetim(h func(http.ResponseWriter, *http.Request, store.Agent), login bool) http.HandlerFunc {
 	return s.authed(func(w http.ResponseWriter, r *http.Request, a store.Agent) {

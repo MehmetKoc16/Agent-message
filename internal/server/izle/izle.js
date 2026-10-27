@@ -109,6 +109,7 @@
     status.classList.remove("canli");
     clearYonetim(); el("yonetim").hidden = true; el("yonetim-ac").hidden = true;
     el("oda-dialog").close(); el("uyelik-dialog").close(); el("uyeleri-yonet").hidden = true; el("oda-ekle").hidden = true;
+    el("silme-dialog").close(); el("konusma-sil").hidden = true;
     if (active) {
       active.controller.abort();
       if (active.roomController) active.roomController.abort();
@@ -165,6 +166,7 @@
     filter = thread; targetExplicit = false; clearReply();
     el("filtre").textContent = thread ? "Konuşma: " + thread : "Tüm konuşmalar";
     el("kapat").hidden = !thread || thread === "T-0";
+    el("konusma-sil").hidden = !thread || !active?.yonetici;
     for (const row of rows) row.element.hidden = !!thread && row.thread !== thread;
     refreshContext();
     if (view.classList.contains("menu-acik")) { menu(false); el("menu-ac").focus(); }
@@ -244,6 +246,12 @@
         el("yanit").hidden = false; text.focus();
       });
       const actions = node("div", undefined, "mesaj-islemler"); actions.append(thread, answer);
+      if (session.yonetici) {
+        const remove = node("button", "Sil", "mesaj-sil"); remove.type = "button";
+        remove.setAttribute("aria-label", "#" + m.id + " mesajını sil");
+        remove.addEventListener("click", () => openDeletion({id: m.id, thread: m.thread}, remove));
+        actions.append(remove);
+      }
       row.append(avatar, meta, node("div", m.body, "govde"), actions);
       row.hidden = !!filter && filter !== m.thread;
       visibleAdded = visibleAdded || !row.hidden;
@@ -602,6 +610,8 @@
     govde_cok_buyuk: "İstek çok büyük.", hiz_siniri: "İstek sınırına ulaşıldı; biraz bekle.",
     cok_fazla_baglanti: "Çok fazla eşzamanlı bağlantı; yeniden dene.",
     kimliksiz_hiz_siniri: "Giriş sınırına ulaşıldı; biraz bekle.", yetkisiz: "Parola geçersiz veya hesap iptal edilmiş.",
+    mesaj_yok: "Mesaj bulunamadı; başka biri silmiş olabilir.", gecersiz_mesaj: "Mesaj numarası geçersiz.",
+    gecersiz_thread: "Konuşma numarası geçersiz.",
     sunucu_hatasi: "Sunucu işlemi tamamlayamadı."
   };
   async function managementAPI(path, method = "GET", body) {
@@ -633,6 +643,7 @@
       clearYonetim();
       if (el("oda-dialog").open) showRoomVerification();
       if (el("uyelik-dialog").open) showMembershipVerification();
+      if (el("silme-dialog").open) showDeletionVerification();
       el("yonetim-durum").textContent = managementErrors.yonetim_oturumu_gerekli;
     }, Math.max(0, managementExpiry - Date.now()));
   }
@@ -764,6 +775,78 @@
   el("uyelik-kapat").addEventListener("click", () => { if (!membershipBusy) el("uyelik-dialog").close(); });
   el("uyelik-dialog").addEventListener("cancel", (event) => { if (membershipBusy) event.preventDefault(); });
   el("uyelik-dialog").addEventListener("close", () => { membershipRoom = ""; showMembershipVerification(); });
+  // Silme kalıcıdır; açık yönetim oturumu yoksa aynı pencerede kod istenir.
+  let deletion = null, deletionBusy = false;
+  function showDeletionVerification() {
+    const verified = !!managementSession && Date.now() < managementExpiry;
+    el("silme-dogrulama").hidden = verified; el("silme-kod").disabled = verified; el("silme-kod").required = !verified;
+  }
+  function openDeletion(item, opener) {
+    const session = active;
+    if (!session?.yonetici || !session.room || deletionBusy) return;
+    const whole = item.id === undefined;
+    deletion = {...item, room: session.room, session, opener};
+    el("silme-baslik").textContent = whole ? item.thread + " konuşmasını sil" : "#" + item.id + " mesajını sil";
+    el("silme-aciklama").textContent = (whole ? "Bu konuşmadaki bütün mesajlar herkes için kalıcı olarak silinir; konuşma numarası yeniden kullanılmaz." :
+      "Bu mesaj herkes için kalıcı olarak silinir.") + " Ajanların daha önce aldığı kopyalar silinmez.";
+    el("silme-onay-alan").hidden = !whole; el("silme-onay-girdi").disabled = !whole; el("silme-onay-girdi").required = whole;
+    el("silme-onay-etiket").textContent = whole ? "Onaylamak için " + item.thread + " yaz" : "";
+    el("silme-onay-girdi").value = ""; el("silme-kod").value = ""; el("silme-hata").textContent = "";
+    showDeletionVerification(); el("silme-dialog").showModal();
+    (!el("silme-dogrulama").hidden ? el("silme-kod") : whole ? el("silme-onay-girdi") : el("silme-vazgec")).focus();
+  }
+  // Silinen satırlar yalnız bu sekmeden kalkar; diğer izleyiciler yenileyince görür.
+  function removeDeleted(item) {
+    const session = item.session;
+    if (active !== session || session.room !== item.room) return;
+    const gone = (row) => item.id === undefined ? row.thread === item.thread : row.message.id === item.id;
+    rows = rows.filter((row) => {
+      if (!gone(row)) return true;
+      seenObserver?.unobserve(row.element); onScreen.delete(row.element); row.element.remove(); ids.delete(row.message.id);
+      return false;
+    });
+    const key = readKey(session, item.thread), summary = session.unreadSummaries?.get(key);
+    if (summary && item.id === undefined) session.unreadSummaries.delete(key);
+    else if (summary) summary.total = Math.max(0, summary.total - 1);
+    threads.clear(); el("konusma-listesi").replaceChildren();
+    for (const row of rows) updateThread(row.message);
+    el("konusma-sayisi").textContent = String(threads.size); el("konusma-bos").hidden = threads.size > 0;
+    if (session.history && rows.length) session.history.oldest = rows[0].message.id;
+    if (target === item.thread && !rows.some((row) => row.thread === item.thread)) target = "";
+    renderUnread(session);
+    if (item.id === undefined && filter === item.thread) showFilter(""); else { refreshContext(); updateBaglam(); }
+    refreshUnread(session).catch(() => {});
+  }
+  el("konusma-sil").addEventListener("click", () => { if (filter) openDeletion({thread: filter}, el("konusma-sil")); });
+  el("silme-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const item = deletion;
+    if (!item || deletionBusy || active !== item.session) return;
+    if (item.id === undefined && el("silme-onay-girdi").value.trim() !== item.thread) {
+      el("silme-hata").textContent = "Onaylamak için " + item.thread + " yaz."; return;
+    }
+    deletionBusy = true; el("silme-onay").disabled = true; el("silme-vazgec").disabled = true; el("silme-hata").textContent = "";
+    try {
+      if (!managementSession || Date.now() >= managementExpiry) {
+        const kod = el("silme-kod").value; el("silme-kod").value = "";
+        acceptManagementSession(await managementAPI("/oturum", "POST", {kod}));
+      }
+      const base = "/odalar/" + encodeURIComponent(item.room);
+      await managementAPI(item.id === undefined ? base + "/konusmalar/" + encodeURIComponent(item.thread) : base + "/mesajlar/" + item.id, "DELETE");
+      removeDeleted(item); el("silme-dialog").close();
+      status.textContent = item.id === undefined ? item.thread + " konuşması silindi." : "#" + item.id + " mesajı silindi.";
+    } catch (error) {
+      if (error.message === managementErrors.mesaj_yok) { removeDeleted(item); el("silme-dialog").close(); status.textContent = error.message; }
+      else if (deletion === item && el("silme-dialog").open) { el("silme-hata").textContent = error.message; showDeletionVerification(); }
+    } finally { deletionBusy = false; el("silme-onay").disabled = false; el("silme-vazgec").disabled = false; }
+  });
+  el("silme-vazgec").addEventListener("click", () => { if (!deletionBusy) el("silme-dialog").close(); });
+  el("silme-dialog").addEventListener("cancel", (event) => { if (deletionBusy) event.preventDefault(); });
+  el("silme-dialog").addEventListener("close", () => {
+    const opener = deletion?.opener; deletion = null;
+    el("silme-kod").value = ""; el("silme-onay-girdi").value = ""; el("silme-hata").textContent = "";
+    if (active && !view.hidden) (opener?.isConnected && !opener.hidden ? opener : messages).focus();
+  });
   function managementAction(fn) {
     return async () => { try { await fn(); } catch (error) { clearTimeout(managementToastTimer); el("yonetim-durum").textContent = error.message; } };
   }
@@ -937,7 +1020,7 @@
       oturum_acildi: "Yönetim oturumu açıldı", oturum_reddedildi: "Yönetim oturumu reddedildi",
       hesap_acildi: "Hesap açıldı", hesap_iptal: "Hesap iptal edildi", iptal: "Hesap iptal edildi", revoke: "Hesap iptal edildi",
       odaya_eklendi: "Odaya eklendi", "odaya-ekle": "Odaya eklendi",
-      oda_olusturuldu: "Oda oluşturuldu",
+      oda_olusturuldu: "Oda oluşturuldu", mesaj_silindi: "Mesaj silindi", konusma_silindi: "Konuşma silindi",
       odadan_cikarildi: "Odadan çıkarıldı", "odadan-cikar": "Odadan çıkarıldı",
       "yonetici-yap": "Yönetici yetkisi verildi", "yonetici-al": "Yönetici yetkisi kaldırıldı"
     };

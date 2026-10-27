@@ -46,6 +46,9 @@ export function createPreviewServer() {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   };
   const messages = seed();
+  // Silinen mesaj ve konuşma numaraları gerçek sunucudaki gibi yeniden kullanılmaz.
+  let lastId = messages.length;
+  const lastThread = new Map();
   const closed = new Set();
   const readMarks = new Map();
   const changes = new EventEmitter();
@@ -152,6 +155,20 @@ export function createPreviewServer() {
           records.unshift({id:records.length+1,zaman:new Date().toISOString(),yapan:"demo",islem:"oda_olusturuldu",hedef:name,ayrinti:title});
           send(201,{name,title});return;
         }
+        const deletion = /^\/v1\/yonetim\/odalar\/([^/]+)\/(mesajlar|konusmalar)\/([^/]+)$/.exec(url.pathname);
+        if (deletion && req.method === "DELETE") {
+          const [, room, kind, key] = deletion, single = kind === "mesajlar";
+          if (!rooms.includes(room)) { send(404, {error:"oda_yok"}); return; }
+          const removed = messages.filter((m) => m.room === room && (single ? m.id === Number(key) : m.thread === key));
+          if (!removed.length) { send(404, {error:"mesaj_yok"}); return; }
+          for (const m of removed) {
+            lastThread.set(room, Math.max(lastThread.get(room) || 0, Number(m.thread.slice(2))));
+            messages.splice(messages.indexOf(m), 1);
+          }
+          const thread = removed[0].thread;
+          records.unshift({id:records.length+1,zaman:new Date().toISOString(),yapan:"demo",islem:single?"mesaj_silindi":"konusma_silindi",hedef:room,ayrinti:single?"#"+key+" · "+thread:thread+" · "+removed.length+" mesaj"});
+          send(200, single ? {ok:true,thread} : {ok:true,silinen:removed.length}); return;
+        }
         send(404,{error:"bulunamadi"});return;
       }
       const route = /^\/v1\/rooms\/([^/]+)\/(log|agents|messages|threads\/T-\d+\/close)$/.exec(url.pathname);
@@ -189,9 +206,9 @@ export function createPreviewServer() {
         changes.once(room, finish); res.once("close", cleanup); return;
       }
       const append = (data) => {
-        const thread = data.thread || "T-" + (1 + Math.max(0, ...messages.filter((m) => m.room === room).map((m) => Number(m.thread.slice(2)))));
+        const thread = data.thread || "T-" + (1 + Math.max(lastThread.get(room) || 0, ...messages.filter((m) => m.room === room).map((m) => Number(m.thread.slice(2)))));
         const history = messages.filter((m) => m.room === room && m.thread === thread);
-        const m = { id: messages.length + 1, room, from: "demo", to: data.to || "", type: data.type,
+        const m = { id: ++lastId, room, from: "demo", to: data.to || "", type: data.type,
           thread, reply_to: data.reply_to, turn: history.length + 1, max_turns: 20,
           body: data.body, created_at: new Date().toISOString() };
         messages.push(m); return m;
