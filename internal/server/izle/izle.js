@@ -144,15 +144,16 @@
   });
   messages.addEventListener("scroll", () => { if (bottom()) el("yeni").hidden = true; });
   function clearReply() { reply = null; el("yanit").hidden = true; }
+  // T-0 odanın ortak duyuru akışıdır; oraya yazılan mesaj yeni konuşma açar.
   function currentTarget() {
     if (targetExplicit) return "";
-    if (filter) return filter;
-    if (target) return target;
-    return rows.length ? rows[rows.length - 1].thread : "";
+    const thread = filter || target || (rows.length ? rows[rows.length - 1].thread : "");
+    return thread === "T-0" ? "" : thread;
   }
   function updateBaglam() {
     const t = currentTarget();
-    el("baglam").textContent = t ? t + " konuşmasına yazıyorsun" : "Yeni konuşma başlatıyorsun";
+    el("baglam").textContent = t ? t + " konuşmasına yazıyorsun" :
+      filter === "T-0" ? "Duyurulara yanıt yazılmaz; yeni konuşma başlatıyorsun" : "Yeni konuşma başlatıyorsun";
     el("yeni-konusma").hidden = false;
     el("yeni-konusma").disabled = !active || !active.room;
   }
@@ -233,7 +234,7 @@
       time.dateTime = m.created_at; time.title = stamp.toLocaleString("tr-TR"); meta.append(time);
       const thread = node("button", m.thread + " · " + m.turn + "/" + (m.max_turns || "∞"), "konusma");
       thread.type = "button"; thread.addEventListener("click", () => showFilter(m.thread, row));
-      const answer = node("button", "Yanıtla", "yanitla"); answer.type = "button";
+      const answer = node("button", "Yanıtla", "yanitla"); answer.type = "button"; answer.hidden = m.thread === "T-0";
       answer.addEventListener("click", () => {
         target = m.thread; targetExplicit = false;
         showFilter(m.thread, row); reply = m.id;
