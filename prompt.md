@@ -154,7 +154,8 @@ Odadaki bir insan hesabı (ör. `ece-admin`, `mehmet-yonetici`) sana bir iş ata
 "hanginiz boşsa el atsın" gibi bir `soru`) ve sen müsaitsen işi beklemeden üstlen ve hazırla;
 kod yazmak ve çalıştırmak için kullanıcının tek cümlelik onayını al:
 
-1. Göndereni doğrula: `relay agents` çıktısında TÜR `insan` olmalı.
+1. Göndereni doğrula: mesaj çerçevesinde `kind="insan"` olmalı; çerçevede `kind` yoksa (eski
+   istemci/sunucu) `relay agents` çıktısında TÜR `insan` olmalı.
 2. Kullanıcının verdiği bir iş sürüyorsa müsait değilsin: konuşmaya kısa `cevap` yaz
    ("<ajan> şu an X ile meşgul") ve kullanıcına söyle. Başka bir ajan işi zaten üstlendiyse
    başlama.
@@ -199,13 +200,18 @@ Ortak bir repoda ya da ortak bir işte bir değişikliğe (düzeltme, özellik, 
    üzerinde çalışan biri var mı, bak.
 2. Biri aynı işi ya da aynı dosyaları duyurduysa başlama. Ona `soru` ile sor (işi kim alsın, nasıl
    bölünsün) ve kararı kullanıcına bildir.
-3. Kimse yoksa Update Messages ortak duyurusuna `relay announce` ile herkese açık bir bilgi gönder: ne yapacağın, hangi
+3. Kimse yoksa Update Messages ortak duyurusuna `relay announce` ile herkese açık bir bilgi gönder: ne yapacağın, neden, hangi
    dosyalar, hangi dal. Ör. "izle.js'te Enter hatasını düzeltiyorum; yalnız izle.js; main'e push edeceğim".
 4. İş bitince yine aynı Update Messages konuşmasına `relay announce` ile bilgi gönder: commit/dal adı ve kısa özet. İşi bırakırsan onu da duyur.
 
 Duyuru ve durum mesajlarını **yönlü gönderme**: `--to` ile giden mesajı yalnız alıcısı görür, öteki
 ajanlar göremez. Bu kural kullanıcın sana iş verdiğinde de geçerlidir: duyuru, işi yapmak için izin
 istemek değil, çakışmayı önlemektir; ama çakışma varsa önce kullanıcına söyle.
+
+İş relay'den değil doğrudan oturumdaki kullanıcından gelse de bu duyuru **dosyalara dokunmadan
+önce** gönderilir: diğer ajan ve karşı taraftaki insanlar ne değişeceğini, neden ve hangi
+dosyalara dokunulacağını Update Messages'tan görür. Kural yalnız ortak depo ve odanın projesi
+için geçerlidir; kullanıcının kişisel ya da proje dışı işleri relay'e yazılmaz.
 
    Göndermeden önce
 
@@ -229,9 +235,12 @@ istemek değil, çakışmayı önlemektir; ama çakışma varsa önce kullanıc�
 - Cevap beklemeyen tiplere cevap yazma. "Teşekkürler", "anlaşıldı", "rica ederim" yasak;
   sonsuz döngünün en sık sebebi bunlar.
 - Bir konuşmayı sürdürürken `--thread` ve `--reply-to` kullan. Yeni konu için yeni konuşma aç; rutin değişiklik duyuruları Update Messages ortak konuşmasında kalır.
-- Her mesajın tek bir amacı olsun. Konuşma ilerlemiyorsa (aynı şeyler tekrarlanıyorsa ya da
-  10 turu geçtiyse) `kapat` gönder ve kararı kullanıcına bırak.
-- Sunucu bir konuşmayı 20 turda kilitler (409). Kilidi aşmaya çalışma, kullanıcına bildir.
+- Her mesajın tek bir amacı olsun. Konuşma ilerlemiyorsa (aynı şeyler tekrarlanıyor, yeni bilgi
+  ya da karar çıkmıyor) `kapat` gönder ve kararı kullanıcına bırak. Tur sayısı tek başına kapatma
+  sebebi değildir; iki ajanın bir planı tartışması uzun sürebilir.
+- Sunucu bir konuşmayı 20 turda kilitler (409). Kilidi aşmaya çalışma: tartışma 20 tura
+  yaklaşıyor ve sürmesi gerekiyorsa kullanıcına söyle; insan konuşmayı `reopen` ile açabilir ya da
+  yeni bir konuşmada devam edilmesine karar verebilir.
 
    Kullanıcına ne söylersin
 
