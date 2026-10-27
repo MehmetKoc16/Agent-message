@@ -507,3 +507,54 @@ test("arka plan sekmesi okunmamış özetini sorgulamaz, görünür olunca hemen
   await new Promise(setImmediate);
   assert.equal(summaries, 1);
 });
+
+test("yönetici mesajı ve konuşmayı TOTP oturumuyla siler; konuşma için numarası yazılır", async (t) => {
+  const calls = [];
+  const h = await harness(async (path, options = {}) => {
+    calls.push({path, options});
+    const data = path.endsWith("/oturum") ? {oturum: "test-session", bitis: new Date(Date.now() + 600000).toISOString()} :
+      path.includes("/konusmalar/") ? {ok: true, silinen: 2} : path.includes("/mesajlar/") ? {ok: true, thread: "T-1"} : {threads: []};
+    return {ok: true, status: 200, json: async () => data};
+  });
+  t.after(() => h.inspect.stop());
+  h.session.yonetici = true;
+  h.inspect.addMessages([1, 2, 3].map((id) => ({id, thread: id === 1 ? "T-1" : "T-2", room: "r1", from: "other", type: "bilgi",
+    body: "m" + id, created_at: "2026-10-27T00:00:00Z"})), h.session);
+  const messages = h.el("mesajlar"), submit = () => h.el("silme-form").listeners.get("submit")({preventDefault() {}});
+  const remove = messages.children[0].children.at(-1).children.at(-1);
+  assert.equal(remove.textContent, "Sil");
+  remove.listeners.get("click")();
+  assert.equal(h.el("silme-dialog").open, true);
+  assert.equal(h.el("silme-dogrulama").hidden, false);
+  h.el("silme-kod").value = "123456";
+  await submit();
+  assert.equal(h.el("silme-dialog").open, false);
+  assert.deepEqual(messages.children.map((row) => row.children[2].textContent), ["m2", "m3"]);
+  const single = calls.find((c) => c.options.method === "DELETE");
+  assert.equal(single.path, "/v1/yonetim/odalar/r1/mesajlar/1");
+  assert.equal(single.options.headers["X-Yonetim-Oturum"], "test-session");
+
+  h.inspect.showFilter("T-2");
+  assert.equal(h.el("konusma-sil").hidden, false);
+  h.el("konusma-sil").listeners.get("click")();
+  assert.equal(h.el("silme-dogrulama").hidden, true, "open management session asked for a new code");
+  h.el("silme-onay-girdi").value = "T-1";
+  await submit();
+  assert.equal(h.el("silme-dialog").open, true);
+  assert.match(h.el("silme-hata").textContent, /T-2/);
+  h.el("silme-onay-girdi").value = "T-2";
+  await submit();
+  assert.equal(messages.children.length, 0);
+  assert.equal(h.el("filtre").textContent, "Tüm konuşmalar");
+  assert.equal(calls.filter((c) => c.path === "/v1/yonetim/oturum").length, 1);
+  assert.equal(calls.filter((c) => c.options.method === "DELETE").at(-1).path, "/v1/yonetim/odalar/r1/konusmalar/T-2");
+});
+
+test("yönetici olmayan oturumda silme düğmeleri görünmez", async (t) => {
+  const h = await harness(async () => ({ok: true, status: 200, json: async () => ({})}));
+  t.after(() => h.inspect.stop());
+  h.inspect.addMessages([{id: 1, thread: "T-1", room: "r1", from: "other", type: "bilgi", body: "m1", created_at: "2026-10-27T00:00:00Z"}], h.session);
+  assert.deepEqual(h.el("mesajlar").children[0].children.at(-1).children.map((b) => b.className), ["konusma", "yanitla"]);
+  h.inspect.showFilter("T-1");
+  assert.equal(h.el("konusma-sil").hidden, true);
+});

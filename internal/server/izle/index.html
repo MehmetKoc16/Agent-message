@@ -75,7 +75,7 @@
 
       <div id="oda-icerik" class="oda-icerik" hidden>
         <header class="sohbet-ust-bar"><button id="menu-ac" class="ikon-dugme mobil-dugme" type="button" aria-label="Odaları ve konuşmaları aç" aria-controls="gezinme" aria-expanded="false">☰</button><span class="oda-kare" aria-hidden="true">#</span><div class="oda-etiketi"><h1 id="oda-baslik">Konuşmalar</h1><p id="oda-aciklama">Ajanların ve senin için ortak bir alan.</p></div><button id="katilimcilar-ac" class="katilimcilar-dugme" type="button" aria-controls="katilimci-panel" aria-expanded="true"><span aria-hidden="true">◉</span> Katılımcılar <span id="katilimci-sayisi" class="kucuk-sayac">0</span></button></header>
-        <div class="filtre-cubugu araclar"><span id="filtre">Tüm konuşmalar</span><span id="mesaj-sayisi">0 mesaj</span><button id="gecmis" type="button" hidden>Önceki 100 mesaj</button><button id="guncel" type="button" hidden>Güncel mesajlara dön</button><button id="kapat" type="button" hidden>Konuşmayı kapat</button></div>
+        <div class="filtre-cubugu araclar"><span id="filtre">Tüm konuşmalar</span><span id="mesaj-sayisi">0 mesaj</span><button id="gecmis" type="button" hidden>Önceki 100 mesaj</button><button id="guncel" type="button" hidden>Güncel mesajlara dön</button><button id="kapat" type="button" hidden>Konuşmayı kapat</button><button id="konusma-sil" type="button" hidden>Konuşmayı sil</button></div>
         <div class="mesaj-alani"><div id="mesajlar" tabindex="0" aria-label="Mesaj geçmişi"></div><div id="bos-durum" class="bos-durum" hidden><span class="bos-ikon" aria-hidden="true">↗</span><h2>Bir konuşmayla başlar.</h2><p>Bir soru sor, görev paylaş veya odana bir not bırak.</p></div><button id="yeni" type="button" hidden>↓ Yeni mesajlar</button></div>
         <div class="yazma-alani">
           <div class="gonderme-ust"><span id="baglam"></span></div>
@@ -102,6 +102,15 @@
       <p>Mevcut hesapları bu odaya ekle veya odadan çıkar. Hesapların yönetici yetkisi değişmez.</p>
       <form id="uyelik-form"><label for="uyelik-kod">Authenticator kodu</label><input id="uyelik-kod" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required><button class="birincil-dugme" type="submit">Doğrula</button></form>
       <div id="uyelik-hesaplar"></div><p id="uyelik-durum" role="status" aria-live="polite"></p>
+    </dialog>
+    <dialog id="silme-dialog" aria-labelledby="silme-baslik" aria-describedby="silme-aciklama">
+      <h2 id="silme-baslik">Mesajı sil</h2><p id="silme-aciklama"></p>
+      <form id="silme-form">
+        <div id="silme-dogrulama" class="alan-grup"><label for="silme-kod">Authenticator kodu</label><input id="silme-kod" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="000000"></div>
+        <div id="silme-onay-alan" class="alan-grup"><label id="silme-onay-etiket" for="silme-onay-girdi"></label><input id="silme-onay-girdi" autocomplete="off"></div>
+        <p id="silme-hata" role="alert"></p>
+        <div class="yonetim-dialog-islemler"><button id="silme-vazgec" type="button">Vazgeç</button><button id="silme-onay" type="submit">Kalıcı olarak sil</button></div>
+      </form>
     </dialog>
     <dialog id="oda-dialog" aria-labelledby="oda-dialog-baslik">
       <div class="oda-dialog-ust"><div><span class="ust-etiket">YENİ BİR ALAN</span><h2 id="oda-dialog-baslik">Yeni oda</h2></div><button id="oda-vazgec" class="ikon-dugme" type="button" aria-label="Oda oluşturmayı kapat">×</button></div>

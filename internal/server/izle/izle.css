@@ -154,7 +154,9 @@ h1, h2, h3, p { margin: 0; }
 .filtre-cubugu { min-height: 43px; padding: 7px 28px; border-bottom: 1px solid var(--cizgi); font-size: 12px; }
 #filtre { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
 #mesaj-sayisi { margin-left: auto; color: var(--ikincil); font-size: 12px; }
-#kapat { padding: 4px 7px; font-size: 12px; }
+#kapat, #konusma-sil { padding: 4px 7px; font-size: 12px; }
+.mesaj-sil, #konusma-sil, #silme-dialog { --silme-kirmizi: color-mix(in srgb, #d02b38 72%, var(--metin)); }
+#konusma-sil, #silme-onay { color: var(--silme-kirmizi); }
 .mesaj-alani { flex: 1; min-height: 0; position: relative; display: flex; }
 #mesajlar { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 28px 24px; overscroll-behavior: contain; scrollbar-width: thin; }
 .mesaj { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; padding: 18px 0; border-bottom: 1px solid var(--cizgi); }
@@ -181,6 +183,13 @@ h1, h2, h3, p { margin: 0; }
 .konusma, .yanitla { border: 0; padding: 2px 0; color: var(--ikincil); font-size: 12px; background: transparent; }
 .konusma { font-family: Consolas, "Courier New", monospace; overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
 .konusma:hover:not(:disabled), .yanitla:hover:not(:disabled) { color: var(--vurgu-metin); background: transparent; text-decoration: underline; }
+.mesaj-sil { border: 0; padding: 2px 0; color: var(--ikincil); font-size: 12px; background: transparent; }
+.mesaj-sil:hover:not(:disabled) { color: var(--silme-kirmizi); background: transparent; text-decoration: underline; }
+#silme-dialog { width: min(520px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 28px; border: 1px solid var(--cizgi); border-radius: 12px; background: var(--yuzey); color: var(--metin); box-shadow: var(--golge); overflow-y: auto; }
+#silme-dialog::backdrop { background: #10151099; }
+#silme-dialog h2 { margin-bottom: 10px; font-size: 18px; }
+#silme-aciklama { margin-bottom: 20px; color: var(--ikincil); font-size: 13px; line-height: 1.6; }
+#silme-hata { color: var(--silme-kirmizi); margin-bottom: 12px; }
 .bos-durum { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 24px; pointer-events: none; }
 .bos-ikon { width: 44px; height: 44px; background: var(--secili); color: var(--vurgu-metin); border-radius: 12px; display: grid; place-items: center; font-size: 24px; margin-bottom: 20px; }
 .bos-durum h2 { font-size: 20px; font-weight: 500; letter-spacing: -.5px; }
@@ -421,7 +430,7 @@ h1, h2, h3, p { margin: 0; }
   .gonderme-alt { padding: 8px; }
   #gonder { min-width: 44px; min-height: 40px; }
   .yazma-alani { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-  #oda-dialog, #yonetim-iptal-dialog { padding: 20px; }
+  #oda-dialog, #yonetim-iptal-dialog, #silme-dialog { padding: 20px; }
   #oda-kod { display: block; width: 100%; margin-block: 8px; }
   .kisayol-ipucu { display: none; }
   #sayac { margin-left: auto; }

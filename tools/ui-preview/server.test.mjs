@@ -115,3 +115,19 @@ test("each preview server starts with fresh disposable data", async (t) => {
   await a("/v1/rooms/agent-message/messages", post({ type: "bilgi", body: "Sadece A" }));
   assert.deepEqual(await (await b("/v1/rooms/agent-message/log")).json(), before);
 });
+
+test("deletion requires verification and never reuses message or thread numbers", async (t) => {
+  const request = await preview(t);
+  const del = (path, key) => request("/v1/yonetim/odalar/agent-message/" + path, {method: "DELETE", headers: key ? {"X-Yonetim-Oturum": key} : {}});
+  assert.equal((await del("mesajlar/1")).status, 401);
+  const login = await (await request("/v1/yonetim/oturum", post({kod: "123456"}))).json();
+  assert.deepEqual(await (await del("mesajlar/1", login.oturum)).json(), {ok: true, thread: "T-1"});
+  assert.equal((await del("mesajlar/1", login.oturum)).status, 404);
+  assert.deepEqual(await (await del("konusmalar/T-2", login.oturum)).json(), {ok: true, silinen: 2});
+  const sent = await (await request("/v1/rooms/agent-message/messages", post({type: "bilgi", body: "sonra"}))).json();
+  assert.equal(sent.id, 5); assert.equal(sent.thread, "T-3");
+  const log = await (await request("/v1/rooms/agent-message/log?tail=1")).json();
+  assert.deepEqual(log.messages.map((m) => m.id), [2, 5]);
+  const records = await (await request("/v1/yonetim/kayit", {headers: {"X-Yonetim-Oturum": login.oturum}})).json();
+  assert.deepEqual(records.map((k) => k.islem).slice(0, 2), ["konusma_silindi", "mesaj_silindi"]);
+});
