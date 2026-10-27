@@ -28,7 +28,11 @@ type PostInput struct {
 // yazılan işaretçidir: odadaki herkes o mesajı görebildiği için konuşmanın tarafıdır.
 const anyAgent = "*"
 
-var ErrBadAnnouncement = errors.New("duyuru yalnız herkese açık bilgi mesajı olabilir")
+var ErrBadAnnouncement = errors.New("duyuru yalnız herkese açık bilgi ya da bildirim mesajı olabilir; bildirim yalnız T-0'da")
+
+// IsAnnouncementType T-0 duyuru akışında kabul edilen mesaj türleridir:
+// "bilgi" (Güncellemeler) ve "bildirim" (Bildirimler; dinleyen ajanı uyandırır).
+func IsAnnouncementType(typ string) bool { return typ == "bilgi" || typ == "bildirim" }
 
 // Post mesajı ekler. Alıcı/reply_to/thread/taraf denetimi, tur sayacı ve ekleme
 // AYNI transaction'dadır (BEGIN IMMEDIATE ile yazarlar sıralanır), bu yüzden
@@ -45,10 +49,15 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 	}
 	in.FromKind = kind
 	if in.Announcement {
-		if in.Type != "bilgi" || in.To != "" || in.ReplyTo != nil || (in.Thread != "" && in.Thread != "T-0") {
+		if !IsAnnouncementType(in.Type) || in.To != "" || in.ReplyTo != nil || (in.Thread != "" && in.Thread != "T-0") {
 			return Message{}, ErrBadAnnouncement
 		}
 		in.Thread = "T-0"
+	}
+	// "bildirim" dinleyen ajanları uyandırır; normal konuşmada (yeni konu ya da
+	// T-n) kabul edilirse herhangi bir mesaj bildirim gibi gösterilebilirdi.
+	if in.Type == "bildirim" && in.Thread != "T-0" {
+		return Message{}, ErrBadAnnouncement
 	}
 	if in.RequestID != "" {
 		rows, err := tx.QueryContext(ctx, msgSelect+`WHERE m.room=? AND m.from_agent=? AND m.request_id=? AND m.request_id <> ''`, in.Room, in.From, in.RequestID)
@@ -141,7 +150,7 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 			}
 			publicOnly = errors.Is(err, sql.ErrNoRows)
 		}
-		if limit == 0 && (in.Type != "bilgi" || in.To != "" || in.ReplyTo != nil) {
+		if limit == 0 && (!IsAnnouncementType(in.Type) || in.To != "" || in.ReplyTo != nil) {
 			return Message{}, ErrBadAnnouncement
 		}
 		if status != "acik" || (limit > 0 && turns >= limit) {
