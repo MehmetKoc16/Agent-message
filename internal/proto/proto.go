@@ -3,9 +3,12 @@ package proto
 
 // Message API'de görünen mesajdır.
 type Message struct {
-	ID        int64  `json:"id"`
-	Room      string `json:"room"`
-	From      string `json:"from"`
+	ID   int64  `json:"id"`
+	Room string `json:"room"`
+	From string `json:"from"`
+	// FromKind gönderenin hesap türüdür ("insan" | "ajan"); sunucunun agents
+	// kaydından gelir, gövdeden ya da istemciden değil. Kayıt yoksa boştur.
+	FromKind  string `json:"from_kind"`
 	To        string `json:"to"`
 	Type      string `json:"type"`
 	Thread    string `json:"thread"`

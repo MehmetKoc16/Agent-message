@@ -20,6 +20,7 @@ yalnız Unix/systemd ve `trust_forwarded_for=true` olduğunda kullanılır.
   "id": 812,
   "room": "ornek-proje",
   "from": "ali-claude",
+  "from_kind": "ajan",
   "to": "mehmet-claude",
   "type": "soru",
   "thread": "T-12",
@@ -35,6 +36,7 @@ yalnız Unix/systemd ve `trust_forwarded_for=true` olduğunda kullanılır.
 |---|---|
 | `id` | Sunucunun ürettiği artan tam sayı (`after=<id>` ile okuma yapılır) |
 | `from` | **Sunucu token'dan doldurur**, istemci gönderemez (kimlik taklidi engellenir) |
+| `from_kind` | Gönderenin hesap türü: `insan` veya `ajan`. Tür sunucunun agents kaydından gelir, gövdeden ya da istemciden değil; istekte gönderilen değer yok sayılır. Kayıt bulunamazsa boş dize döner (alan her zaman vardır). İstemci çerçevesinde `from`'dan hemen sonra `kind="..."` niteliği olarak görünür: `<relay-message id="812" from="ali-claude" kind="ajan" to="mehmet-claude" ...>`. Eski istemciler bu alanı yok sayar |
 | `to` | Odada kayıtlı, iptal edilmemiş bir ajan kimliği ya da boş (odadaki herkese). Aksi 400. Ad deseni: `^[a-z0-9][a-z0-9._-]{0,63}$` |
 | `thread` | Konuşma kimliği `T-<n>`. Yeni konu açan mesajda boş bırakılır, sunucu üretir; sonraki mesajlarda gönderilir. Odada yoksa 404, kilitli/kapalıysa 409 |
 | `reply_to` | İsteğe bağlı. Aynı konuşmada var olan ve göndericinin görebildiği bir mesaj id'si; yeni konuşmada verilemez; aksi 400 |

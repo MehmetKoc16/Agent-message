@@ -39,8 +39,9 @@ var (
 // gövde çerçeveyi kapatamaz ya da sahte çerçeve açamaz; nitelikler de kaçışlıdır.
 func Render(m proto.Message) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, `<relay-message id="%d" from="%s" to="%s" type="%s" thread="%s" turn="%d/%d"`,
-		m.ID, attrEsc.Replace(frameText(m.From)), attrEsc.Replace(frameText(m.To)), attrEsc.Replace(frameText(m.Type)),
+	// kind gönderenin sunucudaki hesap türüdür (insan|ajan); boşsa kind="" yazılır.
+	fmt.Fprintf(&b, `<relay-message id="%d" from="%s" kind="%s" to="%s" type="%s" thread="%s" turn="%d/%d"`,
+		m.ID, attrEsc.Replace(frameText(m.From)), attrEsc.Replace(frameText(m.FromKind)), attrEsc.Replace(frameText(m.To)), attrEsc.Replace(frameText(m.Type)),
 		attrEsc.Replace(frameText(m.Thread)), m.Turn, m.MaxTurns)
 	if m.ReplyTo != nil {
 		fmt.Fprintf(&b, ` reply_to="%d"`, *m.ReplyTo)
