@@ -19,6 +19,7 @@ class Element {
   append(...children) { for (const child of children) { child.parentElement = this; this.children.push(child); } }
   prepend(child) { child.parentElement = this; this.children.unshift(child); }
   replaceChildren(...children) { this.children = []; this.append(...children); }
+  before(node) { const list = this.parentElement.children; node.parentElement = this.parentElement; list.splice(list.indexOf(this), 0, node); }
   remove() { if (this.parentElement.children) this.parentElement.children = this.parentElement.children.filter((c) => c !== this); }
   get firstChild() { return this.children[0]; }
   get options() { return this.children; }
@@ -610,4 +611,52 @@ test("bir odadan gelen 403 oturumu kapatmaz; oda listesi yenilenir, aynı oda ye
   assert.equal(h.el("izleme").hidden, true);
   assert.equal(h.el("durum").textContent, "Bu odaya erişimin yok.");
   assert.ok(calls.filter((p) => p === "/v1/rooms").length <= 3, "room list reloaded in a loop");
+});
+
+test("okunmamış sayısı noktanın yanında görünür; çizgi odaya girişte okunmamış ilk mesajın üstüne konur ve odada kalır", async (t) => {
+  const reads = [];
+  const h = await harness(async (path, options = {}) => {
+    if (path.endsWith("/read")) { reads.push(JSON.parse(options.body).last_id); return {ok: true, status: 200, json: async () => ({ok: true})}; }
+    return {ok: true, status: 200, json: async () => ({threads: [{room: "r1", thread: "T-1", title: "m1", total: 4, last_id: 4, last_incoming_id: 4, read_id: 2, unread: 2}]})};
+  });
+  t.after(() => h.inspect.stop());
+  const message = (id) => ({id, thread: "T-1", room: "r1", from: "other", type: "bilgi", body: "m" + id, created_at: "2026-10-27T00:00:00Z"});
+  h.inspect.addMessages([1, 2, 3, 4].map(message), h.session);
+  await h.inspect.refreshUnread(h.session);
+  const messages = h.el("mesajlar"), button = () => h.el("konusma-listesi").children[0];
+  const badge = () => button().children[1].children[0].children[1];
+  const dividerAt = () => messages.children.findIndex((n) => n.className === "yeni-ayirac");
+  assert.equal(badge().hidden, false);
+  assert.equal(badge().textContent, "2 yeni");
+  assert.equal(dividerAt(), 2, "the divider must sit above the first unread message (#3)");
+  h.inspect.showFilter("T-1");
+  await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.deepEqual(reads, [4]);
+  assert.equal(badge().hidden, true);
+  assert.equal(button().children[0].hidden, true);
+  assert.equal(dividerAt(), 2, "the read write removed the divider from the open conversation");
+  // Çizgi odadan çıkana kadar "girdiğinden beri yeni" olanı göstermeye devam eder.
+  h.inspect.showFilter(""); h.inspect.showFilter("T-1");
+  assert.equal(dividerAt(), 2, "switching views lost the divider before leaving the room");
+  h.inspect.showFilter("");
+  h.inspect.addMessages([message(5)], h.session);
+  assert.equal(badge().textContent, "1 yeni");
+});
+
+test("sayı vermeyen eski sunucuda yalnız nokta görünür", async (t) => {
+  const h = await harness(async () => ({ok: true, status: 200, json: async () => ({threads: [{room: "r1", thread: "T-1", title: "m1", total: 1, last_id: 1, last_incoming_id: 1, read_id: 0}]})}));
+  t.after(() => h.inspect.stop());
+  h.inspect.addMessages([{id: 1, thread: "T-1", room: "r1", from: "other", type: "bilgi", body: "m1", created_at: "2026-10-27T00:00:00Z"}], h.session);
+  await h.inspect.refreshUnread(h.session);
+  const button = h.el("konusma-listesi").children[0];
+  assert.equal(button.children[0].hidden, false);
+  assert.equal(button.children[1].children[0].children[1].hidden, true);
+});
+
+test("okunmamış özeti günlükten önce gelse de çizgi satırlar gelince konur", async (t) => {
+  const h = await harness(async () => ({ok: true, status: 200, json: async () => ({threads: [{room: "r1", thread: "T-1", title: "m1", total: 2, last_id: 2, last_incoming_id: 2, read_id: 1, unread: 1}]})}));
+  t.after(() => h.inspect.stop());
+  await h.inspect.refreshUnread(h.session);
+  h.inspect.addMessages([1, 2].map((id) => ({id, thread: "T-1", room: "r1", from: "other", type: "bilgi", body: "m" + id, created_at: "2026-10-27T00:00:00Z"})), h.session);
+  assert.equal(h.el("mesajlar").children.findIndex((n) => n.className === "yeni-ayirac"), 1);
 });

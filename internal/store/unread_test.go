@@ -130,3 +130,58 @@ func TestUnreadSummaryAndThreadPagesIncludeOlderConversations(t *testing.T) {
 		}
 	}
 }
+
+// NEDEN: arayüz yeşil noktanın yanında bu sayıyı gösterir; kendi mesajlar ve
+// okuma imlecine kadar olanlar sayılmamalı, sayı hesap başına ayrı olmalı.
+func TestThreadSummaryUnreadCount(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(filepath.Join(t.TempDir(), "count.db"), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, a := range []struct{ name, kind string }{{"owner", "insan"}, {"other", "insan"}, {"bot", "ajan"}} {
+		if err := s.AddAgent(ctx, a.name, a.kind, HashToken(a.name), []string{"r1"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unread := func(who string) int {
+		t.Helper()
+		summaries, err := s.ThreadSummaries(ctx, who)
+		if err != nil || len(summaries) != 1 {
+			t.Fatal(summaries, err)
+		}
+		return summaries[0].Unread
+	}
+	first, err := s.Post(ctx, PostInput{Room: "r1", From: "bot", Type: "soru", Body: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var last Message
+	for _, body := range []string{"2", "3"} {
+		if last, err = s.Post(ctx, PostInput{Room: "r1", From: "bot", Thread: first.Thread, Type: "bilgi", Body: body}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Post(ctx, PostInput{Room: "r1", From: "owner", Thread: first.Thread, Type: "bilgi", Body: "kendi"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := unread("owner"); got != 3 {
+		t.Fatalf("okunmamış %d, beklenen 3 (kendi mesaj sayılmaz)", got)
+	}
+	if err := s.MarkThreadRead(ctx, "owner", "r1", first.Thread, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := unread("owner"); got != 2 {
+		t.Fatalf("okunmamış %d, beklenen 2", got)
+	}
+	if err := s.MarkThreadRead(ctx, "owner", "r1", first.Thread, last.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := unread("owner"); got != 0 {
+		t.Fatalf("okunmamış %d, beklenen 0", got)
+	}
+	if got := unread("other"); got != 4 {
+		t.Fatalf("diğer hesabın okunmamışı %d, beklenen 4", got)
+	}
+}

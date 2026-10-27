@@ -7,6 +7,13 @@ noktayla gösterilir. Renk mevcut temanın yeşil rengidir; açık ve koyu temad
 sağlar. Ekran okuyucu düğmeyi “Okunmamış mesajlar” olarak da tanımlar. Diğer odada
 okunmamış konuşma varsa oda seçeneğinin başına da yeşil nokta eklenir.
 
+Noktanın yanında okunmamış mesaj sayısı yazar (ör. “3 yeni”); ekran okuyucu bunu “3 okunmamış
+mesaj” olarak okur. Odaya girildiğinde okunmamış ilk mesajın üstüne **Yeni mesajlar** çizgisi
+konur. Çizgi odaya girildiği andaki okuma durumunu gösterir: okundu kaydı gidince kalkmaz,
+konuşmalar arasında geçince aynı yerde kalır, oda değişince ya da yeniden girişte yeniden
+hesaplanır. Bir konuşma açılınca görünüm çizgiye kaydırılır; “Tüm konuşmalar” görünümü en
+alttan açılır.
+
 - Bir konuşmayı açınca yalnız ekranda yüklenmiş mesajların son kimliği okundu kaydedilir.
 - Odaya girişteki “Tüm konuşmalar” görünümü bütün konuşmaları otomatik okumaz.
 - Seçili konuşma görünürken gelen yeni mesajlar okundu olur.
@@ -27,7 +34,8 @@ Kurulumdan önce veritabanı yedeği alınır; eski v4 ikilisi v5 veritabanını
 Geri alma gerekiyorsa v4 yedeği geri yüklenir. Merge ve canlı kurulum sonrasında
 bu yükseltme gereksinimi Admin Notification'da yöneticilere bildirilir.
 
-API: insan hesapları için `GET /v1/unread`, oda üyeleri için
+API: insan hesapları için `GET /v1/unread` (her konuşma için `unread`: okuma imlecinden sonra
+başkalarının yazdığı mesaj sayısı; eski sunucuda alan yoksa arayüz yalnız noktayı gösterir), oda üyeleri için
 `POST /v1/rooms/{room}/threads/{thread}/read` (`last_id`) ve insanlara ait sayfalı
 konuşma günlüğü. Kimlik, üyelik ve gerçek mesaj kimliği sunucuda doğrulanır;
 başka odadaki veya gelecekteki bir kimlik göndererek mesajlar okundu yapılamaz.

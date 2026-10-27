@@ -12,6 +12,8 @@
   // Reads wait for scrolling to settle so skimmed rows do not spend the POST rate limit.
   const onScreen = new Set();
   let seenTimer = 0;
+  // "Yeni mesajlar" çizgisi: odaya girildiği andaki okuma imleçleri ve çizginin konduğu görünüm.
+  let divider = null, dividerRoom = "", dividerReads = new Map(), dividerFilter = null;
   const seenObserver = typeof IntersectionObserver === "function" ? new IntersectionObserver((entries) => {
     for (const entry of entries) {
       const seen = entry.isIntersecting && (entry.intersectionRatio >= 0.5 ||
@@ -22,6 +24,7 @@
   }, {root: messages, threshold: [0, 0.25, 0.5, 1]}) : null;
   function clearMessages() {
     rows = []; ids = new Set(); messages.replaceChildren(); onScreen.clear(); seenObserver?.disconnect();
+    divider = null; dividerFilter = null;
   }
   const narrow = matchMedia("(max-width: 1150px)");
   function navigationButton() { return el("oda-icerik").hidden ? el("odasiz-menu-ac") : el("menu-ac"); }
@@ -106,7 +109,7 @@
     } catch (_) { /* Depolama kapalıysa oturum bellekte kalır. */ }
   }
   function stop() {
-    status.classList.remove("canli");
+    status.classList.remove("canli"); dividerRoom = "";
     clearYonetim(); el("yonetim").hidden = true; el("yonetim-ac").hidden = true;
     el("oda-dialog").close(); el("uyelik-dialog").close(); el("uyeleri-yonet").hidden = true; el("oda-ekle").hidden = true;
     el("silme-dialog").close(); el("konusma-sil").hidden = true;
@@ -172,7 +175,9 @@
     refreshContext();
     if (view.classList.contains("menu-acik")) { menu(false); el("menu-ac").focus(); }
     updateBaglam();
+    const placed = placeDivider(active);
     if (anchor) { messages.scrollTop += anchor.getBoundingClientRect().top - before; el("yeni").hidden = true; }
+    else if (placed && thread) { divider.scrollIntoView?.({block: "center"}); el("yeni").hidden = true; }
     else scrollDown();
     markSelectedRead();
   }
@@ -196,13 +201,14 @@
     if (!thread) {
       const button = node("button", undefined, "konusma-satir"); button.type = "button";
       const top = node("span", undefined, "konusma-satir-ust");
-      const count = node("span"); top.append(node("span", m.thread), count);
+      const count = node("span"), label = node("span"), badge = node("span", undefined, "okunmamis-sayi");
+      badge.hidden = true; label.append(node("span", m.thread), badge); top.append(label, count);
       const title = m.body.split("\n").find((s) => s.trim()) || "Yeni konuşma";
       button.append(top, node("span", title, "konusma-satir-baslik"));
       button.title = title; button.addEventListener("click", () => openUnreadThread(m.thread));
       const dot = node("span", undefined, "okunmamis-nokta"); dot.hidden = true;
       dot.setAttribute("aria-hidden", "true"); button.prepend(dot);
-      thread = {button, count, title, dot, total: 0}; threads.set(m.thread, thread);
+      thread = {button, count, title, dot, badge, total: 0}; threads.set(m.thread, thread);
       el("konusma-listesi").prepend(button);
     }
     thread.total++;
@@ -268,13 +274,10 @@
     for (const row of rows) updateThread(row.message);
     if (session.unreadSummaries) {
       for (const m of list) {
-        const key = m.room + "/" + m.thread, summary = session.unreadSummaries.get(key);
-        if (summary) {
-          summary.last_id = Math.max(summary.last_id, m.id);
-          if (m.from !== session.name) summary.last_incoming_id = Math.max(summary.last_incoming_id, m.id);
-        }
+        const summary = session.unreadSummaries.get(m.room + "/" + m.thread);
+        if (summary) noteMessage(session, summary, m);
       }
-      renderUnread(session); markSelectedRead();
+      placeDivider(session); renderUnread(session); markSelectedRead();
     }
     if (session.history && rows.length) {
       session.history.oldest = rows[0].message.id;
@@ -381,6 +384,40 @@
     finally { if (!signal.aborted) el("gecmis").disabled = false; }
   });
   function readKey(session, thread) { return session.room + "/" + thread; }
+  // Özet alındıktan sonra gelen başkasının mesajı okunmamış sayısına eklenir.
+  function noteMessage(session, summary, m) {
+    summary.last_id = Math.max(summary.last_id, m.id);
+    if (m.from === session.name) return;
+    if (m.id > summary.last_incoming_id && typeof summary.unread === "number") summary.unread++;
+    summary.last_incoming_id = Math.max(summary.last_incoming_id, m.id);
+  }
+  // Sunucunun sayısı özetteki okuma imlecine göredir. Bu sekmede sonradan okunan kısım varsa
+  // yüklü satırlardan sayılır. Sayı vermeyen eski sunucuda 0 döner; nokta yine görünür.
+  function unreadCount(session, summary, read) {
+    if (typeof summary.unread !== "number") return 0;
+    if (read <= summary.read_id) return Math.max(1, summary.unread);
+    return Math.max(1, rows.filter((row) => row.thread === summary.thread &&
+      row.message.from !== session.name && row.message.id > read).length);
+  }
+  // Çizgi odaya girildiği andaki (okundu yazılmadan önceki) imleçlere göre konur: "odaya girdiğinden
+  // beri yeni". Okundu kaydı gidince kalkmaz; görünüm değişince aynı imleçlerle yeniden konur.
+  function placeDivider(session) {
+    if (!session?.unreadSummaries || active !== session) return false;
+    if (dividerRoom !== session.room) {
+      dividerRoom = session.room; dividerFilter = null;
+      dividerReads = new Map([...session.unreadSummaries].map(([key, s]) =>
+        [key, Math.max(s.read_id, session.localReads?.get(key) || 0)]));
+    }
+    // Özet günlükten önce gelirse boş görünüm "konuldu" sayılmaz; satırlar gelince konur.
+    if (dividerFilter === filter || !rows.length) return false;
+    dividerFilter = filter; divider?.remove(); divider = null;
+    const first = rows.find((row) => !row.element.hidden && row.message.from !== session.name &&
+      row.message.id > (dividerReads.get(readKey(session, row.thread)) ?? Infinity));
+    if (!first) return false;
+    divider = node("div", undefined, "yeni-ayirac"); divider.setAttribute("role", "separator");
+    divider.append(node("span", "Yeni mesajlar")); first.element.before(divider);
+    return true;
+  }
   function renderUnread(session) {
     if (active !== session || !session.unreadSummaries) return;
     for (const summary of session.unreadSummaries.values()) {
@@ -388,9 +425,11 @@
       if (!threads.has(summary.thread)) updateThread({thread: summary.thread, body: summary.title, type: "bilgi"});
       const thread = threads.get(summary.thread);
       const read = Math.max(summary.read_id, session.localReads?.get(summary.room + "/" + summary.thread) || 0);
-      const unread = summary.last_incoming_id > read;
+      const unread = summary.last_incoming_id > read, count = unread ? unreadCount(session, summary, read) : 0;
       thread.dot.hidden = !unread;
-      thread.button.setAttribute("aria-label", summary.thread + " · " + thread.title + (unread ? " · Okunmamış mesajlar" : ""));
+      thread.badge.hidden = !count; thread.badge.textContent = count ? count + " yeni" : "";
+      thread.button.setAttribute("aria-label", summary.thread + " · " + thread.title +
+        (count ? " · " + count + " okunmamış mesaj" : unread ? " · Okunmamış mesajlar" : ""));
       thread.count.textContent = summary.total + " mesaj";
     }
     const ordered = [...threads].sort(([a], [b]) => (session.unreadSummaries.get(session.room + "/" + b)?.last_id || 0) - (session.unreadSummaries.get(session.room + "/" + a)?.last_id || 0));
@@ -408,9 +447,9 @@
     session.unreadSummaries = new Map(data.threads.map((s) => [s.room + "/" + s.thread, s]));
     for (const row of rows) {
       const m = row.message, s = session.unreadSummaries.get(session.room + "/" + m.thread);
-      if (s) { s.last_id = Math.max(s.last_id, m.id); if (m.from !== session.name) s.last_incoming_id = Math.max(s.last_incoming_id, m.id); }
+      if (s) noteMessage(session, s, m);
     }
-    renderUnread(session); markSelectedRead();
+    placeDivider(session); renderUnread(session); markSelectedRead();
   }
   // A background tab shows no dots, so it skips the summary query; it refreshes on return.
   async function unreadLoop(session) {
