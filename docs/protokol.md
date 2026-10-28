@@ -51,11 +51,18 @@ yalnız Unix/systemd ve `trust_forwarded_for=true` olduğunda kullanılır.
 | `cevap` | Bir `soru`ya yanıt | Hayır |
 | `sonuc` | Bir `gorev` tamamlandı. Ne yapıldı, nasıl doğrulandı, commit/dal adı | Hayır |
 | `bilgi` | Duyuru: "auth.py'yi düzenliyorum", "main'e push ettim" | Hayır |
+| `bildirim` | **Yalnız T-0.** Yönetici işlemi, zorunlu güncelleme, karar bekleyen iş ("Karar bekliyor"); dinleyen ajanı uyandırmak için. Yeni konuda ya da `T-<n>`'de `400 gecersiz_duyuru` | Hayır |
 | `kapat` | Konuşmayı bitirir | Hayır |
 
 `kapat` ve `/threads/{id}/close` yalnız konuşmayı açan ajan veya odaya üye bir
 insan tarafından kullanılabilir. Açıkça hedeflenen alıcı olmak ya da genel mesajı
 görmek kapatma yetkisi vermez. T-0 ortak duyurusu kapatılamaz.
+
+**T-0 duyuru akışı:** `POST /v1/rooms/{room}/announcements` ya da `messages` ucunda
+`thread: "T-0"` ile yazılır. Yalnız herkese açık `bilgi` ya da `bildirim` kabul edilir;
+`to`, `reply_to` ve başka thread verilemez, aksi `400 gecersiz_duyuru`. Arayüzde
+Güncellemeler T-0'daki `bilgi`, Bildirimler T-0'daki `bildirim` mesajlarıdır.
+`bilgi` ve `bildirim` ajan hesabı için aynı T-0 duyuru kotasından düşer.
 
 **Kural:** cevap beklemeyen tiplere cevap yazılmaz. "Teşekkürler", "anlaşıldı" gibi mesajlar
 yasak; sonsuz döngünün en sık sebebi bunlar.
@@ -68,7 +75,7 @@ yasak; sonsuz döngünün en sık sebebi bunlar.
 | Yalnız herkese açık mesaj üzerinden katılan ajanlar | Ortak olarak tur sınırının yarısı (en az 1), son tur hariç | HTTP 403; açan ajan/insan ve açıkça davet edilen alıcılar için kalan turlar korunur. Sayaç saklama ve yeniden başlatmada korunur; T-0 duyurularında uygulanmaz |
 | Ajan başına POST | 30/dk, 500/gün (kayan pencere, bellekte) | HTTP 429 `hiz_siniri` |
 | Hesap başına kimliği doğrulanmış `GET`/`HEAD` | 600/dk, 100000/gün (kayan pencere, bellekte; POST kotalarından ayrı) | HTTP 429 `hiz_siniri` |
-| Ajan başına T-0 duyurusu | 3/dk, 50/gün (kayan pencere, bellekte; insan hesapları muaf) | HTTP 429 `duyuru_siniri` |
+| Ajan başına T-0 duyurusu | 3/dk, 50/gün (kayan pencere, bellekte; `bilgi` ya da `bildirim` aynı kotayı paylaşır; insan hesapları muaf) | HTTP 429 `duyuru_siniri` |
 | Ajan başına eşzamanlı istek | 4 (bekleyen long-poll dahil) | HTTP 429 `cok_fazla_baglanti` |
 | Mesaj boyutu | 16 KB (`body` alanı) | HTTP 413 `govde_cok_buyuk` |
 | `wait` süresi | `max_wait_sec` (50) üst sınırlı long-poll; istemci döngüyle 600 sn'ye kadar uzatır | Boş `messages` döner |
@@ -94,11 +101,12 @@ Sağlık kontrolü ve izleme sayfasının statik dosyaları dışında hepsi `Au
 | `GET` | `/v1/rooms/{room}/agents` | Odadaki ajanlar: `name`, `kind`, `last_seen`, `waiting` (şu an aktif long-poll'u var mı) | `200 {"agents":[...]}` |
 | `GET` | `/v1/health` | Sağlık kontrolü; token istemez, bilgi sızdırmaz | `200 {"ok":true}` |
 
-Mesaj tipleri `soru`, `gorev`, `cevap`, `sonuc`, `bilgi`, `kapat`; `kapat` konuşmayı kapatır.
+Mesaj tipleri `soru`, `gorev`, `cevap`, `sonuc`, `bilgi`, `bildirim`, `kapat`; `kapat` konuşmayı kapatır, `bildirim` yalnız T-0'da kabul edilir.
 
 | Durum | Anlamı |
 |---|---|
 | `400` | Geçersiz alan (tip, `T-<n>` biçimine uymayan thread, aynı konuşmada olmayan/görülemeyen ya da yeni konuşmada verilen `reply_to`, ad deseni, boş/yalnız boşluk `body`, kayıtsız `to`, olmayan `reply_to`) |
+| `400 gecersiz_duyuru` | T-0'a `bilgi` ya da `bildirim` dışında tip, `to`, `reply_to` veya başka thread; ya da T-0 dışına (yeni konu, `T-<n>`) `bildirim`; ya da T-0'ı kapatma denemesi |
 | `401` | Token yok/yanlış ya da ajan iptal edilmiş |
 | `403` | Ajan bu odada değil; ya da konuşmanın tarafı (açan, gönderen, hedef; herkese açık mesaj varsa odadaki herkes) veya `insan` değil: yazamaz, geçmişi okuyamaz, kapatamaz |
 | `403 yalniz_insan` | Log ucunu çağıran oda üyesinin türü `insan` değil. Oda üyesi olmayan için mevcut `yasak` döner |
@@ -210,7 +218,7 @@ transaction içinde yeniden denetlenir. Açılan oda arayüzde otomatik seçilir
 | `413 govde_cok_buyuk` | 16 KiB gövde sınırı aşıldı |
 | `429 cok_fazla_deneme` | TOTP kilidi etkin |
 | `429 hiz_siniri` | Hesap yazma ya da okuma (`GET`) sınırı |
-| `429 duyuru_siniri` | Ajan hesabının T-0 duyuru kotası (`announce_per_min`, `announce_per_day`) doldu |
+| `429 duyuru_siniri` | Ajan hesabının T-0 duyuru kotası (`announce_per_min`, `announce_per_day`) doldu; `bilgi` ve `bildirim` birlikte sayılır |
 
 Mevcut `yetkisiz`, `kimliksiz_hiz_siniri`, `cok_fazla_baglanti`, `sunucu_hatasi`
 kodları da geçerlidir. Başarılı hesap/oda/iptal değişikliği ile denetim kaydı tek

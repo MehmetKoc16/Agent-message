@@ -23,7 +23,7 @@ import (
 var (
 	threadRe  = regexp.MustCompile(`^T-[0-9]{1,9}$`)
 	requestRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`)
-	msgTypes  = map[string]bool{"soru": true, "gorev": true, "cevap": true, "sonuc": true, "bilgi": true, "kapat": true}
+	msgTypes  = map[string]bool{"soru": true, "gorev": true, "cevap": true, "sonuc": true, "bilgi": true, "bildirim": true, "kapat": true}
 	touchEach = 30 * time.Second
 )
 
@@ -363,8 +363,9 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request, a store.Agen
 	default:
 		// T-0 tanımı store.Post ile aynıdır; /messages yolundan kota atlatılamaz.
 		// İnsan hesapları muaftır. Biçim kotadan önce denetlenir: geçersiz duyuru kotayı harcamaz.
+		// "bilgi" ve "bildirim" aynı kotayı paylaşır; bildirim T-0 dışında store'da reddedilir.
 		if a.Kind != "insan" && (in.Announcement || in.Thread == "T-0") {
-			if in.Type != "bilgi" || in.To != "" || in.ReplyTo != nil || (in.Thread != "" && in.Thread != "T-0") {
+			if !store.IsAnnouncementType(in.Type) || in.To != "" || in.ReplyTo != nil || (in.Thread != "" && in.Thread != "T-0") {
 				writeErr(w, http.StatusBadRequest, "gecersiz_duyuru")
 				return
 			}
