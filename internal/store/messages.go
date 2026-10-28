@@ -230,13 +230,16 @@ func (s *Store) Post(ctx context.Context, in PostInput) (Message, error) {
 	if err := tx.Commit(); err != nil {
 		return Message{}, err
 	}
-	return Message{ID: id, Room: in.Room, From: in.From, To: in.To, Type: in.Type, Thread: threadID,
+	return Message{ID: id, Room: in.Room, From: in.From, FromKind: in.FromKind, To: in.To, Type: in.Type, Thread: threadID,
 		ReplyTo: in.ReplyTo, Turn: turn, MaxTurns: limit, Body: in.Body, CreatedAt: now}, nil
 }
 
-const msgSelect = `SELECT m.id, m.room, m.from_agent, m.to_agent, m.type, m.thread, m.reply_to,
+// msgSelect gönderenin türünü agents tablosundan alır (LEFT JOIN: kayıt yoksa
+// mesaj yine döner, from_kind boş olur). Tür gövdeden ya da istemciden gelmez.
+const msgSelect = `SELECT m.id, m.room, m.from_agent, COALESCE(a.kind, ''), m.to_agent, m.type, m.thread, m.reply_to,
 	m.turn, COALESCE(t.turn_limit, 0), m.body, m.created_at
-	FROM messages m LEFT JOIN threads t ON t.room = m.room AND t.id = m.thread `
+	FROM messages m LEFT JOIN threads t ON t.room = m.room AND t.id = m.thread
+	LEFT JOIN agents a ON a.name = m.from_agent `
 
 func scanMessages(rows *sql.Rows) ([]Message, error) {
 	defer rows.Close()
@@ -244,7 +247,7 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var rt sql.NullInt64
-		if err := rows.Scan(&m.ID, &m.Room, &m.From, &m.To, &m.Type, &m.Thread, &rt,
+		if err := rows.Scan(&m.ID, &m.Room, &m.From, &m.FromKind, &m.To, &m.Type, &m.Thread, &rt,
 			&m.Turn, &m.MaxTurns, &m.Body, &m.CreatedAt); err != nil {
 			return nil, err
 		}

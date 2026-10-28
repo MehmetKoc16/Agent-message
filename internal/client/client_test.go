@@ -112,7 +112,8 @@ func TestIstemciGonderVeBekle(t *testing.T) {
 		if r.code != 0 {
 			t.Fatalf("wait %d: %q %q", r.code, r.out, r.err)
 		}
-		want := `<relay-message id="1" from="ali" to="veli" type="soru" thread="T-1" turn="1/20" trust="untrusted">` +
+		// kind="ajan": çerçeve gönderenin sunucudaki hesap türünü taşır (#31); ali "ajan" hesabıdır.
+		want := `<relay-message id="1" from="ali" kind="ajan" to="veli" type="soru" thread="T-1" turn="1/20" trust="untrusted">` +
 			"\nAPI nasıl olsun?\n</relay-message>\n" + Reminder + "\n"
 		if r.out != want {
 			t.Fatalf("çıktı farklı:\n%q\nbeklenen:\n%q", r.out, want)
