@@ -120,8 +120,13 @@ Kurucu curl yoksa python3 ile aynı Unix soketinden HTTP sağlık kontrolü yapa
 `systemctl enable --now agent-relay.socket`, ardından servis enable/restart çalışır.
 10 saniyelik sağlık penceresinde 200 alınmazsa servis durdurulur, önceki ikili ve birim
 geri konur; soket birimi ve önceki etkin/aktif durumu da geri alınır. İlk kurulumda yeni birimler
-devre dışı bırakılıp kaldırılır. Geri alma komutlarının hatası ACİL uyarısıyla bildirilir;
-inceleme dosyaları korunur. Oluşmuş config, veri ve hesap korunur. systemd güvenlik
+devre dışı bırakılıp kaldırılır. Yükseltmede önceki sürüm yeniden başlatıldıktan sonra aynı
+10 saniyelik sağlık penceresiyle doğrulanır (`systemctl start` tek başına kanıt değildir).
+200 alınmazsa kurucu "geri alındı" demez; ACİL uyarısı verir ve sıfırdan farklı kodla çıkar:
+yeni ikili şemayı yükseltmiş olabilir, veritabanı göçü geri alınmaz ve relay çalışmıyor
+olabilir. Bu durumda "Güncelleme (yeni sürüm)" bölümündeki kurulum öncesi yedekten
+"Geri alma ve kaldırma" bölümündeki adımlarla dönülür. Geri alma komutlarının hatası da
+ACİL uyarısıyla bildirilir; inceleme dosyaları korunur. Oluşmuş config, veri ve hesap korunur. systemd güvenlik
 puanı gösterilir; puan tek başına kabul kararı değildir. Güncelleme relay restart'ı
 gerektirir; veri yedeği ve sahibin onayladığı kesinti penceresi gerekir. Caddy'ye dokunulmaz.
 
@@ -161,7 +166,12 @@ hatası (değişiklik başladıysa otomatik geri alma), **3** kısmi başarı: m
 sağlıklı, relay henüz hazır değil; eklenen blok ve yedek korunur. Yeniden eklemek yerine
 tanı koyun; aynı alanın tekrar eklenmesi reddedilir.
 Otomatik geri alma başarısızlığı ayrıca ACİL uyarısıyla belirtilir;
-sunucu sahibi hemen müdahale eder. Betikler aynı `flock` kilidini kullanır; başka
+sunucu sahibi hemen müdahale eder. Üç betik (`kurulum.sh`, `caddy-ekle.sh`, `kaldir.sh`)
+`--uygula` sırasında aynı `flock` kilidini kullanır: `/run/agent-relay-deploy/kilit`.
+Dizin yalnız root'un yazabildiği `/run` altında root 0700 oluşturulur; herkese yazılabilir
+`/run/lock` kullanılmaz. Dizin veya dosya sembolik bağlantıysa, dizin root 0700 değilse
+betik hiçbir şeye yazmadan durur; dosya kesilmeden (ekleme kipinde) açılır. Böyle bir hata
+görülürse sahibi `/run/agent-relay-deploy` içeriğini elle inceler. Başka
 operatörlerin Caddy düzenlemeleriyle çakışmamak için değişiklik penceresi yine gereklidir.
 
 ## 6. Doğrulama ve kabul
@@ -276,6 +286,11 @@ Bu sürüme geçmeden önce tutarlı SQLite yedeği alın (çalışırken yalnı
 kopyalamayın; WAL da vardır). Eski ikili v4 veritabanını açamaz. Eski sürüme dönüşte
 ikiliyle birlikte yükseltme öncesi yedeğin de geri yüklenmesi gerekir; yedek sonrası
 mesajlar bu dönüşte kaybolur. Kurucunun yalnız ikiliyi geri koyması bu göçü geri almaz.
+Yükseltme başarısız olur ve göç çoktan uygulanmışsa kurucu bunu önceki sürümün sağlık
+kontrolüyle fark eder ve "ACİL: önceki sürüm geri kondu ama ... sağlık 200 vermedi"
+uyarısıyla çıkar; servis yeniden deneme döngüsünde kalabilir. O zaman relay'i durdurun,
+sahibin onayıyla yükseltme öncesi yedeği geri yükleyin ("Geri alma ve kaldırma" ve
+"Günlük işletim ve yedek"), relay'i başlatıp yerel sağlığı doğrulayın.
 
 1. Sunucu sahibine değişikliği, commit aralığını ve kurulum penceresini bildirin; onay alın.
 2. Bölüm 1'deki gibi derleyin. Yeni ikiliyi, `SHA256SUMS`'u ve `deploy/`'u **yeni ve boş** bir
@@ -322,7 +337,12 @@ sağlığını sahibi tekrar doğrular. Relay DNS kaydı gerekiyorsa kullanıcı
 İkiliyi geri almak için relay'i durdurun, sahibin incelemesinden sonra
 `agent-relay.onceki` dosyasını root:root 0755 ile `agent-relay` üzerine kurun ve
 relay'i başlatıp yerel sağlığı doğrulayın. Veritabanı otomatik geri alınmaz; eski
-sürümle şema uyumunu kontrol edin. İlk başarısız kurulumda önceki ikili bulunmaz.
+sürümle şema uyumunu kontrol edin. Eski ikili yeni şemayı açamıyorsa (kurucunun ACİL
+uyarısı veya `journalctl -u agent-relay`): relay ve soketi durdurun, mevcut `relay.db`,
+`relay.db-wal` ve `relay.db-shm` dosyalarını silmeden ayrı bir yere taşıyın, yükseltme
+öncesi doğrulanmış yedeği `agentrelay:agentrelay` 0600 ile `/var/lib/agent-relay/relay.db`
+olarak koyun, soketi/relay'i başlatıp `/v1/health` 200 olduğunu doğrulayın. Yedekten
+sonraki mesajlar kaybolur; karar sahibindir. İlk başarısız kurulumda önceki ikili bulunmaz.
 
 ```bash
 sudo bash deploy/kaldir.sh
@@ -445,6 +465,9 @@ bash deploy/test/kuru_calisma_test.sh
 
 Test `--kok <dizin>` ile sahte Ubuntu/systemd/soket/RAM ve getent/ip stub'ları kullanır; root,
 systemd süreci veya ağ gerektirmez. Argüman hatası, manifest, grup/soket/RAM, DNS, Caddy tek site
-ve tekrar ekleme kontrollerini sınar; her çağrıda dosya ağacının içerik ve metadata
+ve tekrar ekleme kontrollerini; dağıtım kilidinin sembolik bağlantı/yanlış izin reddini,
+kesmeden açılmasını ve ikinci çağıranı engellemesini (geçici dizinde, gerçek `/run`
+kullanılmadan); `kurulum.sh` geri alma fonksiyonunun sahte `systemctl` ile önceki sürüm
+sağlıksızken ACİL verip başarı bildirmediğini sınar; her çağrıda dosya ağacının içerik ve metadata
 özetinin değişmediğini denetler. `--kok` ile `--uygula` kesinlikle yasaktır; üretimde
 bu bayrak kullanılmaz. Yerel test Linux'taki ayrıcalıklı uygulama akışını doğrulamaz.
