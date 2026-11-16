@@ -672,3 +672,116 @@ test("okunmamış özeti günlükten önce gelse de çizgi satırlar gelince kon
   h.inspect.addMessages([1, 2].map((id) => ({id, thread: "T-1", room: "r1", from: "other", type: "bilgi", body: "m" + id, created_at: "2026-10-27T00:00:00Z"})), h.session);
   assert.equal(h.el("mesajlar").children.findIndex((n) => n.className === "yeni-ayirac"), 1);
 });
+
+const flush = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
+const ok = (data) => ({ok: true, status: 200, json: async () => data});
+const forbidden = () => ({ok: false, status: 403, json: async () => ({error: "yasak"})});
+
+test("okunmamış konuşmaya bakarken odadan çıkarılınca okundu isteği iptal edilmiş sinyalle yinelenmez", async (t) => {
+  let reads = 0, wake, roomsReply;
+  const untilAbort = (signal) => new Promise((_, reject) => {
+    const fail = () => reject(new Error("AbortError"));
+    if (signal.aborted) fail(); else signal.addEventListener("abort", fail, {once: true});
+  });
+  const h = await harness(async (path, options) => {
+    // Kesici: hatalı sürüm mikrogörev zincirinde sonsuza dek dener; test asılı kalmasın.
+    if (path.endsWith("/read") && ++reads > 200) return new Promise(() => {});
+    if (options.signal.aborted) throw new Error("AbortError"); // gerçek fetch iptal edilmiş sinyalde hemen reddeder
+    if (path === "/v1/rooms") return new Promise((resolve) => { roomsReply = resolve; });
+    if (path === "/v1/unread") return ok({threads: [{room: "r1", thread: "T-1", title: "x", total: 1, last_id: 1, last_incoming_id: 1, read_id: 0, unread: 1}]});
+    if (path.endsWith("/read")) return untilAbort(options.signal); // okundu isteği yolda
+    if (path === "/v1/rooms/r1/log?tail=1") return ok({messages: [{id: 1, thread: "T-1", room: "r1", from: "other", type: "bilgi", body: "m", created_at: "2026-10-25T00:00:00Z"}], has_more: false});
+    if (path.startsWith("/v1/rooms/r1/log?after=")) { await new Promise((r) => { wake = r; }); return forbidden(); }
+    if (path.endsWith("/agents")) return ok({agents: []});
+    if (path === "/v1/rooms/r2/log?tail=1") return ok({messages: [], has_more: false});
+    return new Promise(() => {});
+  });
+  t.after(() => h.inspect.stop());
+  h.el("izleme").hidden = false;
+  h.session.rooms = [{name: "r1", title: "Bir"}, {name: "r2", title: "İki"}];
+  h.el("oda").value = "r1"; h.el("oda").listeners.get("change")();
+  await flush();
+  await h.inspect.refreshUnread(h.session);
+  h.inspect.showFilter("T-1");
+  await flush();
+  assert.equal(reads, 1, "one read request must be in flight");
+  wake(); // uzun yoklama 403 döner: odadan çıkarıldık, oda listesi yanıtı henüz gelmedi
+  await flush();
+  assert.equal(reads, 1, "the read request was retried on an aborted room signal");
+  h.inspect.markSelectedRead();
+  await flush();
+  assert.equal(reads, 1, "a dead room still sent read requests");
+  roomsReply(ok({rooms: [{name: "r2", title: "İki"}]}));
+  await flush();
+  assert.equal(h.session.room, "r2");
+  assert.equal(reads, 1);
+});
+
+test("403 sonrası oda listesi alınamazsa oturum ölü odada kalmaz; geri çekilerek yeniden denenir", async (t) => {
+  const timers = [];
+  let roomCalls = 0;
+  const h = await harness(async (path) => {
+    if (path === "/v1/rooms") {
+      if (++roomCalls === 1) throw new Error("ağ");
+      if (roomCalls === 2) return {ok: false, status: 429, json: async () => ({error: "hiz_siniri"})};
+      return ok({rooms: [{name: "r2", title: "İki"}]});
+    }
+    if (path.startsWith("/v1/rooms/r1/")) return forbidden();
+    if (path === "/v1/rooms/r2/log?tail=1") return ok({messages: [], has_more: false});
+    return new Promise(() => {});
+  }, 1440, {setTimeout: (fn, ms) => { timers.push({fn, ms}); return timers.length; }, clearTimeout() {}});
+  t.after(() => h.inspect.stop());
+  const fire = (ms) => { for (const timer of timers.splice(0)) if (timer.ms === ms) timer.fn(); };
+  h.session.rooms = [{name: "r1", title: "Bir"}, {name: "r2", title: "İki"}];
+  h.el("oda").value = "r1"; h.el("oda").listeners.get("change")();
+  await flush();
+  assert.equal(roomCalls, 1);
+  assert.match(h.el("durum").textContent, /^Bir odasına erişimin kalmadı; oda listesi yenilenemedi/);
+  fire(2000); await flush();
+  assert.equal(roomCalls, 2, "the failed room list was never retried");
+  fire(4000); await flush();
+  assert.equal(roomCalls, 3);
+  assert.equal(h.session.room, "r2");
+  assert.equal(h.session.roomController.signal.aborted, false);
+  assert.equal(h.el("izleme").hidden, false);
+  fire(8000); await flush();
+  assert.equal(roomCalls, 3, "the retry kept running after it succeeded");
+});
+
+test("önceki mesajlar boş sayfa dönerse canlı görünüm sürer; yeni mesajlar eklenmeye devam eder", async (t) => {
+  let poll, page, tails = 0;
+  const message = (id) => ({id, thread: "T-1", room: "r1", from: "other", type: "bilgi", body: "m" + id, created_at: "2026-10-27T00:00:00Z"});
+  const h = await harness(async (path) => {
+    // Tam dolu sayfada has_more true gelir; önceki sayfa yine de boş olabilir.
+    if (path === "/v1/rooms/r1/log?tail=1") { tails++; return ok({messages: [message(1)], has_more: true}); }
+    if (path.startsWith("/v1/rooms/r1/log?after=")) return new Promise((resolve) => { poll = resolve; });
+    if (path === "/v1/rooms/r1/log?before=1") return page ? new Promise((resolve) => { page = resolve; }) : ok({messages: [], has_more: false});
+    if (path.endsWith("/agents")) return ok({agents: []});
+    return new Promise(() => {});
+  });
+  t.after(() => h.inspect.stop());
+  h.session.rooms = [{name: "r1", title: "Bir"}];
+  h.el("oda").value = "r1"; h.el("oda").listeners.get("change")();
+  await flush();
+  assert.equal(h.el("gecmis").hidden, false);
+  await h.el("gecmis").listeners.get("click")();
+  assert.equal(h.session.history.browsing, false, "an empty page left the view in history mode");
+  assert.equal(h.el("guncel").hidden, true);
+  assert.equal(h.el("gecmis").hidden, true);
+  assert.equal(h.el("gecmis").disabled, false);
+  poll(ok({messages: [message(2)]}));
+  await flush();
+  assert.equal(h.el("mesajlar").children.length, 2, "a live message was dropped after an empty history page");
+
+  // Boş sayfa beklenirken düşen canlı mesaj kaybolmaz: oda güncel pencereyle yeniden açılır.
+  h.el("gecmis").hidden = false; h.session.history.hasMore = true; page = true;
+  const loading = h.el("gecmis").listeners.get("click")();
+  await flush();
+  poll(ok({messages: [message(3)]}));
+  await flush();
+  assert.equal(h.el("mesajlar").children.length, 2);
+  page(ok({messages: [], has_more: false}));
+  await loading; await flush();
+  assert.equal(tails, 2, "the room was not reloaded after a live message was skipped");
+  assert.equal(h.session.history.browsing, false);
+});

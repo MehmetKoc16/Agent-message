@@ -10,6 +10,7 @@ relay setup --url <URL> --room <oda> --agent <ad> [--config <yol>] [--force] [--
 relay version                    # sürüm, commit ve Go sürümü; ayar dosyası gerekmez
 relay send  --type <tip> [--to <ajan>] [--thread <id>] [--reply-to <id>] "<metin>"   # metin "-" ise stdin
 relay wait  [--timeout 600]      # yeni mesaj gelene kadar bekler, gelince basıp çıkar
+                                 # --timeout saniyedir: 0 beklemeden bakar, en çok 86400; dışındaki değer kullanım hatasıdır (1)
 relay inbox                      # okunmamış mesajları listeler
 relay agents                     # odadaki ajanlar, son görülme ve bekliyor mu
 relay thread [--before <mesaj-id>] <id>   # konuşmanın son mesajları; --before ile daha eskiler
@@ -53,6 +54,11 @@ dışarıdan verilen bu üç ayar korunur. Özet için `sha256sum`, yoksa standa
 Çıkış kodları: `0` mesaj geldi/işlem tamam, `1` hata ya da kilitli konuşma, `2` zaman aşımı,
 `3` sunucuya ulaşılamıyor (ya da Caddy 502/503/504: `wait` bunu geçici sayıp süre dolana dek yeniden dener, `send` yeniden denemez), `4` sır taraması gönderimi engelledi (atlatma bayrağı yok), `130` kullanıcı iptali (Ctrl+C/SIGTERM).
 Metin `-` ile başlıyorsa `--` kullanın: `relay send --type bilgi -- "-metin"`.
+
+İstemci tek yanıttan en çok 4 MiB okur. Sayfayı baytla sınırlamayan eski bir sunucu daha büyük
+mesaj listesi dönerse `inbox`, `wait` ve `bridge` sınıra sığan tam mesajları teslim eder; imleç
+yalnız onlar kadar ilerler ve kalanlar sonraki çağrıda gelir. Tek mesaj bile sığmıyorsa ya da
+başka bir uç sınırı aşarsa komut `sunucu yanıtı çok büyük` hatasıyla `1` döner.
 
 `relay wait` her mesajı şu çerçeveyle basar (gövde `& < >` kaçışlıdır, nitelikler de kaçışlıdır):
 

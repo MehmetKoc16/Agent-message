@@ -32,6 +32,9 @@ var (
 	maxStdin    = int64(1 << 20)
 )
 
+// maxWaitTimeout wait --timeout üst sınırıdır (sn): süre hesabı taşmaz.
+const maxWaitTimeout = 86400
+
 // Env komutun dış dünyasıdır.
 type Env struct {
 	Stdin          io.Reader
@@ -45,7 +48,7 @@ const usage = `kullanım: relay [--config <json>] <komut>
   version                   sürüm, commit ve Go sürümü
   doctor [--timeout 10s]     sır göstermeden bağlantı ve ayar teşhisi
   send --type <tip> [--to <ajan>] [--thread <T-n>] [--reply-to <id>] <metin|->
-  wait [--timeout 600]      yeni mesaj gelene kadar bekler
+  wait [--timeout 600]      yeni mesaj gelene kadar bekler (sn; 0: beklemeden bak, en çok 86400)
   inbox                     okunmamış mesajları basar
   announce [--room-title <başlık>|--room <kimlik>] [--new-topic] <metin|->
                             varsayılan: Update Messages ortak duyurusu
@@ -267,14 +270,18 @@ func (r *runner) fetchFail(err error) int {
 }
 
 func (r *runner) cmdWait(ctx context.Context, fs *flag.FlagSet, args []string) int {
-	timeout := fs.Float64("timeout", 600, "en fazla bekleme (sn); <=0: tek beklemesiz istek")
+	timeout := fs.Float64("timeout", 600, "en fazla bekleme (sn, en çok 86400); 0: tek beklemesiz istek")
 	if _, err := flagx.Parse(fs, args); err != nil {
 		return ExitError
+	}
+	// NaN hiçbir karşılaştırmayı sağlamaz; aralık olumlu koşulla denetlenir.
+	if !(*timeout >= 0 && *timeout <= maxWaitTimeout) {
+		return r.fail(ExitError, "kullanım: relay wait [--timeout <sn>] (0 ile %d arası)", maxWaitTimeout)
 	}
 	if _, err := r.cur.Read(); err != nil { // bozuk imleç ağdan önce yakalanır
 		return r.fail(ExitError, "hata: %v", err)
 	}
-	if *timeout <= 0 {
+	if *timeout == 0 {
 		msgs, err := r.fetchOnce(ctx, 0)
 		if err != nil {
 			return r.fetchFail(err)
@@ -285,7 +292,7 @@ func (r *runner) cmdWait(ctx context.Context, fs *flag.FlagSet, args []string) i
 		return r.fail(ExitTimeout, "zaman aşımı: yeni mesaj yok")
 	}
 	deadline := time.Now().Add(time.Duration(*timeout * float64(time.Second)))
-	lastOK := false
+	unreachable := false // son istek geçici hatayla bitti; hiç istek yapılamadıysa kesinti sayılmaz
 	for ctx.Err() == nil {
 		left := time.Until(deadline)
 		if left <= 0 {
@@ -294,7 +301,7 @@ func (r *runner) cmdWait(ctx context.Context, fs *flag.FlagSet, args []string) i
 		wait := max(1, min(pollSeconds, int(left/time.Second)))
 		msgs, err := r.fetchOnce(ctx, wait)
 		if err == nil {
-			lastOK = true
+			unreachable = false
 			if len(msgs) > 0 {
 				return r.show(msgs)
 			}
@@ -306,7 +313,7 @@ func (r *runner) cmdWait(ctx context.Context, fs *flag.FlagSet, args []string) i
 		if !isTransient(err) {
 			return r.fetchFail(err) // 401, 403, bozuk imleç...: yeniden denemenin anlamı yok
 		}
-		lastOK = false
+		unreachable = true
 		select {
 		case <-time.After(min(retryDelay, max(0, time.Until(deadline)))):
 		case <-ctx.Done():
@@ -315,7 +322,7 @@ func (r *runner) cmdWait(ctx context.Context, fs *flag.FlagSet, args []string) i
 	if ctx.Err() != nil {
 		return r.fail(ExitCanceled, "iptal edildi")
 	}
-	if !lastOK {
+	if unreachable {
 		return r.fail(ExitUnreachable, "sunucuya ulaşılamadı")
 	}
 	return r.fail(ExitTimeout, "zaman aşımı: yeni mesaj yok")

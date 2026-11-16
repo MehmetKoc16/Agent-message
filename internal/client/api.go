@@ -22,6 +22,13 @@ var ErrUnreachable = errors.New("sunucuya ulaşılamadı")
 // (ör. yeniden başlıyor). wait bunu ulaşılamama gibi geçici sayıp yeniden dener.
 var ErrUnavailable = errors.New("sunucu geçici olarak yanıt vermiyor")
 
+// ErrTooLarge sunucu yanıtı maxResponse sınırını aştı. Kesilmiş gövde ayrıştırılmaz;
+// "geçersiz yanıt"tan ayrı bildirilir.
+var ErrTooLarge = errors.New("sunucu yanıtı çok büyük (4 MiB sınırı)")
+
+// maxResponse tek yanıttan okunan en çok bayttır.
+const maxResponse = 4 << 20
+
 // ErrCanceled kullanıcı iptali (Ctrl+C / context iptali).
 var ErrCanceled = errors.New("iptal edildi")
 
@@ -59,19 +66,35 @@ func newAPI(c *Config) *api {
 }
 
 func (a *api) do(parent context.Context, method, path string, payload, out any, timeout time.Duration) error {
+	data, err := a.call(parent, method, path, payload, timeout)
+	if err != nil || out == nil {
+		return err
+	}
+	if len(data) > maxResponse {
+		return ErrTooLarge
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return &APIError{Status: http.StatusOK, Code: "gecersiz_yanit"}
+	}
+	return nil
+}
+
+// call isteği yapar ve başarılı yanıtın gövdesini döndürür. Gövde maxResponse'tan uzunsa
+// sınır+1 bayt döner: çağıran kesilmeyi uzunluktan anlar.
+func (a *api) call(parent context.Context, method, path string, payload any, timeout time.Duration) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	var body io.Reader
 	if payload != nil {
 		b, err := json.Marshal(payload)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		body = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, a.base+path, body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+a.token)
 	if payload != nil {
@@ -80,35 +103,30 @@ func (a *api) do(parent context.Context, method, path string, payload, out any, 
 	resp, err := a.hc.Do(req)
 	if err != nil {
 		if parent.Err() != nil {
-			return ErrCanceled
+			return nil, ErrCanceled
 		}
-		return ErrUnreachable
+		return nil, ErrUnreachable
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
 	if err != nil {
 		if parent.Err() != nil {
-			return ErrCanceled
+			return nil, ErrCanceled
 		}
-		return ErrUnreachable
+		return nil, ErrUnreachable
 	}
 	switch resp.StatusCode {
 	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return ErrUnavailable
+		return nil, ErrUnavailable
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		var e struct {
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(data, &e)
-		return &APIError{Status: resp.StatusCode, Code: e.Error}
+		return nil, &APIError{Status: resp.StatusCode, Code: e.Error}
 	}
-	if out != nil {
-		if err := json.Unmarshal(data, out); err != nil {
-			return &APIError{Status: resp.StatusCode, Code: "gecersiz_yanit"}
-		}
-	}
-	return nil
+	return data, nil
 }
 
 type sendInput struct {
@@ -127,12 +145,63 @@ func (a *api) send(ctx context.Context, in sendInput) (proto.Message, error) {
 }
 
 func (a *api) fetch(ctx context.Context, after int64, wait int) ([]proto.Message, error) {
+	p := fmt.Sprintf("/v1/rooms/%s/messages?after=%d&wait=%d", url.PathEscape(a.room), after, wait)
+	data, err := a.call(ctx, http.MethodGet, p, nil, time.Duration(wait+10)*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxResponse {
+		// Sayfayı baytla sınırlamayan sunucu: hata verip imleci aynı yanıta kilitlemek yerine
+		// sığan tam mesajlar teslim edilir; imleç onlarla ilerler, kalanı sonraki çağrı alır.
+		msgs := partialMessages(data[:maxResponse])
+		if len(msgs) == 0 {
+			return nil, ErrTooLarge
+		}
+		return msgs, nil
+	}
 	var r struct {
 		Messages []proto.Message `json:"messages"`
 	}
-	p := fmt.Sprintf("/v1/rooms/%s/messages?after=%d&wait=%d", url.PathEscape(a.room), after, wait)
-	err := a.do(ctx, http.MethodGet, p, nil, &r, time.Duration(wait+10)*time.Second)
-	return r.Messages, err
+	if err := json.Unmarshal(data, &r); err != nil {
+		return nil, &APIError{Status: http.StatusOK, Code: "gecersiz_yanit"}
+	}
+	return r.Messages, nil
+}
+
+// partialMessages kesilmiş bir {"messages":[...]} gövdesinden yalnız tam ayrıştırılan baştaki
+// mesajları döndürür; yarım kalan son öğe alınmaz. id artmıyorsa orada durur: imleç en büyük
+// id'ye ilerlediği için sırasız bir kalan, teslim edilmeden atlanırdı.
+func partialMessages(data []byte) []proto.Message {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return nil
+	}
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return nil
+		}
+		if key != "messages" {
+			var skip json.RawMessage
+			if dec.Decode(&skip) != nil {
+				return nil
+			}
+			continue
+		}
+		if t, err := dec.Token(); err != nil || t != json.Delim('[') {
+			return nil
+		}
+		var msgs []proto.Message
+		for dec.More() {
+			var m proto.Message
+			if dec.Decode(&m) != nil || (len(msgs) > 0 && m.ID <= msgs[len(msgs)-1].ID) {
+				break
+			}
+			msgs = append(msgs, m)
+		}
+		return msgs
+	}
+	return nil
 }
 
 type threadView struct {

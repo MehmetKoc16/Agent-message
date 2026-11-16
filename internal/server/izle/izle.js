@@ -308,17 +308,29 @@
   function roomPath(session) { return "/v1/rooms/" + encodeURIComponent(session.room); }
   // Bir odadan çıkarılmak oturumu kapatmaz; yalnız 401 çıkış yaptırır. Oda listesi
   // yenilenir. Liste aynı odayı yeniden açtırırsa döngüye girmeden çıkış yapılır.
+  // Liste alınamazsa oturum iptal edilmiş oda sinyaliyle kalmasın diye geri çekilerek denenir.
   function roomForbidden(session) {
     const room = session.room;
     if (active !== session || session.roomsReloading) return;
     if (session.forbiddenRoom === room) { logout("Bu odaya erişimin yok."); return; }
     const title = session.rooms?.find((r) => r.name === room)?.title || room;
     session.roomsReloading = true; session.forbiddenRoom = room; session.roomController?.abort();
-    reloadRooms(session).then(() => {
-      if (active === session && session.room) el("gonderim-durum").textContent = title + " odasına erişimin kalmadı; oda listesi yenilendi.";
-    }).catch(() => {
-      if (active === session) status.textContent = title + " odasına erişimin kalmadı; oda listesi yenilenemedi.";
-    }).finally(() => { session.roomsReloading = false; });
+    // Çıkış yapıldıysa ya da kullanıcı başka odaya geçtiyse yeniden denenmez.
+    const stuck = () => active === session && session.room === room && session.roomController.signal.aborted;
+    (async () => {
+      for (let backoff = 2; ; backoff = Math.min(60, backoff * 2)) {
+        try {
+          await reloadRooms(session);
+          if (active === session && session.room) el("gonderim-durum").textContent = title + " odasına erişimin kalmadı; oda listesi yenilendi.";
+          return;
+        } catch (_) {
+          if (!stuck()) return;
+          status.textContent = title + " odasına erişimin kalmadı; oda listesi yenilenemedi. " + backoff + " saniye sonra yeniden denenecek.";
+          await pause(backoff * 1000, session.controller.signal);
+          if (!stuck()) return;
+        }
+      }
+    })().catch(() => {}).finally(() => { session.roomsReloading = false; });
   }
   async function request(session, suffix, signal) {
     let backoff = 2;
@@ -356,7 +368,7 @@
       const data = await request(session, "/log?after=" + after + "&wait=25", signal);
       if (signal.aborted) return;
       if (!history.browsing) addMessages(data.messages, session);
-      else if (data.messages.length) { el("yeni").textContent = "↓ Güncel mesajlara dön"; el("yeni").hidden = false; }
+      else if (data.messages.length) { history.missed = true; el("yeni").textContent = "↓ Güncel mesajlara dön"; el("yeni").hidden = false; }
       for (const m of data.messages) after = Math.max(after, m.id);
     }
   }
@@ -367,12 +379,17 @@
     const signal = session.roomController.signal;
     el("gecmis").disabled = true;
     // Canlı döngü yükleme sırasında sayfa imlecini değiştirmesin.
+    const browsing = history.browsing;
+    let moved = false;
     history.browsing = true; el("guncel").hidden = false;
     try {
       const data = await request(session, (filter ? "/threads/" + encodeURIComponent(filter) : "") + "/log?before=" + history.oldest, signal);
       if (signal.aborted) return;
       history.hasMore = data.has_more;
-      if (data.messages.length) {
+      // Tam dolu son sayfada has_more true gelir; önceki sayfa boşsa daha eski mesaj yoktur.
+      if (!data.messages.length) history.hasMore = false;
+      else {
+        moved = true;
         const thread = filter;
         clearMessages(); threads.clear();
         el("konusma-listesi").replaceChildren(); history.scope = thread; showFilter(thread);
@@ -381,7 +398,15 @@
       }
       el("gecmis").hidden = !history.hasMore;
     } catch (_) { /* Oda değişimi ve çıkış bekleyen sayfayı iptal eder. */ }
-    finally { if (!signal.aborted) el("gecmis").disabled = false; }
+    finally {
+      if (!signal.aborted) {
+        el("gecmis").disabled = false;
+        // Sayfa değişmediyse görünüm eski kipine döner; canlı mesajlar eklenmeye devam eder.
+        if (!moved) { history.browsing = browsing; el("guncel").hidden = !browsing; }
+        // Yükleme sırasında atlanan canlı mesaj varsa güncel pencere yeniden alınır.
+        if (!moved && !browsing && history.missed && active === session) openRoom(session, session.room, true);
+      }
+    }
   });
   function readKey(session, thread) { return session.room + "/" + thread; }
   // Özet alındıktan sonra gelen başkasının mesajı okunmamış sayısına eklenir.
@@ -468,6 +493,8 @@
   function markSelectedRead() {
     const session = active;
     if (!session?.unreadSummaries || view.hidden || document.visibilityState === "hidden") return;
+    // Oda sinyali iptal edildiyse (odadan çıkarılma) yeni oda açılana dek okundu yazılmaz.
+    if (session.roomController?.signal.aborted) return;
     const seen = new Map();
     for (const row of rows) {
       if (row.element.hidden || (row.thread !== filter && !onScreen.has(row.element))) continue;
@@ -480,8 +507,8 @@
     const summary = session.unreadSummaries.get(key);
     const read = Math.max(summary?.read_id || 0, session.localReads?.get(key) || 0);
     session.readPending ||= new Set();
-    if (id <= read || session.readPending.has(key)) return;
     const room = session.room, signal = session.roomController.signal;
+    if (id <= read || session.readPending.has(key) || signal.aborted) return;
     session.readPending.add(key);
     try {
       const {response} = await api(session, "/v1/rooms/" + encodeURIComponent(room) + "/threads/" + encodeURIComponent(thread) + "/read", signal, {
@@ -494,7 +521,10 @@
     } catch (_) { /* Preserve unread status if the server did not acknowledge. */ }
     finally {
       session.readPending.delete(key);
-      if (signal.aborted && active === session) markSelectedRead();
+      // Oda değiştiyse yeni odanın sinyaliyle yeniden denenir. Aynı iptal edilmiş sinyalle
+      // denemek, anında reddedilen isteği mikrogörev zincirinde sonsuza dek yinelerdi.
+      const current = session.roomController.signal;
+      if (signal.aborted && active === session && current !== signal && !current.aborted) markSelectedRead();
       // If a newer message arrived during the write, acknowledge it only if it is seen too.
       if (!signal.aborted && active === session && session.localReads?.get(key) >= id &&
           rows.some((row) => row.thread === thread && row.message.id > id)) markSelectedRead();
