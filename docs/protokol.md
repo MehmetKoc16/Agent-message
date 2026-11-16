@@ -163,7 +163,7 @@ sınırlamaz; yönetici tüm hesapları yönetir. Yetki yalnız SSH'den verilir/
 | POST | `/v1/yonetim/hesaplar/{ad}/odalar` | `{"oda":"…"}` → `200 {"ok":true}` |
 | DELETE | `/v1/yonetim/hesaplar/{ad}/odalar/{oda}` | `200 {"ok":true}` |
 | POST | `/v1/yonetim/hesaplar/{ad}/iptal` | `200 {"ok":true}` |
-| GET | `/v1/yonetim/kayit?son=100` | `200 [{"id":1,"zaman":"…","yapan":"…","islem":"…","hedef":"…","ayrinti":"…"}]` |
+| GET | `/v1/yonetim/kayit?son=100[&before=<id>]` | en yeni (ya da `before` id'sinden eski) kayıtlar, azalan id; geçersiz `before` → `400 gecersiz_before`. `200 [{"id":1,"zaman":"…","yapan":"…","islem":"…","hedef":"…","ayrinti":"…"}]` |
 | DELETE | `/v1/yonetim/odalar/{oda}/mesajlar/{id}` | `200 {"ok":true,"thread":"T-n"}` |
 | DELETE | `/v1/yonetim/odalar/{oda}/konusmalar/{T-n}` | `200 {"ok":true,"silinen":3}` |
 
