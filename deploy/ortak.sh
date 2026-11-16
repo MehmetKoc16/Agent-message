@@ -193,9 +193,29 @@ saglik_bekle() {
     return 1
 }
 
+# Kilit herkese yazılabilir /run/lock yerine yalnız root'un yazabildiği /run
+# altında, root:0700 özel dizinde tutulur: başka hesap adı önceden dosya veya
+# sembolik bağlantı olarak oluşturup geri almayı engelleyemez/dosya sıfırlatamaz.
+kilit_dizin=/run/agent-relay-deploy
 kilit_al() {
+    # Bütün değişiklik betikleri aynı kilidi tutar; kuru çalışma çağırmaz.
+    # Argümanlar yalnız test içindir; betikler argümansız çağırır.
+    local dizin=${1:-$kilit_dizin} sahip=${2:-0} dosya
     komut_iste flock
-    # Bütün değişiklik betikleri aynı kilidi tutar; kuru çalışma dosya açmaz.
-    exec 9>/run/lock/agent-relay-deploy.lock
+    komut_iste stat
+    [[ $dizin == /* ]] || hata 'kilit dizini mutlak yol olmalı'
+    dosya="$dizin/kilit"
+    [[ ! -L $dizin ]] || hata 'kilit dizini sembolik bağlantı; elle inceleyin'
+    if [[ ! -e $dizin ]]; then
+        # mkdir mevcut adı izlemez/ezmez; eşzamanlı oluşturma aşağıda doğrulanır.
+        mkdir -m 0700 -- "$dizin" 2>/dev/null || [[ -d $dizin ]] || hata 'kilit dizini oluşturulamadı'
+    fi
+    [[ -d $dizin && ! -L $dizin ]] || hata 'kilit dizini dizin değil; elle inceleyin'
+    [[ $(stat -c '%u:%a' -- "$dizin") == "$sahip:700" ]] || hata 'kilit dizini root:0700 değil; elle inceleyin'
+    [[ ! -L $dosya ]] || hata 'kilit dosyası sembolik bağlantı; elle inceleyin'
+    if [[ -e $dosya && ! -f $dosya ]]; then hata 'kilit dosyası normal dosya değil; elle inceleyin'; fi
+    # Ekleme kipi: mevcut içerik hiçbir koşulda kesilmez.
+    exec 9>>"$dosya" || hata 'kilit dosyası açılamadı'
+    [[ ! -L $dosya && -f $dosya && $(stat -c '%u:%h' -- "$dosya") == "$sahip:1" ]] || hata 'kilit dosyası değişti/geçersiz; elle inceleyin'
     flock -n 9 || hata 'başka bir relay değişikliği devam ediyor'
 }

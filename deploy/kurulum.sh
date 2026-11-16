@@ -60,7 +60,7 @@ printf '%s\n' 'Plan: SHA-256, Ubuntu/systemd, caddy grubu/soket ve en az 300 MiB
     '3. config yoksa root:agentrelay 0640 oluştur; mevcut config içeriğine dokunma.' \
     '4. Soket ve servis birimlerini kur; yerel drop-in şartını kontrol et; systemd-analyze verify çalıştır.' \
     '5. daemon-reload; enable --now; 10 sn içinde HTTP 200 bekle.' \
-    '6. Hata halinde servis/soketi durdur; ikili/iki birim ve önceki aktif soketi geri al.' \
+    '6. Hata halinde servis/soketi durdur; ikili/iki birim ve önceki aktif soketi geri al; önceki sürümün sağlığını doğrula (veritabanı göçü geri alınmaz).' \
     '7. systemd-analyze security agent-relay puanını göster. Caddyfile değiştirilmez.'
 printf '%s\n' 'Soket: /run/agent-relay/relay.sock; TCP dinleyicisi yok.'
 sonraki() {
@@ -115,7 +115,7 @@ islem=$(mktemp -d /opt/agent-relay/.kurulum.XXXXXX)
 chmod 0700 "$islem"
 geri_don() {
     trap - ERR INT TERM
-    local sorun=0
+    local sorun=0 eski_sagliksiz=0
     if (( degisti )); then
         if ! systemctl stop agent-relay; then
             if systemctl is-active --quiet agent-relay; then
@@ -145,14 +145,33 @@ geri_don() {
         systemctl daemon-reload || sorun=1
         if (( soket_aktif )); then systemctl start agent-relay.socket || sorun=1; fi
         # Yükseltmede önceki sürüm çalışıyorduysa onu geri ayağa kaldır.
-        if (( onceki_aktif && eski && birim_eski )); then systemctl start agent-relay || sorun=1; fi
+        if (( onceki_aktif && eski && birim_eski )); then
+            # Type=simple: start hemen başarı döner. Yeni ikili şemayı göç
+            # ettirdiyse eski ikili açılışta çıkar; gerçek sağlığı bekle.
+            # if içinde çağrılır: başarısızlık set -e ile betiği öldürmez.
+            if systemctl start agent-relay; then
+                if ! soket_saglik_bekle; then eski_sagliksiz=1; fi
+            else
+                sorun=1
+            fi
+        fi
+    fi
+    if (( eski_sagliksiz )); then
+        printf '%s\n' 'ACİL: önceki sürüm geri kondu ama 10 sn içinde sağlık 200 vermedi; relay ÇALIŞMIYOR olabilir.' \
+            'Yeni ikili veritabanı şemasını yükseltmiş olabilir; veritabanı göçü GERİ ALINMADI ve eski ikili yeni şemayı açamaz.' \
+            'Kurulum öncesi alınan tutarlı yedekten dönülmeli: docs/kurulum.md "Güncelleme (yeni sürüm)" ve "Geri alma ve kaldırma" bölümleri.' \
+            'Servis durdurulmadı (yeniden deneme döngüsünde olabilir); inceleyin: systemctl status agent-relay; journalctl -u agent-relay -n 50' >&2
     fi
     if (( sorun )); then
         printf 'ACİL: geri alma tam değil; sunucu sahibi incelemeli. İnceleme dizini: %s\n' "$islem" >&2
         exit 1
     fi
+    if (( eski_sagliksiz )); then
+        printf 'İnceleme dizini korundu: %s\n' "$islem" >&2
+        exit 1
+    fi
     rm -rf -- "$islem"
-    printf '%s\n' 'hata: kurulum geri alındı (önceki sürüm çalışıyorsa yeniden başlatıldı, yoksa relay kapalı). Veri/config ve yerel drop-in korundu; elle inceleyin.' >&2
+    printf '%s\n' 'hata: kurulum geri alındı (önceki sürüm çalışıyorduysa yeniden başlatıldı ve sağlık 200 doğrulandı, yoksa relay kapalı). Veri/config ve yerel drop-in korundu; elle inceleyin.' >&2
     exit 1
 }
 trap geri_don ERR INT TERM
