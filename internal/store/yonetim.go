@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 )
 
 var ErrYoneticiProtected = errors.New("yoneticiye_dokunulamaz")
@@ -77,6 +78,12 @@ func (s *Store) ChangeAccount(ctx context.Context, yapan, islem, ad, oda, secret
 	}
 	if err != nil {
 		return err
+	}
+	if islem == "yonetici-yap" || islem == "yonetici-al" {
+		// Deneme sayacı/kilidi eski sırra aittir; yeni sırla (ya da yetkisiz) sürmez.
+		if _, err = tx.ExecContext(ctx, `DELETE FROM yonetim_failures WHERE agent=?`, ad); err != nil {
+			return err
+		}
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO yonetim_kayit(zaman,yapan,islem,hedef,ayrinti) VALUES (?,?,?,?,?)`, s.stamp(), yapan, islem, ad, oda); err != nil {
 		return err
@@ -190,11 +197,73 @@ func (s *Store) AddKayit(ctx context.Context, yapan, islem, hedef, ayrinti strin
 	_, err := s.db.ExecContext(ctx, `INSERT INTO yonetim_kayit(zaman,yapan,islem,hedef,ayrinti) VALUES (?,?,?,?,?)`, s.stamp(), yapan, islem, hedef, ayrinti)
 	return err
 }
+
+// okumaIslemleri veri değiştirmeyen, tekrarı tek satırda toplanan işlemlerdir.
+var okumaIslemleri = []string{"hesaplar_listelendi", "kayit_listelendi"}
+
+// AddOkumaKayit listeleme kaydını yazar. Hesabın son gerçek işleminden (okuma
+// olmayan satır) beri aynı listeleme zaten kayıtlıysa yeni satır eklemez, yalnız
+// zamanını günceller: hız sınırı olmayan GET'ler asıl işlemleri kayıttan itemez.
+func (s *Store) AddOkumaKayit(ctx context.Context, yapan, islem string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Gerçek işlemden sonra her okuma türünden en çok bir satır olur; o kadarına bakmak yeter.
+	rows, err := tx.QueryContext(ctx, `SELECT id,islem FROM yonetim_kayit WHERE yapan=? ORDER BY id DESC LIMIT ?`, yapan, len(okumaIslemleri))
+	if err != nil {
+		return err
+	}
+	var hit int64
+	for done := false; rows.Next(); {
+		var id int64
+		var prior string
+		if err := rows.Scan(&id, &prior); err != nil {
+			rows.Close()
+			return err
+		}
+		if done {
+			continue
+		}
+		if prior == islem {
+			hit, done = id, true
+		} else if !slices.Contains(okumaIslemleri, prior) {
+			done = true
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if hit != 0 {
+		_, err = tx.ExecContext(ctx, `UPDATE yonetim_kayit SET zaman=? WHERE id=?`, s.stamp(), hit)
+	} else {
+		_, err = tx.ExecContext(ctx, `INSERT INTO yonetim_kayit(zaman,yapan,islem,hedef,ayrinti) VALUES (?,?,?,'','')`, s.stamp(), yapan, islem)
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ListKayit en yeni kayıtları azalan id sırasıyla verir.
 func (s *Store) ListKayit(ctx context.Context, limit int) ([]Kayit, error) {
+	return s.ListKayitPage(ctx, 0, limit)
+}
+
+// ListKayitPage before'dan (id; 0 ise en yeniden) eski kayıtları verir; geriye
+// doğru sayfalama içindir.
+func (s *Store) ListKayitPage(ctx context.Context, before int64, limit int) ([]Kayit, error) {
 	if limit < 1 || limit > 1000 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,zaman,yapan,islem,hedef,ayrinti FROM yonetim_kayit ORDER BY id DESC LIMIT ?`, limit)
+	where, args := ``, []any{}
+	if before > 0 {
+		where, args = `WHERE id < ? `, []any{before}
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id,zaman,yapan,islem,hedef,ayrinti FROM yonetim_kayit `+where+`ORDER BY id DESC LIMIT ?`, append(args, limit)...)
 	if err != nil {
 		return nil, err
 	}

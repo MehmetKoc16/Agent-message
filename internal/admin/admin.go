@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -26,9 +27,15 @@ const usage = `kullanım: agent-relay admin --config <json> <komut>
   yonetici-al <ad>                                     yönetici yetkisini kaldırır
   odaya-ekle <ad> <oda>                                oda üyeliği ekler
   odadan-cikar <ad> <oda>                              oda üyeliğini kaldırır
-  kayit [--son N]                                      denetim kayıtlarını listeler
+  kayit [--son N] [--before ID]                        denetim kayıtlarını listeler (ID'den eskiler)
   reopen <oda> <thread>                               kilitli konuşmayı açar (+max_turns)
   purge                                               saklama süresi dolan mesajları siler`
+
+// threadRe sunucudaki konuşma kimliği deseniyle aynıdır (server.threadRe).
+var threadRe = regexp.MustCompile(`^T-[0-9]{1,9}$`)
+
+// maxRetentionDays config'teki retention_days üst sınırıyla aynıdır.
+const maxRetentionDays = 3650
 
 // NewToken 32 rastgele bayttan base64url token üretir.
 func NewToken() (string, error) {
@@ -102,17 +109,20 @@ func run(ctx context.Context, cfg config.Server, st *store.Store, cmd string, ar
 		return nil
 	case "kayit":
 		limit := fs.Int("son", 100, "son kayıt sayısı")
+		before := fs.Int64("before", 0, "bu kayıt numarasından eskiler")
 		pos, err := flagx.Parse(fs, args)
 		if err != nil {
 			return err
 		}
-		if len(pos) != 0 || *limit < 1 || *limit > 1000 {
-			return errors.New("kullanım: kayit [--son 1..1000]")
+		beforeSet := false
+		fs.Visit(func(f *flag.Flag) { beforeSet = beforeSet || f.Name == "before" })
+		if len(pos) != 0 || *limit < 1 || *limit > 1000 || (beforeSet && *before < 1) {
+			return errors.New("kullanım: kayit [--son 1..1000] [--before ID]")
 		}
-		if err := st.AddKayit(ctx, "ssh", "kayit_listelendi", "", ""); err != nil {
+		if err := st.AddOkumaKayit(ctx, "ssh", "kayit_listelendi"); err != nil {
 			return err
 		}
-		rows, err := st.ListKayit(ctx, *limit)
+		rows, err := st.ListKayitPage(ctx, *before, *limit)
 		if err != nil {
 			return err
 		}
@@ -207,10 +217,16 @@ func run(ctx context.Context, cfg config.Server, st *store.Store, cmd string, ar
 		if len(pos) != 2 {
 			return errors.New("kullanım: reopen <oda> <thread>")
 		}
+		if !config.NameRe.MatchString(pos[0]) || !threadRe.MatchString(pos[1]) {
+			return errors.New("geçersiz oda veya konuşma (ör. reopen oda T-12)")
+		}
 		if err := st.ReopenThread(ctx, pos[0], pos[1], cfg.MaxTurns); err != nil {
 			if errors.Is(err, store.ErrThreadNotFound) {
 				return fmt.Errorf("konuşma yok: %s/%s", pos[0], pos[1])
 			}
+			return err
+		}
+		if err := st.AddKayit(ctx, "ssh", "reopen", pos[0], fmt.Sprintf("%s · +%d tur", pos[1], cfg.MaxTurns)); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "açıldı: %s/%s (tur sınırı +%d)\n", pos[0], pos[1], cfg.MaxTurns)
@@ -220,8 +236,15 @@ func run(ctx context.Context, cfg config.Server, st *store.Store, cmd string, ar
 		if _, err := flagx.Parse(fs, args); err != nil {
 			return err
 		}
-		n, err := st.Purge(ctx, time.Now().Add(-time.Duration(cfg.RetentionDays)*24*time.Hour))
+		// Gün sayısı Duration'a çevrilmez: büyük değer taşar ve kesim geleceğe düşerdi.
+		if cfg.RetentionDays < 1 || cfg.RetentionDays > maxRetentionDays {
+			return fmt.Errorf("retention_days 1..%d olmalı: %d", maxRetentionDays, cfg.RetentionDays)
+		}
+		n, err := st.Purge(ctx, time.Now().UTC().AddDate(0, 0, -cfg.RetentionDays))
 		if err != nil {
+			return err
+		}
+		if err := st.AddKayit(ctx, "ssh", "purge", "", fmt.Sprintf("%d gün · %d mesaj", cfg.RetentionDays, n)); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "silinen mesaj: %d\n", n)

@@ -167,6 +167,15 @@ func (s *Server) audit(w http.ResponseWriter, r *http.Request, a store.Agent, is
 	}
 	return true
 }
+
+// auditOkuma listeleme kaydıdır; tekrarlar tek satırda toplanır (store.AddOkumaKayit).
+func (s *Server) auditOkuma(w http.ResponseWriter, r *http.Request, a store.Agent, islem string) bool {
+	if err := s.st.AddOkumaKayit(r.Context(), a.Name, islem); err != nil {
+		s.internal(w, "denetim kaydı", err)
+		return false
+	}
+	return true
+}
 func (s *Server) handleYonetimList(w http.ResponseWriter, r *http.Request, a store.Agent) {
 	rows, err := s.st.ListAgents(r.Context())
 	if err != nil {
@@ -181,7 +190,7 @@ func (s *Server) handleYonetimList(w http.ResponseWriter, r *http.Request, a sto
 		}
 		out = append(out, map[string]any{"name": v.Name, "kind": v.Kind, "rooms": rooms, "last_seen": v.LastSeen, "revoked": v.RevokedAt != "", "yonetici": v.Yonetici})
 	}
-	if s.audit(w, r, a, "hesaplar_listelendi", "", "") {
+	if s.auditOkuma(w, r, a, "hesaplar_listelendi") {
 		writeJSON(w, 200, out)
 	}
 }
@@ -306,10 +315,20 @@ func (s *Server) handleYonetimKayit(w http.ResponseWriter, r *http.Request, a st
 		}
 		limit = n
 	}
-	if !s.audit(w, r, a, "kayit_listelendi", "", "") {
+	// before: bu id'den eski kayıtlar (geriye doğru sayfalama).
+	var before int64
+	if r.URL.Query().Has("before") {
+		n, err := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
+		if err != nil || n < 1 {
+			writeErr(w, 400, "gecersiz_before")
+			return
+		}
+		before = n
+	}
+	if !s.auditOkuma(w, r, a, "kayit_listelendi") {
 		return
 	}
-	rows, err := s.st.ListKayit(r.Context(), limit)
+	rows, err := s.st.ListKayitPage(r.Context(), before, limit)
 	if err != nil {
 		s.internal(w, "kayıt listesi", err)
 		return

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -46,27 +47,10 @@ func (s *Store) initTOTP(path string) error {
 	keyPath := path + ".totp.key"
 	f, err := os.Open(keyPath)
 	if errors.Is(err, os.ErrNotExist) && !hasEncrypted {
-		key := make([]byte, 32)
-		if _, err = rand.Read(key); err != nil {
-			return err
+		if err := createTOTPKey(keyPath); err != nil {
+			return errors.New("TOTP anahtarı yazılamadı")
 		}
-		f, err = os.OpenFile(keyPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err == nil {
-			_, err = f.Write(key)
-			if err == nil {
-				err = f.Sync()
-			}
-			closeErr := f.Close()
-			if err == nil {
-				err = closeErr
-			}
-			if err != nil {
-				return errors.New("TOTP anahtarı yazılamadı")
-			}
-		}
-		if err == nil || errors.Is(err, os.ErrExist) {
-			f, err = os.Open(keyPath)
-		}
+		f, err = os.Open(keyPath)
 	}
 	if err != nil {
 		return errors.New("TOTP anahtarı okunamadı; ayrı anahtar yedeğini geri yükleyin")
@@ -78,7 +62,11 @@ func (s *Store) initTOTP(path string) error {
 	}
 	key, err := io.ReadAll(io.LimitReader(f, 33))
 	if err != nil || len(key) != 32 {
-		return errors.New("TOTP anahtarı geçersiz")
+		if !hasEncrypted {
+			// Bilerek yeniden üretilmez: var olan dosya asla ezilmez, karar yöneticinindir.
+			return errors.New("TOTP anahtarı geçersiz (32 bayt olmalı); şifreli sır yok: anahtar dosyasını silip yeniden başlatın")
+		}
+		return errors.New("TOTP anahtarı geçersiz; ayrı anahtar yedeğini geri yükleyin")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -104,6 +92,41 @@ func (s *Store) initTOTP(path string) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// createTOTPKey yeni anahtarı aynı klasörde 0600 geçici dosyaya yazıp fsync eder ve
+// hard link ile yerleştirir: dosya ya hiç yoktur ya da tamdır (arada çökme boş anahtar
+// bırakmaz). Link mevcut dosyayı ezmez; anahtar zaten varsa ona dokunulmaz.
+func createTOTPKey(keyPath string) error {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return err
+	}
+	dir := filepath.Dir(keyPath)
+	tmp, err := os.CreateTemp(dir, filepath.Base(keyPath)+".*") // 0600 ile oluşur
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(key)
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err := os.Link(tmp.Name(), keyPath); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	// Klasör girdisini de diske yaz; desteklenmeyen sistemlerde (Windows) hata yok sayılır.
+	if d, err := os.Open(dir); err == nil {
+		d.Sync()
+		d.Close()
+	}
+	return nil
 }
 
 func (s *Store) sealTOTP(name, secret string) (string, error) {
