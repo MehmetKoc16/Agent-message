@@ -221,6 +221,7 @@ func invoke(parent context.Context, o Options, session, prompt string) (result r
 	defer cancel()
 	cmd := exec.CommandContext(ctx, o.Exe, a...)
 	cmd.Dir = o.Workdir // resume -C desteklemese de aynı çalışma dizini
+	isolate(cmd)
 	// Env nil: ebeveyn ortamı aynen geçer; okunmaz ve değiştirilmez.
 	if o.Runner == "codex" {
 		cmd.Stdin = strings.NewReader(prompt) // EOF'ta pipe kapanır
