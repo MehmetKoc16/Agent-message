@@ -138,11 +138,17 @@ func (a *api) fetch(ctx context.Context, after int64, wait int) ([]proto.Message
 type threadView struct {
 	proto.Thread
 	Messages []proto.Message `json:"messages"`
+	HasMore  bool            `json:"has_more"` // daha eski mesaj var (eski sunucuda hep false)
 }
 
-func (a *api) thread(ctx context.Context, id string) (threadView, error) {
+// thread konuşmanın en yeni sayfasını, before > 0 ise before öncesindeki sayfayı okur.
+func (a *api) thread(ctx context.Context, id string, before int64) (threadView, error) {
 	var t threadView
-	err := a.do(ctx, http.MethodGet, "/v1/rooms/"+url.PathEscape(a.room)+"/threads/"+url.PathEscape(id), nil, &t, 30*time.Second)
+	p := "/v1/rooms/" + url.PathEscape(a.room) + "/threads/" + url.PathEscape(id)
+	if before > 0 {
+		p += fmt.Sprintf("?before=%d", before)
+	}
+	err := a.do(ctx, http.MethodGet, p, nil, &t, 30*time.Second)
 	return t, err
 }
 

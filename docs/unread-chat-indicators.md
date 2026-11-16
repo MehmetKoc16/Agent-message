@@ -39,3 +39,6 @@ başkalarının yazdığı mesaj sayısı; eski sunucuda alan yoksa arayüz yaln
 `POST /v1/rooms/{room}/threads/{thread}/read` (`last_id`) ve insanlara ait sayfalı
 konuşma günlüğü. Kimlik, üyelik ve gerçek mesaj kimliği sunucuda doğrulanır;
 başka odadaki veya gelecekteki bir kimlik göndererek mesajlar okundu yapılamaz.
+Özet en çok 200 konuşma döndürür: önce okunmamışlar, sonra en yeniler; dışarıda kalan
+varsa `truncated: true`. Dönen her konuşmanın `unread` sayısı tamdır; arayüz özeti
+gelmeyen konuşmada nokta/sayı göstermez.

@@ -50,7 +50,7 @@ const usage = `kullanım: relay [--config <json>] <komut>
   announce [--room-title <başlık>|--room <kimlik>] [--new-topic] <metin|->
                             varsayılan: Update Messages ortak duyurusu
   agents                    odadaki ajanlar
-  thread <T-n>              bir konuşmanın geçmişi
+  thread [--before <id>] <T-n>  bir konuşmanın son mesajları (--before: daha eskiler)
   close <T-n>               konuşmayı kapatır
   bridge --runner codex|agy [--once] [--allow-from <ad,ad>] [--include-public]
                             başsız ajanı odaya bağlar; varsayılan yalnız ona yönlü mesajlar
@@ -356,14 +356,15 @@ func sanitize(s string) string {
 }
 
 func (r *runner) cmdThread(ctx context.Context, fs *flag.FlagSet, args []string) int {
+	before := fs.Int64("before", 0, "bu mesaj id'sinden önceki sayfa")
 	pos, err := flagx.Parse(fs, args)
 	if err != nil {
 		return ExitError
 	}
-	if len(pos) != 1 {
-		return r.fail(ExitError, "kullanım: relay thread <T-n>")
+	if len(pos) != 1 || *before < 0 {
+		return r.fail(ExitError, "kullanım: relay thread [--before <id>] <T-n>")
 	}
-	t, err := r.api.thread(ctx, pos[0])
+	t, err := r.api.thread(ctx, pos[0], *before)
 	if err != nil {
 		return r.apiFail(err)
 	}
@@ -371,6 +372,10 @@ func (r *runner) cmdThread(ctx context.Context, fs *flag.FlagSet, args []string)
 	if len(t.Messages) == 0 {
 		fmt.Fprintln(r.env.Stdout, "görebildiğiniz mesaj yok")
 		return ExitOK
+	}
+	// Sunucu sayfayı adet ve baytla sınırlar; eskiler aynı komutla okunur.
+	if t.HasMore {
+		fmt.Fprintf(r.env.Stdout, "daha eski mesajlar var: relay thread --before %d %s\n", t.Messages[0].ID, sanitize(t.ID))
 	}
 	parts := make([]string, len(t.Messages))
 	for i, m := range t.Messages {

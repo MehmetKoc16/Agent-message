@@ -121,8 +121,8 @@ func (c Server) Validate() error {
 		return errors.New("rate_per_min ve rate_per_day en az 1 olmalı")
 	case c.AnnouncePerMin < 1 || c.AnnouncePerDay < 1:
 		return errors.New("announce_per_min ve announce_per_day en az 1 olmalı")
-	case c.RetentionDays < 1:
-		return errors.New("retention_days en az 1 olmalı")
+	case c.RetentionDays < 1 || c.RetentionDays > 3650:
+		return errors.New("retention_days 1 ile 3650 arasında olmalı")
 	case c.MaxWaitSec < 1 || c.MaxWaitSec > 120:
 		return errors.New("max_wait_sec 1 ile 120 arasında olmalı")
 	case c.MaxConnsPerAgent < 1:

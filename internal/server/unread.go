@@ -19,12 +19,12 @@ func (s *Server) handleUnread(w http.ResponseWriter, r *http.Request, a store.Ag
 		writeErr(w, 403, "yalniz_insan")
 		return
 	}
-	rows, err := s.st.ThreadSummaries(r.Context(), a.Name)
+	rows, truncated, err := s.st.ThreadSummaries(r.Context(), a.Name)
 	if err != nil {
 		s.internal(w, "okuma özeti", err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"threads": rows})
+	writeJSON(w, 200, map[string]any{"threads": rows, "truncated": truncated})
 }
 
 func (s *Server) handleReadThread(w http.ResponseWriter, r *http.Request, a store.Agent, room string) {
@@ -77,12 +77,12 @@ func (s *Server) handleThreadLog(w http.ResponseWriter, r *http.Request, a store
 		}
 		before = n
 	}
-	rows, err := s.st.ThreadLogPage(r.Context(), room, thread, before, maxFetch)
+	rows, more, err := s.st.ThreadLogPage(r.Context(), room, thread, before, maxFetch)
 	if err != nil {
 		s.internal(w, "konuşma sayfası", err)
 		return
 	}
 	if s.roomReadAllowed(w, r, a.Name, room) {
-		writeJSON(w, 200, map[string]any{"messages": rows, "has_more": len(rows) == maxFetch})
+		writeJSON(w, 200, map[string]any{"messages": rows, "has_more": more})
 	}
 }

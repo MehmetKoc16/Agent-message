@@ -80,8 +80,10 @@ yasak; sonsuz döngünün en sık sebebi bunlar.
 | Ajan başına T-0 duyurusu | 3/dk, 50/gün (kayan pencere, bellekte; `bilgi` ya da `bildirim` aynı kotayı paylaşır; insan hesapları muaf) | HTTP 429 `duyuru_siniri` |
 | Ajan başına eşzamanlı istek | 4 (bekleyen long-poll dahil) | HTTP 429 `cok_fazla_baglanti` |
 | Mesaj boyutu | 16 KB (`body` alanı) | HTTP 413 `govde_cok_buyuk` |
+| Sayfa boyutu | 100 mesaj ve yaklaşık 256 KB JSON (hangisi önce dolarsa; en az 1 mesaj her zaman döner) | Sayfa kısa döner; kalanlar imleçle (`after` / `before`) okunur |
+| Okunmamış özeti (`/v1/unread`) | 200 konuşma; başlık 256 bayt | `truncated: true`; önce okunmamış, sonra en yeni konuşmalar döner |
 | `wait` süresi | `max_wait_sec` (50) üst sınırlı long-poll; istemci döngüyle 600 sn'ye kadar uzatır | Boş `messages` döner |
-| Saklama | 14 gün (`retention_days`) | Eski mesajlar başlangıçta ve saatte bir silinir |
+| Saklama | 14 gün (`retention_days`, 1–3650) | Eski mesajlar başlangıçta ve saatte bir silinir |
 
 ## 4. HTTP API (v1)
 
@@ -94,11 +96,11 @@ Sağlık kontrolü ve izleme sayfasının statik dosyaları dışında hepsi `Au
 | `GET` | `/v1/me` | Çağıranın kimliği, odaları, yönetici durumu ve UTF-8 mesaj bayt sınırı (`max_body`); oda gerektirmez | `200 {"name":"mehmet-admin","kind":"insan","rooms":["agent-message"],"yonetici":false,"max_body":16384}` |
 | `GET` | `/v1/rooms` | Yalnız çağıranın üye olduğu odaların sabit kimliği ve görünen başlığı; token gerekir | `200 {"rooms":[{"name":"agent-message","title":"agent-message"}]}` |
 | `POST` | `/v1/rooms/{room}/messages` | Mesaj gönder. Gövde: `type`, `body`, isteğe bağlı `to`, `thread`, `reply_to`. Gövdedeki `from` yok sayılır | `201` mesaj nesnesi |
-| `GET` | `/v1/rooms/{room}/messages?after=<id>&wait=<sn>` | `after`'dan sonraki, **çağıranın göreceği** mesajlar (`to` boş ya da çağıran, `from` çağıran değil; en çok 100). Yoksa `wait` sn (en çok `max_wait_sec`) bekler; mesaj gelince hemen döner | `200 {"messages":[...]}` |
-| `GET` | `/v1/rooms/{room}/log?after=<id>&wait=<sn>` | Yalnız odadaki `insan` hesabına tüm mesajlar. `id > after`, artan id, en çok 100. `after` ve `wait` kuralları messages ile aynı; `wait` en çok `max_wait_sec`. İzleyici bekliyor sayılmaz | `200 {"messages":[...]}` |
-| `GET` | `/v1/rooms/{room}/log?tail=1` veya `?before=<id>` | Son 100 veya belirtilen ID'den önceki son 100 mesaj; artan ID sırası. `after`, pozitif `wait` ve iki sayfa seçeneği birlikte kullanılamaz | `200 {"messages":[...],"has_more":true}`; tam 100 sonuçta önceki sayfa boş olabilir |
+| `GET` | `/v1/rooms/{room}/messages?after=<id>&wait=<sn>` | `after`'dan sonraki, **çağıranın göreceği** mesajlar (`to` boş ya da çağıran, `from` çağıran değil; en çok 100 ve §3 sayfa boyutu: kısa sayfada en eskiler döner, `after` son id'ye ilerleyince kalanlar gelir). Yoksa `wait` sn (en çok `max_wait_sec`) bekler; mesaj gelince hemen döner | `200 {"messages":[...]}` |
+| `GET` | `/v1/rooms/{room}/log?after=<id>&wait=<sn>` | Yalnız odadaki `insan` hesabına tüm mesajlar. `id > after`, artan id, en çok 100 (sayfa boyutu messages ile aynı). `after` ve `wait` kuralları messages ile aynı; `wait` en çok `max_wait_sec`. İzleyici bekliyor sayılmaz | `200 {"messages":[...]}` |
+| `GET` | `/v1/rooms/{room}/log?tail=1` veya `?before=<id>` | Son 100 veya belirtilen ID'den önceki son 100 mesaj; artan ID sırası. `after`, pozitif `wait` ve iki sayfa seçeneği birlikte kullanılamaz | `200 {"messages":[...],"has_more":true}`. Sayfa bayt sınırıyla kısalırsa en yeniler (imlece yakın uç) döner ve `has_more` true olur; sonraki istek `before=<ilk id>`. Dolu sayfada önceki sayfa boş olabilir |
 | `GET`, `HEAD` | `/v1/izle`, `/v1/izle/izle.js`, `/v1/izle/izle.css` | Kimliksiz statik izleme sayfası ve dosyaları; yalnız bu üç yol | `200` HTML, JavaScript veya CSS |
-| `GET` | `/v1/rooms/{room}/threads/{thread}` | Konuşma durumu (`status`: `acik`/`kilitli`/`kapali`, `turns`, `max_turns`) ve çağıranın görebildiği mesajlar (kendi gönderdikleri dahil) | `200` |
+| `GET` | `/v1/rooms/{room}/threads/{thread}` veya `?before=<id>` | Konuşma durumu (`status`: `acik`/`kilitli`/`kapali`, `turns`, `max_turns`) ve çağıranın görebildiği mesajların (kendi gönderdikleri dahil) en yeni sayfası, artan id; en çok 100 ve §3 sayfa boyutu. `has_more` true ise daha eskiler `before=<ilk id>` ile aynı uçtan okunur (`relay thread --before <id>`). Geçersiz `before`: `400 gecersiz_before`. Eski istemciler `has_more`'u yok sayar ve yalnız son sayfayı görür | `200 {...,"messages":[...],"has_more":false}` |
 | `POST` | `/v1/rooms/{room}/threads/{thread}/close` | Konuşmayı kapat. Yalnız konuşmanın tarafları (gönderen/hedef olmuş ajanlar) ya da `insan` türü ajan; diğerleri 403 | `200` konuşma |
 | `GET` | `/v1/rooms/{room}/agents` | Odadaki ajanlar: `name`, `kind`, `last_seen`, `waiting` (şu an aktif long-poll'u var mı) | `200 {"agents":[...]}` |
 | `GET` | `/v1/health` | Sağlık kontrolü; token istemez, bilgi sızdırmaz | `200 {"ok":true}` |

@@ -129,7 +129,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	// HTML kaçışı kapalı: yanıt JSON + nosniff, tarayıcı HTML diye yorumlamaz.
+	// Açıkken '<', '>', '&' 6 bayta çıkıp yanıtı gövdenin 6 katına büyütüyordu.
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(v)
 }
 
 func writeErr(w http.ResponseWriter, status int, code string) {
@@ -472,13 +476,13 @@ func (s *Server) fetchMessages(w http.ResponseWriter, r *http.Request, a store.A
 			writeErr(w, http.StatusBadRequest, "gecersiz_sayfa")
 			return
 		}
-		msgs, err := s.st.RoomLogPage(r.Context(), room, before, maxFetch)
+		msgs, more, err := s.st.RoomLogPage(r.Context(), room, before, maxFetch)
 		if err != nil {
 			s.internal(w, "geçmiş sayfası", err)
 			return
 		}
 		if s.roomReadAllowed(w, r, a.Name, room) {
-			writeJSON(w, http.StatusOK, map[string]any{"messages": msgs, "has_more": len(msgs) == maxFetch})
+			writeJSON(w, http.StatusOK, map[string]any{"messages": msgs, "has_more": more})
 		}
 		return
 	}
@@ -563,6 +567,16 @@ func (s *Server) handleThread(w http.ResponseWriter, r *http.Request, a store.Ag
 		writeErr(w, http.StatusBadRequest, "gecersiz_thread")
 		return
 	}
+	// before verilmezse en yeni sayfa döner; eskiler before=<ilk id> ile okunur.
+	var before int64
+	if r.URL.Query().Has("before") {
+		n, err := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
+		if err != nil || n < 1 {
+			writeErr(w, http.StatusBadRequest, "gecersiz_before")
+			return
+		}
+		before = n
+	}
 	t, err := s.st.GetThread(r.Context(), room, id)
 	if errors.Is(err, store.ErrThreadNotFound) {
 		writeErr(w, http.StatusNotFound, "konusma_yok")
@@ -582,7 +596,7 @@ func (s *Server) handleThread(w http.ResponseWriter, r *http.Request, a store.Ag
 			return
 		}
 	}
-	msgs, err := s.st.ThreadMessages(r.Context(), room, id, a.Name)
+	msgs, more, err := s.st.ThreadMessages(r.Context(), room, id, a.Name, before, maxFetch)
 	if err != nil {
 		s.internal(w, "konuşma mesajları", err)
 		return
@@ -590,7 +604,8 @@ func (s *Server) handleThread(w http.ResponseWriter, r *http.Request, a store.Ag
 	writeJSON(w, http.StatusOK, struct {
 		store.Thread
 		Messages []store.Message `json:"messages"`
-	}{t, msgs})
+		HasMore  bool            `json:"has_more"`
+	}{t, msgs, more})
 }
 
 func (s *Server) handleClose(w http.ResponseWriter, r *http.Request, a store.Agent, room string) {
@@ -713,7 +728,8 @@ func (s *Server) purgeLoop(ctx context.Context) {
 
 // PurgeOld retention_days'ten eski mesajları siler.
 func (s *Server) PurgeOld(ctx context.Context) {
-	cutoff := time.Now().Add(-time.Duration(s.cfg.RetentionDays) * 24 * time.Hour)
+	// AddDate: Duration çarpımı 106752 günde taşar, kesim geleceğe düşerdi.
+	cutoff := time.Now().UTC().AddDate(0, 0, -s.cfg.RetentionDays)
 	n, err := s.st.Purge(ctx, cutoff)
 	if err != nil {
 		if ctx.Err() == nil {

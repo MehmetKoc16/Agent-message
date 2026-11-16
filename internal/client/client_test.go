@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
@@ -369,6 +370,10 @@ func TestIstemciKomutlariVeHatalar(t *testing.T) {
 	if !strings.Contains(out, "konuşma T-1 durum=acik tur=2/20") || !strings.Contains(out, `reply_to="1"`) || strings.Count(out, "<relay-message") != 2 {
 		t.Fatalf("thread:\n%s", out)
 	}
+	// Sunucu konuşma sayfasını sınırlar; --before daha eski sayfayı okur.
+	if c, o, _ := e.run("ali", "", "thread", "--before", "2", "T-1"); c != 0 || strings.Count(o, "<relay-message") != 1 || !strings.Contains(o, `id="1"`) || strings.Contains(o, "daha eski") {
+		t.Fatalf("thread --before: %d\n%s", c, o)
+	}
 	if c, o, _ := e.run("ali", "", "agents"); c != 0 || !strings.Contains(o, "ali") || !strings.Contains(o, "veli") || !strings.Contains(o, "BEKLİYOR") {
 		t.Fatalf("agents: %d %q", c, o)
 	}
@@ -404,5 +409,30 @@ func TestStdinVeUTF8(t *testing.T) {
 	_, out, _ := e.run("veli", "", "inbox")
 	if !strings.Contains(out, text) {
 		t.Fatalf("UTF-8 bozuldu:\n%s", out)
+	}
+}
+
+// NEDEN: sunucu konuşma ucunu 100 mesajla sınırlar; CLI eskilerin nasıl okunacağını
+// söylemeli ve verdiği komut kalan mesajları eksiksiz getirmeli.
+func TestThreadEskiSayfayiGosterir(t *testing.T) {
+	e := newCEnv(t)
+	var first int64
+	for i := 0; i < 101; i++ {
+		m, err := e.st.Post(context.Background(), store.PostInput{Room: "r1", From: "veli", Type: "bilgi", Body: "duyuru", Announcement: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = m.ID
+		}
+	}
+	c, out, _ := e.run("ali", "", "thread", "T-0")
+	hint := fmt.Sprintf("daha eski mesajlar var: relay thread --before %d T-0", first+1)
+	if c != 0 || strings.Count(out, "<relay-message") != 100 || !strings.Contains(out, hint) {
+		t.Fatalf("thread: %d, %d mesaj\n%.300s", c, strings.Count(out, "<relay-message"), out)
+	}
+	c, out, _ = e.run("ali", "", "thread", "--before", fmt.Sprint(first+1), "T-0")
+	if c != 0 || strings.Count(out, "<relay-message") != 1 || !strings.Contains(out, fmt.Sprintf(`id="%d"`, first)) || strings.Contains(out, "daha eski") {
+		t.Fatalf("thread --before: %d\n%.300s", c, out)
 	}
 }

@@ -97,3 +97,17 @@ func Test_config_listen_dogrulamasi(t *testing.T) {
 		}
 	}
 }
+
+// NEDEN: 106752 gün ve üstü time.Duration'ı taşırıp kesimi geleceğe düşürür ve
+// bütün mesajları sildirir; makul üst sınır bunu ayar aşamasında durdurur.
+func Test_config_retention_ust_siniri(t *testing.T) {
+	for _, bad := range []string{`{"db":"x","retention_days":3651}`, `{"db":"x","retention_days":106752}`} {
+		_, err := LoadServer(write(t, bad))
+		if err == nil || !strings.Contains(err.Error(), "retention_days 1 ile 3650 arasında olmalı") {
+			t.Fatalf("%s reddedilmeli: %v", bad, err)
+		}
+	}
+	if _, err := LoadServer(write(t, `{"db":"x","retention_days":3650}`)); err != nil {
+		t.Fatal(err)
+	}
+}

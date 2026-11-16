@@ -27,7 +27,7 @@ func TestReadMarkersArePerAccountMonotonicAndPersistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	summaries, _ := s.ThreadSummaries(ctx, "owner")
+	summaries, _, _ := s.ThreadSummaries(ctx, "owner")
 	if len(summaries) != 1 || summaries[0].LastIncomingID != 0 {
 		t.Fatal(summaries)
 	}
@@ -58,7 +58,7 @@ func TestReadMarkersArePerAccountMonotonicAndPersistent(t *testing.T) {
 	if err := s.MarkThreadRead(ctx, "bot", "r1", own.Thread, first.ID); !errors.Is(err, ErrUnauthorized) {
 		t.Fatal(err)
 	}
-	summaries, _ = s.ThreadSummaries(ctx, "other")
+	summaries, _, _ = s.ThreadSummaries(ctx, "other")
 	if len(summaries) != 1 || summaries[0].ReadID != 0 || summaries[0].LastIncomingID != second.ID {
 		t.Fatal(summaries)
 	}
@@ -67,7 +67,7 @@ func TestReadMarkersArePerAccountMonotonicAndPersistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	summaries, err = s.ThreadSummaries(ctx, "owner")
+	summaries, _, err = s.ThreadSummaries(ctx, "owner")
 	if err != nil || len(summaries) != 1 || summaries[0].ReadID != second.ID {
 		t.Fatal(summaries, err)
 	}
@@ -75,14 +75,14 @@ func TestReadMarkersArePerAccountMonotonicAndPersistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	summaries, _ = s.ThreadSummaries(ctx, "owner")
+	summaries, _, _ = s.ThreadSummaries(ctx, "owner")
 	if summaries[0].LastIncomingID != third.ID || summaries[0].ReadID != second.ID {
 		t.Fatal(summaries)
 	}
 	if err := s.RemoveRoom(ctx, "owner", "r1"); err != nil {
 		t.Fatal(err)
 	}
-	summaries, _ = s.ThreadSummaries(ctx, "owner")
+	summaries, _, _ = s.ThreadSummaries(ctx, "owner")
 	if len(summaries) != 0 {
 		t.Fatal("removed room leaked", summaries)
 	}
@@ -107,7 +107,7 @@ func TestUnreadSummaryAndThreadPagesIncludeOlderConversations(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	all, err := s.ThreadSummaries(ctx, "reader")
+	all, _, err := s.ThreadSummaries(ctx, "reader")
 	if err != nil || len(all) != 106 || all[len(all)-1].Thread != first.Thread {
 		t.Fatal(len(all), err)
 	}
@@ -116,11 +116,11 @@ func TestUnreadSummaryAndThreadPagesIncludeOlderConversations(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	tail, err := s.ThreadLogPage(ctx, "r1", first.Thread, 0, 100)
+	tail, _, err := s.ThreadLogPage(ctx, "r1", first.Thread, 0, 100)
 	if err != nil || len(tail) != 100 {
 		t.Fatal(len(tail), err)
 	}
-	older, err := s.ThreadLogPage(ctx, "r1", first.Thread, tail[0].ID, 100)
+	older, _, err := s.ThreadLogPage(ctx, "r1", first.Thread, tail[0].ID, 100)
 	if err != nil || len(older) != 5 || older[0].ID != first.ID {
 		t.Fatal(len(older), err)
 	}
@@ -147,7 +147,7 @@ func TestThreadSummaryUnreadCount(t *testing.T) {
 	}
 	unread := func(who string) int {
 		t.Helper()
-		summaries, err := s.ThreadSummaries(ctx, who)
+		summaries, _, err := s.ThreadSummaries(ctx, who)
 		if err != nil || len(summaries) != 1 {
 			t.Fatal(summaries, err)
 		}

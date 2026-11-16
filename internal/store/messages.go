@@ -241,26 +241,71 @@ const msgSelect = `SELECT m.id, m.room, m.from_agent, COALESCE(a.kind, ''), m.to
 	FROM messages m LEFT JOIN threads t ON t.room = m.room AND t.id = m.thread
 	LEFT JOIN agents a ON a.name = m.from_agent `
 
+// MaxPageBytes tek sayfada dönen mesajların JSON'daki yaklaşık toplam boyutudur.
+// Adet sınırı tek başına yetmez: 100 x max_body tek yanıtta belleği doldurur.
+const MaxPageBytes = 256 << 10
+
+// msgOverhead bir mesajın gövde dışı JSON alanları için ayrılan paydır.
+const msgOverhead = 512
+
+// jsonCost s'nin JSON dizgesi olarak kaplayacağı bayt sayısıdır (kaçışlar dahil).
+func jsonCost(s string) int {
+	n := len(s) + 2
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '"' || c == '\\':
+			n++
+		case c < 0x20:
+			n += 5 // en kötü hal: \u00XX
+		case c == 0xE2 && i+2 < len(s) && s[i+1] == 0x80 && s[i+2]&^1 == 0xA8:
+			n += 3 // U+2028/U+2029 -> \u2028
+		}
+	}
+	return n
+}
+
 func scanMessages(rows *sql.Rows) ([]Message, error) {
+	out, _, err := scanPage(rows, 0)
+	return out, err
+}
+
+// scanPage satırları sorgu sırasıyla okur; toplam boyut maxBytes'ı aşacaksa durur
+// ve kesildiğini bildirir (maxBytes 0: sınırsız). İlk mesaj her zaman döner, yoksa
+// imleç ilerleyemezdi. Sorgu sırası imlece yakın uçtan başladığı için atılanlar
+// hep imlecin uzak ucundadır: sonraki sayfa tam kalınan yerden sürer.
+func scanPage(rows *sql.Rows, maxBytes int) ([]Message, bool, error) {
 	defer rows.Close()
 	out := []Message{}
+	total := 0
 	for rows.Next() {
 		var m Message
 		var rt sql.NullInt64
 		if err := rows.Scan(&m.ID, &m.Room, &m.From, &m.FromKind, &m.To, &m.Type, &m.Thread, &rt,
 			&m.Turn, &m.MaxTurns, &m.Body, &m.CreatedAt); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if rt.Valid {
 			v := rt.Int64
 			m.ReplyTo = &v
 		}
+		total += msgOverhead + jsonCost(m.Body)
+		if maxBytes > 0 && total > maxBytes && len(out) > 0 {
+			return out, true, nil
+		}
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	return out, false, rows.Err()
+}
+
+// reverse azalan id ile okunan sayfayı artan sıraya çevirir.
+func reverse(msgs []Message) {
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
 }
 
 // Fetch ajanın görebileceği (to boş ya da ajan; from ajan değil) yeni mesajları verir.
+// Sayfa MaxPageBytes ile de sınırlıdır; kalanlar after ilerleyince gelir.
 func (s *Store) Fetch(ctx context.Context, room, agent string, after int64, limit int) ([]Message, error) {
 	rows, err := s.db.QueryContext(ctx, msgSelect+
 		`WHERE m.room = ? AND m.id > ? AND m.from_agent <> ? AND (m.to_agent = '' OR m.to_agent = ?)
@@ -268,21 +313,25 @@ func (s *Store) Fetch(ctx context.Context, room, agent string, after int64, limi
 	if err != nil {
 		return nil, err
 	}
-	return scanMessages(rows)
+	out, _, err := scanPage(rows, MaxPageBytes)
+	return out, err
 }
 
-// RoomLog odadaki tüm mesajları artan id sırasıyla verir.
+// RoomLog odadaki tüm mesajları artan id sırasıyla verir (Fetch ile aynı sınırlar).
 func (s *Store) RoomLog(ctx context.Context, room string, after int64, limit int) ([]Message, error) {
 	rows, err := s.db.QueryContext(ctx, msgSelect+
 		`WHERE m.room = ? AND m.id > ? ORDER BY m.id LIMIT ?`, room, after, limit)
 	if err != nil {
 		return nil, err
 	}
-	return scanMessages(rows)
+	out, _, err := scanPage(rows, MaxPageBytes)
+	return out, err
 }
 
 // RoomLogPage en yeni veya before öncesindeki sayfayı, artan ID sırasıyla verir.
-func (s *Store) RoomLogPage(ctx context.Context, room string, before int64, limit int) ([]Message, error) {
+// more, sayfa dolduğunda ya da bayt sınırıyla kesildiğinde true'dur: daha eski
+// mesaj olabilir.
+func (s *Store) RoomLogPage(ctx context.Context, room string, before int64, limit int) ([]Message, bool, error) {
 	where := `WHERE m.room = ? `
 	args := []any{room}
 	if before > 0 {
@@ -292,13 +341,11 @@ func (s *Store) RoomLogPage(ctx context.Context, room string, before int64, limi
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, msgSelect+where+`ORDER BY m.id DESC LIMIT ?`, args...)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	msgs, err := scanMessages(rows)
-	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
-		msgs[i], msgs[j] = msgs[j], msgs[i]
-	}
-	return msgs, err
+	msgs, cut, err := scanPage(rows, MaxPageBytes)
+	reverse(msgs)
+	return msgs, cut || len(msgs) == limit, err
 }
 
 // GetThread konuşma durumunu verir.
@@ -314,14 +361,23 @@ func (s *Store) GetThread(ctx context.Context, room, id string) (Thread, error) 
 }
 
 // ThreadMessages konuşmada ajanın görebildiği mesajlardır (kendi gönderdikleri dahil).
-func (s *Store) ThreadMessages(ctx context.Context, room, id, agent string) ([]Message, error) {
-	rows, err := s.db.QueryContext(ctx, msgSelect+
-		`WHERE m.room = ? AND m.thread = ? AND (m.to_agent = '' OR m.to_agent = ? OR m.from_agent = ?)
-		 ORDER BY m.id`, room, id, agent, agent)
-	if err != nil {
-		return nil, err
+// En yeni (before > 0 ise before öncesindeki) sayfayı artan ID sırasıyla verir;
+// more anlamı RoomLogPage ile aynıdır.
+func (s *Store) ThreadMessages(ctx context.Context, room, id, agent string, before int64, limit int) ([]Message, bool, error) {
+	where := `WHERE m.room = ? AND m.thread = ? AND (m.to_agent = '' OR m.to_agent = ? OR m.from_agent = ?) `
+	args := []any{room, id, agent, agent}
+	if before > 0 {
+		where += `AND m.id < ? `
+		args = append(args, before)
 	}
-	return scanMessages(rows)
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, msgSelect+where+`ORDER BY m.id DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	msgs, cut, err := scanPage(rows, MaxPageBytes)
+	reverse(msgs)
+	return msgs, cut || len(msgs) == limit, err
 }
 
 // IsThreadParty ajan konuşmayı açtıysa, mesaj gönderdiyse ya da mesaj hedefi olduysa

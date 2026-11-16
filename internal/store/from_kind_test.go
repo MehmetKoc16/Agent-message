@@ -60,12 +60,12 @@ func TestMesajlarGonderenTurunuTasir(t *testing.T) {
 	}
 	msgs, err := s.Fetch(ctx, "r1", "veli", 0, 100)
 	check("Fetch", msgs, err)
-	msgs, err = s.ThreadMessages(ctx, "r1", ajanMsg.Thread, "veli")
+	msgs, _, err = s.ThreadMessages(ctx, "r1", ajanMsg.Thread, "veli", 0, 100)
 	check("ThreadMessages", msgs, err)
 	msgs, err = s.RoomLog(ctx, "r1", 0, 100)
 	check("RoomLog", msgs, err)
-	msgs, err = s.RoomLogPage(ctx, "r1", 0, 100)
+	msgs, _, err = s.RoomLogPage(ctx, "r1", 0, 100)
 	check("RoomLogPage", msgs, err)
-	msgs, err = s.ThreadLogPage(ctx, "r1", ajanMsg.Thread, 0, 100)
+	msgs, _, err = s.ThreadLogPage(ctx, "r1", ajanMsg.Thread, 0, 100)
 	check("ThreadLogPage", msgs, err)
 }

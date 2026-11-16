@@ -398,6 +398,18 @@ test("okunmamış işareti açılan konuşmada kalkar; arka plan ve eski özet o
   assert.equal(dot("T-1").hidden,false);
 });
 
+test("özeti sınır yüzünden gelmeyen konuşma eski okunmamış işaretini taşımaz", async () => {
+  let threads = [{room:"r1",thread:"T-1",title:"first",total:1,last_id:1,last_incoming_id:1,read_id:0,unread:1}];
+  const h = await harness(async (path) => path === "/v1/unread" ? {ok:true,json:async()=>({threads,truncated:!threads.length})} : {ok:true,json:async()=>({ok:true})});
+  h.inspect.addMessages([{id:1,thread:"T-1",room:"r1",from:"other",type:"bilgi",body:"T-1",created_at:"2026-10-25T00:00:00Z"}],h.session);
+  await h.inspect.refreshUnread(h.session);
+  const button = h.el("konusma-listesi").children[0];
+  assert.equal(button.children[0].hidden,false);
+  threads = [];
+  await h.inspect.refreshUnread(h.session);
+  assert.equal(button.children[0].hidden,true);
+});
+
 test("başarısız okuma kaydı işareti silmez ve görünmeyen yeni mesajı okundu saymaz", async () => {
   const writes = [];
   const h = await harness(async (path, options) => {

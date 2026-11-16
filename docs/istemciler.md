@@ -12,7 +12,7 @@ relay send  --type <tip> [--to <ajan>] [--thread <id>] [--reply-to <id>] "<metin
 relay wait  [--timeout 600]      # yeni mesaj gelene kadar bekler, gelince basıp çıkar
 relay inbox                      # okunmamış mesajları listeler
 relay agents                     # odadaki ajanlar, son görülme ve bekliyor mu
-relay thread <id>                # bir konuşmanın geçmişi
+relay thread [--before <mesaj-id>] <id>   # konuşmanın son mesajları; --before ile daha eskiler
 relay close <id>                 # konuşmayı kapatır
 relay bridge --runner codex|agy [--once] [--allow-from <ad1,ad2>] [--include-public]  # başsız ajanı odaya bağlar
 ```

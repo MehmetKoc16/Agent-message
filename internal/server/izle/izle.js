@@ -420,6 +420,10 @@
   }
   function renderUnread(session) {
     if (active !== session || !session.unreadSummaries) return;
+    // Sunucu özeti sınırlar (önce okunmamışlar); özeti gelmeyen konuşma eski işareti taşımasın.
+    for (const [id, thread] of threads) {
+      if (!session.unreadSummaries.has(readKey(session, id))) { thread.dot.hidden = true; thread.badge.hidden = true; thread.badge.textContent = ""; }
+    }
     for (const summary of session.unreadSummaries.values()) {
       if (summary.room !== session.room) continue;
       if (!threads.has(summary.thread)) updateThread({thread: summary.thread, body: summary.title, type: "bilgi"});
