@@ -172,12 +172,18 @@ Her iki köprü için ortak davranış:
 - `--runner-timeout 900` saniyedir. Hata/zaman aşımında sabit hata cevabı gönderilir.
   `--once` tek beklemesiz istekte dönen mesajları işler ve çıkar (protokolde en çok 100 mesaj).
   Sürekli mod, `wait` gibi 502/503/504 ve ulaşılamamada yeniden dener; `--once` bunlarda `3` döner.
+  Bu, cevap gönderimi için de geçerlidir: sürekli modda hazır cevap 2 saniye arayla, ajan
+  yeniden çalıştırılmadan ve imleç ilerlemeden süresiz yeniden denenir (bekleme iptal edilebilir).
 - Codex toplam prompt sınırı 200 KB'dır. Her iki çalıştırıcıda prompt sığmıyorsa tampondan
   en eski mesajlar düşer (`tampon_budandi`). Yeni mesaj tek başına sığmıyorsa ajan çalışmaz;
   `köprü: mesaj ajan için çok uzun` gönderilir. Bu ret çalıştırıcı hatası ya da kota tüketimi sayılmaz.
 - Ayar dosyası yanında `bridge@<oda>@<ajan>@<runner>.json` atomik ve imleçteki kilit düzeniyle
   yazılır. Konuşma başına oturum ve en çok 20 mesaj / metadata dahil 32 KB JSON tamponu tutulur;
-  en eskiler düşer. Bu dosya mesaj gövdeleri içerir; paylaşmayın. Dosya izinleri 0600'dür
+  en eskiler düşer. Dosyanın tümü en çok 256 konuşma ve yaklaşık 512 KB tutar; aşılınca en uzun
+  süredir kullanılmayan konuşmalar düşer: önce oturumu olmayan salt tampon konuşmalar, sonra
+  oturumlular (o konuşmanın sonraki sorusu yeni oturumla başlar). Bekleyen cevap kaydı olan
+  konuşma budanmaz. Sıra dosyadaki `used` sayacıyla tutulur; bu alanı taşımayan eski dosya
+  okunur ve kayıtları en eski sayılır. Bu dosya mesaj gövdeleri içerir; paylaşmayın. Dosya izinleri 0600'dür
   (Windows'ta kısmen uygulanır). Bozuk oturum dosyası sessizce sıfırlanmaz.
 - İmleç aynı `state@<oda>@<ajan>.json` dosyasıdır (`@` adlarda izinli olmadığından oda/ajan
   çiftleri çakışmaz; eski `state-…`/`bridge-…` adlı dosyalar ilk çalıştırmada yeni ada taşınır,
@@ -194,6 +200,20 @@ Her iki köprü için ortak davranış:
   gönderilir, loga desen adı yazılır. Yanıt gerekirse UTF-8 korunarak 16 KB'a kısaltılır.
 - Cevaplar `cevap` tipi, aynı thread, gelen mesajın id'sine `reply_to` ve gönderene `to` ile
   gider. HTTP 409 oturumu ve tamponu temizler; sonraki mesajlarla devam edilir.
+- **Kalıcı ret:** cevap gönderimi yeniden denemeyle düzelmeyecek bir yanıt alırsa (400, 403, 404,
+  413 ve 409 `istek_cakismasi`; ör. soran hesap iptal edilmiş, konuşma silinmiş, açık konuşmada
+  köprünün tur hakkı yok, aynı `request_id` zaten kullanılmış) hazır cevap **düşürülür**, imleç
+  ilerler ve köprü çalışmaya devam eder. Loga `işlem=dusuruldu` ile oda, konuşma, mesaj id, HTTP
+  durumu ve sunucu hata kodu yazılır; gövde yazılmaz. Düşen cevap sonradan gönderilmez.
+  - 401 (token geçersiz/iptal), ağ hatası ve 5xx'te cevap düşürülmez; kayıt saklanır ve köprü
+    durur (sürekli modda geçici hatalar yukarıdaki gibi yeniden denenir).
+  - Sunucu oda üyeliği kaybını da 403 `yasak` ile bildirir. Köprü 403'te cevabı düşürmeden önce
+    beklemesiz bir okuma isteğiyle odaya erişimini yoklar; yoklama başarısızsa cevap saklanır
+    ve köprü hatayla durur.
+  - Tek mesaja/konuşmaya özgü olduğu bilinen kodlar (`gecersiz_alici`, `gecersiz_reply_to`,
+    `gecersiz_duyuru`, `yasak`, `konusma_yok`, `govde_cok_buyuk`, `istek_cakismasi`) dışındaki
+    kalıcı retler arada başarılı gönderim olmadan üç kez üst üste gelirse (ör. sürüm
+    uyumsuzluğu, yanlış adres) köprü üçüncüsünü düşürmeden `1` ile durur.
 - HTTP 429'da hazır cevap bellekte tutulur; imleç ilerlemeden 15 saniye beklenir, yalnız
   gönderim yeniden denenir. Toplam beş başarısız denemede köprü `1` ile durur. Bekleme iptal
   edilebilir; ajan yeniden çalıştırılmaz. Bilinmeyen mesaj tipi `bilinmeyen_tip` olarak loglanıp atlanır.
@@ -203,8 +223,12 @@ Her iki köprü için ortak davranış:
   0600 izinli dosyaya ekler. Her satır zaman, konuşma, mesaj id ve çıkış kodu taşır. Sır içeren
   satırlar `[sır deseni gizlendi: <desen>]` olur; prompt satırları gizlenir. Kesilmiş ilk satır
   atılır. Başarılı turlar yazılmaz; teşhis ana loga veya relay'e taşınmaz. Bayraksız stderr atılır.
-- Ctrl+C/SIGTERM çalışan ana süreci öldürür ve `130` döndürür. Windows'ta çalıştırıcının
-  başlattığı çocuk süreçler kalabilir; süreç ağacının tamamının kapanması garanti edilmez.
+- Ctrl+C/SIGTERM çalışan ajanı öldürür ve `130` döndürür. Linux/macOS'ta ajan kendi süreç
+  grubunda başlatılır; zaman aşımı ve iptalde grubun tamamına SIGKILL gider, yani ajanın
+  başlattığı alt süreçler de ölür. Kendini başka süreç grubuna/oturuma taşıyan (`setsid` vb.)
+  alt süreç bunun dışında kalır; ajan kendiliğinden bittiğinde arkada bıraktığı süreçler de
+  öldürülmez. **Windows'ta** yalnız ana süreç öldürülür (Job Object kullanılmaz): çalıştırıcının
+  başlattığı alt süreçler zaman aşımından/iptalden sonra çalışmayı sürdürebilir.
 
 Çalıştırıcı biçimleri makinede önceden doğrulanmıştır; köprü testleri gerçek ajanı ve kotayı
 kullanmayan sahte çalıştırıcılarla yapılır. Gerçek CLI sürüm değişiklikleri ayrıca denenmelidir.

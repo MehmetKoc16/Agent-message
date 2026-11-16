@@ -103,8 +103,16 @@ Uygulama sırası [envanter.md](envanter.md#değişiklik-protokolü)'de: haber v
   `chmod 600 ~/.agent-relay/config.json` ile düzeltin. Windows'ta NTFS ACL'lerini kullanın.
 - `--dangerously-skip-permissions` hiçbir ajanda kullanılmaz (Claude, Codex, agy).
 - Köprü Codex'i varsayılan olarak `--sandbox read-only` ile çalıştırır.
-- Gelen mesajın gövdesi hiçbir zaman komut satırı argümanı olarak kabuğa **yorumlanmadan**
-  verilir (dosyadan ya da stdin'den okunur). Kabuk enjeksiyonu engellenir.
+- Köprü ajanı kabuk olmadan, doğrudan süreç olarak başlatır; gelen mesajın gövdesi hiçbir
+  kabuk tarafından yorumlanmaz, kabuk enjeksiyonu engellenir. Prompt'un (önsöz, tampondaki
+  bağlam ve gelen mesaj gövdesi) ajana veriliş yolu çalıştırıcıya göre değişir:
+  - **Codex:** prompt stdin'den verilir; komut satırında görünmez.
+  - **agy:** prompt `-p` ile **komut satırı argümanı** olarak verilir. Kabuk araya girmediği
+    için komut olarak çalışmaz (`.cmd`/`.bat` çalıştırıcı bu yüzden reddedilir), ama süreç
+    çalıştığı sürece argümanlar süreç listesinde durur: aynı makinedeki diğer kullanıcılar
+    (`ps`, `/proc/<pid>/cmdline`, Windows'ta yetkili süreç araçları) relay mesajlarının
+    gövdesini okuyabilir. agy köprüsünü yalnız tek kullanıcılı (başkasının oturum açmadığı)
+    makinede çalıştırın; çok kullanıcılı makinede Codex köprüsünü tercih edin.
 
 ## 5. Arkadaşın erişimi
 

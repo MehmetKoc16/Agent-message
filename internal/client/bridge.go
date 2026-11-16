@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -64,6 +65,7 @@ func (r *runner) cmdBridge(ctx context.Context, fs *flag.FlagSet, args []string)
 			var ae *APIError
 			return errors.As(err, &ae) && ae.Status == 409 && ae.Code != "istek_cakismasi"
 		},
+		Permanent: bridgeRejection,
 		RateLimited: func(err error) bool {
 			var ae *APIError
 			return errors.As(err, &ae) && ae.Status == 429
@@ -79,4 +81,37 @@ func (r *runner) cmdBridge(ctx context.Context, fs *flag.FlagSet, args []string)
 		return r.fetchFail(err)
 	}
 	return ExitOK
+}
+
+// Yalnız tek mesajı/konuşmayı etkilediği bilinen sunucu kodları ve HTTP durumları.
+var isolatedRejections = map[string]int{
+	"gecersiz_alici": 400, "gecersiz_reply_to": 400, "gecersiz_duyuru": 400,
+	"yasak": 403, "konusma_yok": 404, "govde_cok_buyuk": 413, "istek_cakismasi": 409,
+}
+
+var rejectionCodeRE = regexp.MustCompile(`^[a-z0-9_]{1,40}$`)
+
+// bridgeRejection yeniden denemeyle düzelmeyecek gönderim yanıtlarını ayırır. 401
+// (token) ve diğer 409'lar burada yoktur. Kod tam karşılaştırılır; mesaja ya da
+// konuşmaya özgü olduğu bilinen kodlar dışındakiler köprünün ardışık ret sayacına girer.
+func bridgeRejection(err error) (bridge.Rejection, bool) {
+	var ae *APIError
+	if !errors.As(err, &ae) {
+		return bridge.Rejection{}, false
+	}
+	switch ae.Status {
+	case 400, 403, 404, 413:
+	case 409:
+		if ae.Code != "istek_cakismasi" {
+			return bridge.Rejection{}, false
+		}
+	default:
+		return bridge.Rejection{}, false
+	}
+	r := bridge.Rejection{Status: ae.Status, Code: ae.Code}
+	if !rejectionCodeRE.MatchString(r.Code) {
+		r.Code = "bilinmiyor" // sunucu dışı (ör. vekil) yanıt metni loga taşınmaz
+	}
+	r.Isolated = isolatedRejections[r.Code] == r.Status
+	return r, true
 }

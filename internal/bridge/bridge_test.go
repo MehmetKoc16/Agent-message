@@ -68,6 +68,7 @@ type fixture struct {
 	messages     []proto.Message
 	replies      []sent
 	status       int
+	code         string // hata yanıtındaki JSON kodu; boşsa "test"
 	postStatuses []int
 	postTimes    []time.Time
 	getStatuses  []int
@@ -99,8 +100,12 @@ func newFixture(t *testing.T) *fixture {
 				status, f.postStatuses = f.postStatuses[0], f.postStatuses[1:]
 			}
 			if status != 0 {
+				code := f.code
+				if code == "" {
+					code = "test"
+				}
 				w.WriteHeader(status)
-				fmt.Fprint(w, `{"error":"test"}`)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
 				return
 			}
 			w.WriteHeader(http.StatusCreated)
@@ -113,9 +118,11 @@ func newFixture(t *testing.T) *fixture {
 		if len(f.getStatuses) != 0 {
 			status := f.getStatuses[0]
 			f.getStatuses = f.getStatuses[1:]
-			w.WriteHeader(status)
-			fmt.Fprint(w, `{"error":"test"}`)
-			return
+			if status != 0 { // 0: bu istek normal yanıtlanır
+				w.WriteHeader(status)
+				fmt.Fprint(w, `{"error":"test"}`)
+				return
+			}
 		}
 		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 		msgs := make([]proto.Message, 0)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -23,6 +24,13 @@ func value(args []string, flag string) string {
 
 func Run(runner string) {
 	args := os.Args[1:]
+	if len(args) == 1 && args[0] == "--torun" {
+		// Torun süreç: ebeveyni öldürülse de işini bitirmeye çalışır.
+		_ = os.WriteFile("grandchild-started", []byte("tamam"), 0o600)
+		time.Sleep(4 * time.Second)
+		_ = os.WriteFile("grandchild-finished", []byte("tamam"), 0o600)
+		return
+	}
 	b, _ := io.ReadAll(os.Stdin)
 	prompt, session := string(b), ""
 	if runner == "agy" {
@@ -56,6 +64,19 @@ func Run(runner string) {
 	}
 	if strings.Contains(prompt, "HATA_ISTE") {
 		os.Exit(1)
+	}
+	if strings.Contains(prompt, "TORUN_ISTE") {
+		// Stdio verilmez: torun ebeveynin pipe'larını açık tutmaz.
+		child := exec.Command(os.Args[0], "--torun")
+		if child.Start() != nil {
+			os.Exit(2)
+		}
+		for i := 0; i < 100; i++ { // torun başlamadan zaman aşımına girme
+			if _, err := os.Stat("grandchild-started"); err == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 	if strings.Contains(prompt, "YAVAS_ISTE") {
 		// Zaman aşımı testindeki 6 sn sınırından uzun olmalı: yavaş CI makinesinde de

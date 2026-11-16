@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/MehmetKoc16/Agent-message/internal/proto"
 )
@@ -13,12 +14,17 @@ import (
 const (
 	maxPendingMessages = 20
 	maxPendingBytes    = 32 << 10
+	// Dosyanın tümü için sınırlar; aşılınca en uzun süredir kullanılmayan konuşma düşer.
+	maxConversations = 256
+	maxStateBytes    = 512 << 10
 )
 
 type conversation struct {
 	Session  string           `json:"session,omitempty"`
 	Pending  []proto.Message  `json:"pending,omitempty"`
 	Delivery *pendingDelivery `json:"delivery,omitempty"`
+	// Used son yazımın sıra numarasıdır (saat değil); eski dosyada yoktur ve 0 = en eski sayılır.
+	Used int64 `json:"used,omitempty"`
 }
 
 type pendingDelivery struct {
@@ -83,8 +89,13 @@ func (s stateStore) update(thread string, c *conversation) error {
 	if c == nil {
 		delete(f.Threads, thread)
 	} else {
+		for _, old := range f.Threads {
+			c.Used = max(c.Used, old.Used)
+		}
+		c.Used++
 		f.Threads[thread] = c
 	}
+	f.prune(thread)
 	b, err := json.Marshal(f)
 	if err != nil {
 		return errors.New("köprü oturumları kodlanamadı")
@@ -105,6 +116,45 @@ func (s stateStore) update(thread string, c *conversation) error {
 		return errors.New("köprü oturum dosyası yazılamadı")
 	}
 	return nil
+}
+
+// prune dosyayı konuşma sayısı ve toplam bayt sınırına indirir. Önce oturumu olmayan
+// salt tampon konuşmalar, sonra oturumlular en eski kullanımdan başlayarak düşer.
+// Bekleyen teslim kaydı olan ve o an yazılan konuşma budanmaz.
+func (f *stateFile) prune(keep string) {
+	type entry struct {
+		thread string
+		c      *conversation
+		size   int
+	}
+	total := len(`{"threads":{}}`)
+	var list []entry
+	for thread, c := range f.Threads {
+		k, _ := json.Marshal(thread)
+		v, _ := json.Marshal(c)
+		size := len(k) + len(v) + 2 // iki nokta ve virgül
+		total += size
+		if thread != keep && c.Delivery == nil {
+			list = append(list, entry{thread, c, size})
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		a, b := list[i], list[j]
+		if (a.c.Session == "") != (b.c.Session == "") {
+			return a.c.Session == ""
+		}
+		if a.c.Used != b.c.Used {
+			return a.c.Used < b.c.Used
+		}
+		return a.thread < b.thread
+	})
+	for _, e := range list {
+		if len(f.Threads) <= maxConversations && total <= maxStateBytes {
+			return
+		}
+		delete(f.Threads, e.thread)
+		total -= e.size
+	}
 }
 
 func (c *conversation) add(m proto.Message) {

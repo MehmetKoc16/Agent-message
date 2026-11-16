@@ -19,7 +19,17 @@ const (
 	failureReply = "köprü: ajan çalıştırılamadı"
 	budgetReply  = "köprü: saatlik çalıştırma sınırına ulaşıldı; mesajınız kaydedildi ama yanıtlanmadı, lütfen daha sonra yeniden sorun"
 	tooLongReply = "köprü: mesaj ajan için çok uzun"
+	// Mesaja özgü olmayan art arda bu kadar kalıcı rette köprü durur.
+	maxRejections = 3
 )
+
+// Rejection yeniden denemeyle düzelmeyecek sunucu reddidir. Isolated yalnız bu
+// mesaja/konuşmaya özgü retleri işaretler; diğerleri köprünün tümünü etkileyebilir.
+type Rejection struct {
+	Status   int
+	Code     string
+	Isolated bool
+}
 
 type Outgoing struct {
 	To, Type, Thread, Body string
@@ -40,6 +50,7 @@ type Dependencies struct {
 	Scan                func(string) (string, bool)
 	Transient, Conflict func(error) bool
 	RateLimited         func(error) bool
+	Permanent           func(error) (Rejection, bool)
 	Lock                func(string) (func(), error)
 	Replace             func(string, string) error
 	Stderr              io.Writer
@@ -55,6 +66,7 @@ type engine struct {
 	runs     []time.Time
 	notified map[string]time.Time
 	failures int
+	rejected int
 }
 
 // Run seri çalışır. Sinyal iptali context üzerinden hem long-poll'a hem sürece ulaşır.
@@ -274,9 +286,10 @@ func (e *engine) deliver(ctx context.Context, m proto.Message, pending Outgoing,
 		e.log(m, "hata", duration, fmt.Sprintf(" sır_deseni=%q gönderim=engellendi", name))
 		return errors.New("köprü: kayıtlı cevap sır denetimini geçemedi; gönderim durduruldu")
 	}
-	for attempt := 1; attempt <= 5; attempt++ {
+	for attempt := 1; attempt <= 5; {
 		err := e.d.Send(ctx, pending)
 		if err == nil {
+			e.rejected = 0
 			e.log(m, "gonderildi", duration, "")
 			return nil
 		}
@@ -299,11 +312,59 @@ func (e *engine) deliver(ctx context.Context, m proto.Message, pending Outgoing,
 				timer.Stop()
 				return ctx.Err()
 			}
+			attempt++
+			continue
+		}
+		if e.d.Permanent != nil {
+			if r, ok := e.d.Permanent(err); ok {
+				return e.reject(ctx, m, r, err, duration)
+			}
+		}
+		if !e.o.Once && e.d.Transient(err) {
+			// Sürekli modda geçici hata okuma döngüsündeki gibi süresiz yeniden denenir.
+			e.log(m, "hata", duration, " sunucu_geçici=true gönderim=yeniden_denenecek")
+			timer := time.NewTimer(e.d.RetryDelay)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			}
 			continue
 		}
 		e.log(m, "hata", duration, " gönderim=başarısız")
 		return err
 	}
+	return nil
+}
+
+// reject kalıcı reddedilen teslimi düşürür: nil dönünce çağıran imleci ilerletip kaydı
+// siler. Hata dönerse kayıt diskte kalır. Gövde ve cevap loglanmaz.
+func (e *engine) reject(ctx context.Context, m proto.Message, r Rejection, cause error, duration time.Duration) error {
+	detail := fmt.Sprintf(" oda=%q HTTP=%d kod=%q", e.o.Room, r.Status, r.Code)
+	if r.Status == 403 {
+		// Sunucu oda üyeliği kaybını da aynı 403 koduyla bildirir. Okuma yoklaması da
+		// reddediliyorsa köprü tümüyle yetkisizdir: mesaj düşürme, dur.
+		after, err := e.d.Cursor.Read()
+		if err == nil {
+			_, err = e.d.Fetch(ctx, after, 0)
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err != nil {
+			e.log(m, "hata", duration, detail+" gönderim=başarısız neden=oda_erisimi_dogrulanamadi")
+			return cause
+		}
+	}
+	if !r.Isolated {
+		e.rejected++
+		if e.rejected >= maxRejections {
+			e.log(m, "hata", duration, detail+" gönderim=başarısız neden=ardisik_kalici_ret")
+			return errors.New("köprü üç ardışık kalıcı gönderim reddi nedeniyle durdu; teslim kaydı saklandı")
+		}
+	}
+	e.log(m, "dusuruldu", duration, detail+" neden=kalici_ret")
 	return nil
 }
 
