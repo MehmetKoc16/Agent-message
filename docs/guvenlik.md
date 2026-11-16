@@ -195,14 +195,27 @@ vermez. Rol, aktif üyeler, oda ve denetim kayıtları aynı transaction'da doğ
 Hesap açma ve üyelik/iptal değişikliği ile denetim kaydı aynı transaction'dadır;
 kayıt yazılamazsa değişiklik geri alınır. Oturum açma ve reddetme, hesap/kayıt
 listeleme de kaydedilir. SSH işlemlerinde yapan `ssh`, web'de hesap adıdır.
+Listeleme (`hesaplar_listelendi`, `kayit_listelendi`) hız sınırı olmayan GET'tir;
+bu yüzden hesabın son gerçek işleminden beri aynı listeleme zaten kayıtlıysa yeni
+satır eklenmez, o satırın zamanı güncellenir (satır son okuma zamanını taşır, id
+sırası zaman sırasından sapabilir). Böylece ele geçirilmiş oturum iptal/silme kaydını
+listeleme istekleriyle görünür pencerenin dışına itemez. Tek istekte en çok 1000
+kayıt döner; daha eskiler `GET /v1/yonetim/kayit?son=N&before=<id>` ya da
+`admin kayit --son N --before <id>` ile geriye doğru sayfalanır. SSH `reopen` ve
+`purge` de kaydedilir (kayıt işlemden hemen sonra, ayrı yazılır).
 Kayıt alanları zaman, yapan, işlem, hedef ve oda gibi ayrıntıdır; parola, oturum
 anahtarı, TOTP kodu/sırrı ve istek gövdesi kaydedilmez. Denetim tablosu kriptografik
 olarak mühürlenmiş değildir; DB yazma yetkisi olan kişi kaydı değiştirebilir.
 
 **TOTP sırları AES-256-GCM ile, hesap adına bağlı olarak şifrelenir.** 32 baytlık
 anahtar SQLite dışında `<db-yolu>.totp.key` dosyasındadır; ilk açılışta 0600 ile
-oluşturulur. Mevcut düz metin sırlar açılış transaction'ında dönüştürülür.
+oluşturulur. Anahtar önce aynı klasörde geçici dosyaya yazılıp fsync edilir, sonra
+hard link ile yerleştirilir: dosya ya yoktur ya da tamdır, mevcut dosya ezilmez
+(dosya sistemi hard link desteklemelidir). Mevcut düz metin sırlar açılış
+transaction'ında dönüştürülür.
 Şifreli sır varken anahtar kayıp/yanlışsa sunucu başlamaz; yeni anahtar üretmez.
+Anahtar dosyası var ama 32 bayt değilse de otomatik yenilenmez; şifreli sır yoksa
+hata, dosyayı silip yeniden başlatmayı söyler.
 Anahtarı veritabanı yedeğinden ayrı erişim ve ayrı depoda yedekleyin; geri yüklerken
 eşleşen anahtar gerekir. Windows'ta kullanıcı/servis hesabına özel NTFS ACL uygulayın.
 DB/WAL/SHM ve anahtarı birlikte okuyabilen saldırgan ikinci faktörü çözebilir;

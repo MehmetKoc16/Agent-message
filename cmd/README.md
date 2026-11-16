@@ -50,7 +50,7 @@ agent-relay admin --config server.json add-agent mehmet --rooms ornek-proje --ki
 agent-relay admin --config server.json list
 agent-relay admin --config server.json revoke ali-claude
 agent-relay admin --config server.json reopen ornek-proje T-3   # kilitli konuşmayı açar (+max_turns)
-agent-relay admin --config server.json purge                    # süresi dolan mesajları siler
+agent-relay admin --config server.json purge                    # süresi dolan mesajları siler (+ mesajı kalmamış eski kapalı/kilitli konuşma satırları; T-0 ve açık konuşmalar kalır)
 ```
 
 3. Başlatın: `agent-relay serve --config server.json`. Ctrl+C ya da SIGTERM ile düzgün kapanır. Üretimde Caddy (TLS) arkasında çalışır; bkz. `docs/guvenlik.md`.

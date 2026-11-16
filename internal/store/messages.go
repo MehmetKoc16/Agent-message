@@ -446,26 +446,66 @@ func (s *Store) CloseThread(ctx context.Context, room, id string) error {
 	return nil
 }
 
-// ReopenThread konuşmayı açar ve tur sınırını add kadar artırır.
+var ErrAnnouncementThread = errors.New("duyuru akışı (T-0) yeniden açılamaz")
+
+// ReopenThread konuşmayı açar ve tur sınırını add kadar artırır. T-0 duyuru
+// akışıdır: turn_limit=0 işareti bozulmasın diye reddedilir.
 func (s *Store) ReopenThread(ctx context.Context, room, id string, add int) error {
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE threads SET status = 'acik', turn_limit = turn_limit + ? WHERE room = ? AND id = ?`,
-		add, room, id)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	defer tx.Rollback()
+	var limit int
+	err = tx.QueryRowContext(ctx, `SELECT turn_limit FROM threads WHERE room = ? AND id = ?`, room, id).Scan(&limit)
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrThreadNotFound
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if id == "T-0" || limit == 0 {
+		return ErrAnnouncementThread
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE threads SET status = 'acik', turn_limit = turn_limit + ? WHERE room = ? AND id = ?`,
+		add, room, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
-// Purge cutoff'tan eski mesajları siler ve silinen sayısını döndürür.
-// (Konuşma satırları küçük olduğu için silinmez; T-<n> numaraları yeniden kullanılmaz.)
+// Purge cutoff'tan eski mesajları siler ve silinen mesaj sayısını döndürür. Aynı
+// transaction'da, hiç mesajı kalmamış, cutoff'tan önce açılmış ve artık yazılamayan
+// (kapalı/kilitli) konuşmaların threads, thread_parties ve thread_reads satırları da
+// silinir. Açık konuşmalar kalır: taraflar ve tur sayacı saklama süresinden sonra da
+// geçerlidir. T-0 (duyuru akışı) asla silinmez. room_counters'a dokunulmaz;
+// T-<n> numaraları yeniden kullanılmaz.
 func (s *Store) Purge(ctx context.Context, cutoff time.Time) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM messages WHERE created_at < ?`, FormatTime(cutoff))
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+	defer tx.Rollback()
+	at := FormatTime(cutoff)
+	res, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE created_at < ?`, at)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	const bitmis = `id <> 'T-0' AND turn_limit <> 0 AND status IN ('kapali','kilitli') AND created_at < ?
+		AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.room = threads.room AND m.thread = threads.id)`
+	for _, q := range []string{
+		`DELETE FROM thread_parties WHERE (room, thread) IN (SELECT room, id FROM threads WHERE ` + bitmis + `)`,
+		`DELETE FROM thread_reads WHERE (room, thread) IN (SELECT room, id FROM threads WHERE ` + bitmis + `)`,
+		`DELETE FROM threads WHERE ` + bitmis,
+	} {
+		if _, err := tx.ExecContext(ctx, q, at); err != nil {
+			return 0, err
+		}
+	}
+	return n, tx.Commit()
 }

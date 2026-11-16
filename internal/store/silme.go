@@ -38,8 +38,8 @@ func (s *Store) DeleteMessage(ctx context.Context, yapan, room string, id int64)
 }
 
 // DeleteThread konuşmanın bütün mesajlarını siler ve silinen sayıyı döndürür.
-// Konuşma satırı Purge'deki gibi kalır: T-<n> yeniden kullanılmaz, tur sayacı ve
-// taraflar korunur, konuşma açıksa yeni mesaj alabilir.
+// Konuşma satırı kalır: T-<n> yeniden kullanılmaz, tur sayacı ve taraflar korunur,
+// konuşma açıksa yeni mesaj alabilir. (Kapalı ve eskiyse satırı sonraki Purge siler.)
 func (s *Store) DeleteThread(ctx context.Context, yapan, room, thread string) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

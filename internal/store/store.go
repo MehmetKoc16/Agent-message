@@ -61,7 +61,14 @@ func Open(path string, maxTurns int) (*Store, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0)
 	s := &Store{db: db, maxTurns: maxTurns, Now: time.Now}
-	if err := s.migrate(); err != nil {
+	err = s.migrate()
+	// Taze veritabanında eşzamanlı ilk açılış: WAL'a geçiş busy_timeout'u beklemeden
+	// SQLITE_BUSY dönebilir. migrate tek transaction'dır; yeniden denemek güvenlidir.
+	for i := 1; i <= 20 && isBusy(err); i++ {
+		time.Sleep(time.Duration(i) * 10 * time.Millisecond)
+		err = s.migrate()
+	}
+	if err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -70,6 +77,12 @@ func Open(path string, maxTurns int) (*Store, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// isBusy hata SQLITE_BUSY (5) ise true döner; sürücü tipi içe aktarılmadan bakılır.
+func isBusy(err error) bool {
+	var e interface{ Code() int }
+	return errors.As(err, &e) && e.Code()&0xff == 5
 }
 
 // Close veritabanını kapatır.

@@ -258,7 +258,8 @@ ardından **Kapat** ile kutuyu silin. **Sohbete dön** sohbet görünümünü a�
 Yönetici hesabına web'den oda değişikliği veya iptal uygulanamaz.
 
 SSH karşılıkları `odaya-ekle <ad> <oda>`, `odadan-cikar <ad> <oda>`,
-`kayit --son 100` komutlarıdır. Yetkiyi kaldırmak için
+`kayit --son 100` komutlarıdır (daha eskiler: `kayit --son 100 --before <id>`).
+`yonetici-yap`/`yonetici-al` hesabın TOTP deneme kilidini de sıfırlar. Yetkiyi kaldırmak için
 `yonetici-al mehmet-yonetici` kullanın; TOTP sırrı da temizlenir. Telefon
 kaybında SSH'den yetkiyi kaldırın veya `yonetici-yap` ile sırrı yenileyin.
 
